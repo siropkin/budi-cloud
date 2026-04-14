@@ -39,13 +39,13 @@ export async function getCurrentUser(): Promise<BudiUser | null> {
 }
 
 /**
- * Get overview stats for the org.
+ * Get overview stats visible to the current user.
+ * Manager sees full org; member sees own devices only (ADR-0083 §6).
  */
-export async function getOverviewStats(orgId: string, range: DateRange) {
+export async function getOverviewStats(user: BudiUser, range: DateRange) {
   const admin = createAdminClient();
 
-  // Get all device IDs in this org
-  const deviceIds = await getOrgDeviceIds(admin, orgId);
+  const deviceIds = await getVisibleDeviceIds(admin, user);
   if (deviceIds.length === 0) {
     return {
       totalCostCents: 0,
@@ -87,10 +87,11 @@ export async function getOverviewStats(orgId: string, range: DateRange) {
 
 /**
  * Get daily cost activity for charts.
+ * Manager sees full org; member sees own devices only (ADR-0083 §6).
  */
-export async function getDailyActivity(orgId: string, range: DateRange) {
+export async function getDailyActivity(user: BudiUser, range: DateRange) {
   const admin = createAdminClient();
-  const deviceIds = await getOrgDeviceIds(admin, orgId);
+  const deviceIds = await getVisibleDeviceIds(admin, user);
   if (deviceIds.length === 0) return [];
 
   const { data: rollups } = await admin
@@ -127,15 +128,17 @@ export async function getDailyActivity(orgId: string, range: DateRange) {
 
 /**
  * Get cost breakdown by user/device.
+ * Manager sees all users; member sees only their own cost (ADR-0083 §6).
  */
-export async function getCostByUser(orgId: string, range: DateRange) {
+export async function getCostByUser(user: BudiUser, range: DateRange) {
   const admin = createAdminClient();
 
-  // Get users and their devices
-  const { data: orgUsers } = await admin
-    .from("users")
-    .select("id, display_name, email")
-    .eq("org_id", orgId);
+  // Get users visible to the current user
+  const userFilter =
+    user.role === "manager"
+      ? admin.from("users").select("id, display_name, email").eq("org_id", user.org_id!)
+      : admin.from("users").select("id, display_name, email").eq("id", user.id);
+  const { data: orgUsers } = await userFilter;
 
   if (!orgUsers?.length) return [];
 
@@ -166,8 +169,8 @@ export async function getCostByUser(orgId: string, range: DateRange) {
   // Map device costs to users
   const byUser = new Map<string, { name: string; cost_cents: number }>();
   for (const device of devices ?? []) {
-    const user = orgUsers.find((u) => u.id === device.user_id);
-    const name = user?.display_name || user?.email || device.user_id.slice(0, 8);
+    const owner = orgUsers.find((u) => u.id === device.user_id);
+    const name = owner?.display_name || owner?.email || device.user_id.slice(0, 8);
     const deviceCost = byDevice.get(device.id) ?? 0;
     const existing = byUser.get(device.user_id);
     if (existing) {
@@ -184,10 +187,11 @@ export async function getCostByUser(orgId: string, range: DateRange) {
 
 /**
  * Get cost breakdown by model.
+ * Manager sees full org; member sees own devices only (ADR-0083 §6).
  */
-export async function getCostByModel(orgId: string, range: DateRange) {
+export async function getCostByModel(user: BudiUser, range: DateRange) {
   const admin = createAdminClient();
-  const deviceIds = await getOrgDeviceIds(admin, orgId);
+  const deviceIds = await getVisibleDeviceIds(admin, user);
   if (deviceIds.length === 0) return [];
 
   const { data: rollups } = await admin
@@ -219,10 +223,11 @@ export async function getCostByModel(orgId: string, range: DateRange) {
 
 /**
  * Get cost breakdown by repo.
+ * Manager sees full org; member sees own devices only (ADR-0083 §6).
  */
-export async function getCostByRepo(orgId: string, range: DateRange) {
+export async function getCostByRepo(user: BudiUser, range: DateRange) {
   const admin = createAdminClient();
-  const deviceIds = await getOrgDeviceIds(admin, orgId);
+  const deviceIds = await getVisibleDeviceIds(admin, user);
   if (deviceIds.length === 0) return [];
 
   const { data: rollups } = await admin
@@ -245,10 +250,11 @@ export async function getCostByRepo(orgId: string, range: DateRange) {
 
 /**
  * Get cost breakdown by branch.
+ * Manager sees full org; member sees own devices only (ADR-0083 §6).
  */
-export async function getCostByBranch(orgId: string, range: DateRange) {
+export async function getCostByBranch(user: BudiUser, range: DateRange) {
   const admin = createAdminClient();
-  const deviceIds = await getOrgDeviceIds(admin, orgId);
+  const deviceIds = await getVisibleDeviceIds(admin, user);
   if (deviceIds.length === 0) return [];
 
   const { data: rollups } = await admin
@@ -280,10 +286,11 @@ export async function getCostByBranch(orgId: string, range: DateRange) {
 
 /**
  * Get cost breakdown by ticket.
+ * Manager sees full org; member sees own devices only (ADR-0083 §6).
  */
-export async function getCostByTicket(orgId: string, range: DateRange) {
+export async function getCostByTicket(user: BudiUser, range: DateRange) {
   const admin = createAdminClient();
-  const deviceIds = await getOrgDeviceIds(admin, orgId);
+  const deviceIds = await getVisibleDeviceIds(admin, user);
   if (deviceIds.length === 0) return [];
 
   const { data: rollups } = await admin
@@ -309,10 +316,11 @@ export async function getCostByTicket(orgId: string, range: DateRange) {
 
 /**
  * Get sessions list.
+ * Manager sees full org; member sees own devices only (ADR-0083 §6).
  */
-export async function getSessions(orgId: string, range: DateRange) {
+export async function getSessions(user: BudiUser, range: DateRange) {
   const admin = createAdminClient();
-  const deviceIds = await getOrgDeviceIds(admin, orgId);
+  const deviceIds = await getVisibleDeviceIds(admin, user);
   if (deviceIds.length === 0) return [];
 
   const { data: sessions } = await admin
@@ -342,6 +350,27 @@ export async function getOrgMembers(orgId: string) {
 }
 
 // --- Helpers ---
+
+/**
+ * Get device IDs visible to the current user.
+ * Per ADR-0083 §6:
+ *   - Manager: sees all devices in the org
+ *   - Member: sees only their own devices
+ */
+async function getVisibleDeviceIds(
+  admin: ReturnType<typeof createAdminClient>,
+  user: BudiUser
+): Promise<string[]> {
+  if (user.role === "manager") {
+    return getOrgDeviceIds(admin, user.org_id!);
+  }
+  // Member: own devices only
+  const { data: devices } = await admin
+    .from("devices")
+    .select("id")
+    .eq("user_id", user.id);
+  return (devices ?? []).map((d) => d.id);
+}
 
 async function getOrgDeviceIds(
   admin: ReturnType<typeof createAdminClient>,

@@ -34,7 +34,7 @@ export default async function SessionsPage({
   if (!user?.org_id) return null;
 
   const range = dateRangeFromDays(params.days);
-  const sessions = await getSessions(user.org_id, range);
+  const sessions = await getSessions(user, range);
 
   return (
     <div className="space-y-6">

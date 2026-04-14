@@ -16,7 +16,7 @@ export default async function TeamPage({
   if (!user?.org_id) return null;
 
   const range = dateRangeFromDays(params.days);
-  const userCosts = await getCostByUser(user.org_id, range);
+  const userCosts = await getCostByUser(user, range);
 
   return (
     <div className="space-y-6">

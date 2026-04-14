@@ -18,8 +18,8 @@ export default async function OverviewPage({
 
   const range = dateRangeFromDays(params.days);
   const [stats, activity] = await Promise.all([
-    getOverviewStats(user.org_id, range),
-    getDailyActivity(user.org_id, range),
+    getOverviewStats(user, range),
+    getDailyActivity(user, range),
   ]);
 
   return (
