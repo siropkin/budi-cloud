@@ -49,7 +49,7 @@ export async function GET(request: Request) {
       user.email?.split("@")[0] ||
       "User";
 
-    await admin.from("users").insert({
+    const { error: insertError } = await admin.from("users").insert({
       id: user.id,
       org_id: null, // Will be set when creating/joining an org
       role: "manager", // First user defaults to manager
@@ -57,6 +57,13 @@ export async function GET(request: Request) {
       display_name: displayName,
       email: user.email,
     });
+
+    if (insertError) {
+      console.error("Failed to create user record:", insertError);
+      return NextResponse.redirect(
+        `${origin}/login?error=user_creation_failed`
+      );
+    }
 
     // New user with no org — redirect to setup
     return NextResponse.redirect(`${origin}/dashboard/setup`);
