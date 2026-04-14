@@ -43,7 +43,11 @@ export async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", path);
-    return NextResponse.redirect(url);
+    const redirect = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirect.cookies.set(cookie.name, cookie.value);
+    });
+    return redirect;
   }
 
   // Redirect authenticated users away from login
@@ -52,7 +56,11 @@ export async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = next;
     url.searchParams.delete("next");
-    return NextResponse.redirect(url);
+    const redirect = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirect.cookies.set(cookie.name, cookie.value);
+    });
+    return redirect;
   }
 
   return supabaseResponse;
