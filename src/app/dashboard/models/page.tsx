@@ -16,7 +16,7 @@ export default async function ModelsPage({
   if (!user?.org_id) return null;
 
   const range = dateRangeFromDays(params.days);
-  const models = await getCostByModel(user.org_id, range);
+  const models = await getCostByModel(user, range);
 
   return (
     <div className="space-y-6">

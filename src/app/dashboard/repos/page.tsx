@@ -22,9 +22,9 @@ export default async function ReposPage({
 
   const range = dateRangeFromDays(params.days);
   const [repos, branches, tickets] = await Promise.all([
-    getCostByRepo(user.org_id, range),
-    getCostByBranch(user.org_id, range),
-    getCostByTicket(user.org_id, range),
+    getCostByRepo(user, range),
+    getCostByBranch(user, range),
+    getCostByTicket(user, range),
   ]);
 
   return (
