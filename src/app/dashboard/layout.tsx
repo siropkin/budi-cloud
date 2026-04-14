@@ -13,7 +13,7 @@ export default async function DashboardLayout({
   const user = await getCurrentUser();
 
   if (!user) redirect("/auth/error?reason=missing_user_record");
-  if (!user.org_id) redirect("/dashboard/setup");
+  if (!user.org_id) redirect("/setup");
 
   return (
     <div className="flex h-screen bg-[#0a0a0a] text-white">

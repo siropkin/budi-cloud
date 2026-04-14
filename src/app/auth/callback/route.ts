@@ -66,7 +66,7 @@ export async function GET(request: Request) {
     }
 
     // New user with no org — redirect to setup
-    return NextResponse.redirect(`${origin}/dashboard/setup`);
+    return NextResponse.redirect(`${origin}/setup`);
   }
 
   // Existing user — update email/display_name if changed
@@ -86,7 +86,7 @@ export async function GET(request: Request) {
 
   // If user has no org, redirect to setup
   if (!existingUser.org_id) {
-    return NextResponse.redirect(`${origin}/dashboard/setup`);
+    return NextResponse.redirect(`${origin}/setup`);
   }
 
   return NextResponse.redirect(`${origin}${next}`);
