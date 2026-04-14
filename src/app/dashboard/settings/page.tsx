@@ -1,6 +1,7 @@
 import { getCurrentUser, getOrgMembers } from "@/lib/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { ApiKeySection } from "./api-key-section";
 import { InviteSection } from "./invite-section";
 
 export default async function SettingsPage() {
@@ -40,20 +41,7 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Your API Key</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-2 text-sm text-zinc-400">
-            Use this key with <code className="text-zinc-300">budi cloud join</code> on
-            your local machine to start syncing data.
-          </p>
-          <code className="block rounded-lg bg-black/50 px-4 py-3 font-mono text-sm text-emerald-400">
-            {user.api_key}
-          </code>
-        </CardContent>
-      </Card>
+      <ApiKeySection apiKey={user.api_key} />
 
       <Card>
         <CardHeader>
