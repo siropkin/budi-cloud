@@ -12,7 +12,7 @@ export default async function DashboardLayout({
 }) {
   const user = await getCurrentUser();
 
-  if (!user) redirect("/login");
+  if (!user) redirect("/auth/error?reason=missing_user_record");
   if (!user.org_id) redirect("/dashboard/setup");
 
   return (
