@@ -24,9 +24,7 @@ export function OrgSetupForm() {
           className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-zinc-500 focus:border-blue-500 focus:outline-none"
         />
       </div>
-      {state?.error && (
-        <p className="text-sm text-red-400">{state.error}</p>
-      )}
+      {state?.error && <p className="text-sm text-red-400">{state.error}</p>}
       <button
         type="submit"
         disabled={pending}

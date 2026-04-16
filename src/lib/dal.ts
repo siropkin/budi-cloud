@@ -79,7 +79,12 @@ export async function getOverviewStats(user: BudiUser, range: DateRange) {
       totalOutputTokens: acc.totalOutputTokens + Number(r.output_tokens),
       totalMessages: acc.totalMessages + r.message_count,
     }),
-    { totalCostCents: 0, totalInputTokens: 0, totalOutputTokens: 0, totalMessages: 0 }
+    {
+      totalCostCents: 0,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalMessages: 0,
+    }
   );
 
   return { ...totals, totalSessions: sessionCount ?? 0 };
@@ -96,7 +101,9 @@ export async function getDailyActivity(user: BudiUser, range: DateRange) {
 
   const { data: rollups } = await admin
     .from("daily_rollups")
-    .select("bucket_day, input_tokens, output_tokens, cost_cents, message_count")
+    .select(
+      "bucket_day, input_tokens, output_tokens, cost_cents, message_count"
+    )
     .in("device_id", deviceIds)
     .gte("bucket_day", range.from)
     .lte("bucket_day", range.to)
@@ -105,7 +112,12 @@ export async function getDailyActivity(user: BudiUser, range: DateRange) {
   // Aggregate by day
   const byDay = new Map<
     string,
-    { input_tokens: number; output_tokens: number; cost_cents: number; message_count: number }
+    {
+      input_tokens: number;
+      output_tokens: number;
+      cost_cents: number;
+      message_count: number;
+    }
   >();
   for (const r of rollups ?? []) {
     const existing = byDay.get(r.bucket_day) ?? {
@@ -136,7 +148,10 @@ export async function getCostByUser(user: BudiUser, range: DateRange) {
   // Get users visible to the current user
   const userFilter =
     user.role === "manager"
-      ? admin.from("users").select("id, display_name, email").eq("org_id", user.org_id!)
+      ? admin
+          .from("users")
+          .select("id, display_name, email")
+          .eq("org_id", user.org_id!)
       : admin.from("users").select("id, display_name, email").eq("id", user.id);
   const { data: orgUsers } = await userFilter;
 
@@ -163,14 +178,18 @@ export async function getCostByUser(user: BudiUser, range: DateRange) {
   // Aggregate by device → user
   const byDevice = new Map<string, number>();
   for (const r of rollups ?? []) {
-    byDevice.set(r.device_id, (byDevice.get(r.device_id) ?? 0) + Number(r.cost_cents));
+    byDevice.set(
+      r.device_id,
+      (byDevice.get(r.device_id) ?? 0) + Number(r.cost_cents)
+    );
   }
 
   // Map device costs to users
   const byUser = new Map<string, { name: string; cost_cents: number }>();
   for (const device of devices ?? []) {
     const owner = orgUsers.find((u) => u.id === device.user_id);
-    const name = owner?.display_name || owner?.email || device.user_id.slice(0, 8);
+    const name =
+      owner?.display_name || owner?.email || device.user_id.slice(0, 8);
     const deviceCost = byDevice.get(device.id) ?? 0;
     const existing = byUser.get(device.user_id);
     if (existing) {
@@ -201,7 +220,10 @@ export async function getCostByModel(user: BudiUser, range: DateRange) {
     .gte("bucket_day", range.from)
     .lte("bucket_day", range.to);
 
-  const byModel = new Map<string, { provider: string; model: string; cost_cents: number }>();
+  const byModel = new Map<
+    string,
+    { provider: string; model: string; cost_cents: number }
+  >();
   for (const r of rollups ?? []) {
     const key = `${r.provider}:${r.model}`;
     const existing = byModel.get(key);
@@ -264,7 +286,10 @@ export async function getCostByBranch(user: BudiUser, range: DateRange) {
     .gte("bucket_day", range.from)
     .lte("bucket_day", range.to);
 
-  const byBranch = new Map<string, { repo_id: string; git_branch: string; cost_cents: number }>();
+  const byBranch = new Map<
+    string,
+    { repo_id: string; git_branch: string; cost_cents: number }
+  >();
   for (const r of rollups ?? []) {
     const key = `${r.repo_id}:${r.git_branch}`;
     const existing = byBranch.get(key);
@@ -304,7 +329,10 @@ export async function getCostByTicket(user: BudiUser, range: DateRange) {
   const byTicket = new Map<string, number>();
   for (const r of rollups ?? []) {
     if (r.ticket) {
-      byTicket.set(r.ticket, (byTicket.get(r.ticket) ?? 0) + Number(r.cost_cents));
+      byTicket.set(
+        r.ticket,
+        (byTicket.get(r.ticket) ?? 0) + Number(r.cost_cents)
+      );
     }
   }
 

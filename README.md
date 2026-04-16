@@ -28,13 +28,13 @@ See [ADR-0083](https://github.com/siropkin/budi/blob/main/docs/adr/0083-cloud-in
 
 The cloud alpha supports small teams (1–20 developers):
 
-| Aspect | Detail |
-|--------|--------|
-| **Roles** | `manager` (view all org data, manage members) and `member` (sync data, view own data) |
-| **Granularity** | Daily aggregates; no per-message, per-hour, or real-time views |
-| **Retention** | 90 days |
-| **Multi-org** | Not supported in v1 — one user belongs to one org |
-| **SSO / SAML** | Not supported in v1 — API key auth for daemon sync, Supabase Auth (GitHub, Google, magic link) for the web dashboard |
+| Aspect          | Detail                                                                                                               |
+| --------------- | -------------------------------------------------------------------------------------------------------------------- |
+| **Roles**       | `manager` (view all org data, manage members) and `member` (sync data, view own data)                                |
+| **Granularity** | Daily aggregates; no per-message, per-hour, or real-time views                                                       |
+| **Retention**   | 90 days                                                                                                              |
+| **Multi-org**   | Not supported in v1 — one user belongs to one org                                                                    |
+| **SSO / SAML**  | Not supported in v1 — API key auth for daemon sync, Supabase Auth (GitHub, Google, magic link) for the web dashboard |
 
 ## Auth
 

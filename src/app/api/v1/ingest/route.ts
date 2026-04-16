@@ -1,41 +1,16 @@
 import { type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  buildRollupRows,
+  buildSessionRows,
+  type IngestDailyRollup,
+  type IngestSessionSummary,
+} from "@/app/api/v1/ingest/rows";
 
 // ADR-0083 §7: Max body size 1 MiB
 const MAX_BODY_BYTES = 1024 * 1024;
 
 const CURRENT_SCHEMA_VERSION = 1;
-
-interface DailyRollup {
-  bucket_day: string;
-  role: string;
-  provider: string;
-  model: string;
-  repo_id: string;
-  git_branch: string;
-  ticket?: string | null;
-  message_count: number;
-  input_tokens: number;
-  output_tokens: number;
-  cache_creation_tokens: number;
-  cache_read_tokens: number;
-  cost_cents: number;
-}
-
-interface SessionSummary {
-  session_id: string;
-  provider: string;
-  started_at?: string | null;
-  ended_at?: string | null;
-  duration_ms?: number | null;
-  repo_id?: string | null;
-  git_branch?: string | null;
-  ticket?: string | null;
-  message_count: number;
-  total_input_tokens: number;
-  total_output_tokens: number;
-  total_cost_cents: number;
-}
 
 interface SyncEnvelope {
   schema_version: number;
@@ -43,8 +18,8 @@ interface SyncEnvelope {
   org_id: string;
   synced_at: string;
   payload: {
-    daily_rollups: DailyRollup[];
-    session_summaries: SessionSummary[];
+    daily_rollups: IngestDailyRollup[];
+    session_summaries: IngestSessionSummary[];
   };
 }
 
@@ -199,26 +174,15 @@ export async function POST(request: NextRequest) {
   }
 
   // --- UPSERT daily rollups (ADR-0083 §5) ---
-  let recordsUpserted = 0;
+  let dailyRollupsUpserted = 0;
+  let sessionSummariesUpserted = 0;
 
   if (body.payload.daily_rollups.length > 0) {
-    const rollupRows = body.payload.daily_rollups.map((r) => ({
-      device_id: body.device_id,
-      bucket_day: r.bucket_day,
-      role: r.role,
-      provider: r.provider,
-      model: r.model,
-      repo_id: r.repo_id,
-      git_branch: r.git_branch,
-      ticket: r.ticket ?? null,
-      message_count: r.message_count,
-      input_tokens: r.input_tokens,
-      output_tokens: r.output_tokens,
-      cache_creation_tokens: r.cache_creation_tokens,
-      cache_read_tokens: r.cache_read_tokens,
-      cost_cents: r.cost_cents,
-      synced_at: body.synced_at,
-    }));
+    const rollupRows = buildRollupRows(
+      body.device_id,
+      body.synced_at,
+      body.payload.daily_rollups
+    );
 
     const { error: rollupError, count } = await supabase
       .from("daily_rollups")
@@ -235,27 +199,17 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-    recordsUpserted += count ?? rollupRows.length;
+    dailyRollupsUpserted = count ?? rollupRows.length;
   }
 
   // --- UPSERT session summaries (ADR-0083 §5) ---
+  // See `buildSessionRows` for the `started_at` coalescing that fixes #14.
   if (body.payload.session_summaries.length > 0) {
-    const sessionRows = body.payload.session_summaries.map((s) => ({
-      device_id: body.device_id,
-      session_id: s.session_id,
-      provider: s.provider,
-      started_at: s.started_at ?? null,
-      ended_at: s.ended_at ?? null,
-      duration_ms: s.duration_ms ?? null,
-      repo_id: s.repo_id ?? null,
-      git_branch: s.git_branch ?? null,
-      ticket: s.ticket ?? null,
-      message_count: s.message_count,
-      total_input_tokens: s.total_input_tokens,
-      total_output_tokens: s.total_output_tokens,
-      total_cost_cents: s.total_cost_cents,
-      synced_at: body.synced_at,
-    }));
+    const sessionRows = buildSessionRows(
+      body.device_id,
+      body.synced_at,
+      body.payload.session_summaries
+    );
 
     const { error: sessionError, count } = await supabase
       .from("session_summaries")
@@ -271,7 +225,7 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-    recordsUpserted += count ?? sessionRows.length;
+    sessionSummariesUpserted = count ?? sessionRows.length;
   }
 
   // --- Compute watermark: latest fully-synced bucket_day ---
@@ -286,9 +240,13 @@ export async function POST(request: NextRequest) {
   const watermark = watermarkRow?.bucket_day ?? null;
 
   // --- ADR-0083 §5: Success response ---
+  // `records_upserted` stays for backward compatibility with existing daemon
+  // builds; the per-table counts make session regressions obvious (#14).
   return Response.json({
     accepted: true,
     watermark,
-    records_upserted: recordsUpserted,
+    records_upserted: dailyRollupsUpserted + sessionSummariesUpserted,
+    daily_rollups_upserted: dailyRollupsUpserted,
+    session_summaries_upserted: sessionSummariesUpserted,
   });
 }
