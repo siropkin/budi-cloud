@@ -63,7 +63,10 @@ export async function getOverviewStats(user: BudiUser, range: DateRange) {
     )
     .in("device_id", deviceIds)
     .gte("bucket_day", range.from)
-    .lte("bucket_day", range.to);
+    .lte("bucket_day", range.to)
+    // Defeat the default PostgREST max-rows cap so Overview and Team sum the
+    // same complete row set (#15).
+    .limit(100_000);
 
   const { count: sessionCount } = await admin
     .from("session_summaries")
@@ -138,70 +141,114 @@ export async function getDailyActivity(user: BudiUser, range: DateRange) {
     .map(([day, data]) => ({ bucket_day: day, ...data }));
 }
 
+/** Synthetic user id used to group rollups whose owner we can't surface. */
+export const UNASSIGNED_USER_ID = "__unassigned__";
+
 /**
  * Get cost breakdown by user/device.
  * Manager sees all users; member sees only their own cost (ADR-0083 §6).
+ *
+ * Rollups that resolve to a visible user are grouped by that user. Any cost
+ * left over (devices whose owner isn't in the viewer's visible set, or
+ * rollups with no matching device row) is surfaced as an `Unassigned` row,
+ * mirroring how `Cost by Project` on the Repos page already handles
+ * unattributed data. This guarantees
+ *
+ *     getOverviewStats.totalCostCents === sum(getCostByUser[...].cost_cents)
+ *
+ * for the same (user, range), fixing the Overview/Team reconciliation gap
+ * described in #15.
  */
 export async function getCostByUser(user: BudiUser, range: DateRange) {
   const admin = createAdminClient();
 
-  // Get users visible to the current user
-  const userFilter =
-    user.role === "manager"
-      ? admin
-          .from("users")
-          .select("id, display_name, email")
-          .eq("org_id", user.org_id!)
-      : admin.from("users").select("id, display_name, email").eq("id", user.id);
-  const { data: orgUsers } = await userFilter;
-
-  if (!orgUsers?.length) return [];
-
-  const { data: devices } = await admin
-    .from("devices")
-    .select("id, user_id, label")
-    .in(
-      "user_id",
-      orgUsers.map((u) => u.id)
-    );
-
-  const deviceIds = (devices ?? []).map((d) => d.id);
+  // Use the identical device set as `getOverviewStats` so the two pages
+  // agree on the denominator.
+  const deviceIds = await getVisibleDeviceIds(admin, user);
   if (deviceIds.length === 0) return [];
 
   const { data: rollups } = await admin
     .from("daily_rollups")
-    .select("device_id, cost_cents, input_tokens, output_tokens, message_count")
+    .select("device_id, cost_cents")
     .in("device_id", deviceIds)
     .gte("bucket_day", range.from)
-    .lte("bucket_day", range.to);
+    .lte("bucket_day", range.to)
+    // Defeat the default PostgREST max-rows cap so we sum every row instead
+    // of a silently-truncated subset.
+    .limit(100_000);
 
-  // Aggregate by device → user
-  const byDevice = new Map<string, number>();
-  for (const r of rollups ?? []) {
-    byDevice.set(
-      r.device_id,
-      (byDevice.get(r.device_id) ?? 0) + Number(r.cost_cents)
-    );
+  const { data: devices } = await admin
+    .from("devices")
+    .select("id, user_id")
+    .in("id", deviceIds);
+
+  const deviceToUser = new Map<string, string>();
+  for (const d of devices ?? []) {
+    deviceToUser.set(d.id as string, d.user_id as string);
   }
 
-  // Map device costs to users
-  const byUser = new Map<string, { name: string; cost_cents: number }>();
-  for (const device of devices ?? []) {
-    const owner = orgUsers.find((u) => u.id === device.user_id);
-    const name =
-      owner?.display_name || owner?.email || device.user_id.slice(0, 8);
-    const deviceCost = byDevice.get(device.id) ?? 0;
-    const existing = byUser.get(device.user_id);
+  const ownerIds = Array.from(new Set(deviceToUser.values()));
+  const { data: ownerUsers } =
+    ownerIds.length > 0
+      ? await admin
+          .from("users")
+          .select("id, display_name, email, org_id")
+          .in("id", ownerIds)
+      : { data: [] as UserLookup[] };
+
+  // Which owner IDs should surface by name to this viewer?
+  //   - Manager: every owner in their org
+  //   - Member:  only themselves; anything else collapses into Unassigned
+  const visibleOwnerIds = new Set<string>(
+    user.role === "manager"
+      ? (ownerUsers ?? [])
+          .filter((u) => u.org_id === user.org_id)
+          .map((u) => u.id)
+      : [user.id]
+  );
+
+  const userMeta = new Map<string, string>();
+  for (const u of ownerUsers ?? []) {
+    userMeta.set(u.id, u.display_name || u.email || u.id.slice(0, 8));
+  }
+
+  type Bucket = { id: string; name: string; cost_cents: number };
+  const byUser = new Map<string, Bucket>();
+  for (const r of rollups ?? []) {
+    const ownerId = deviceToUser.get(r.device_id as string);
+    const bucketId =
+      ownerId && visibleOwnerIds.has(ownerId) ? ownerId : UNASSIGNED_USER_ID;
+    const cost = Number(r.cost_cents);
+    const existing = byUser.get(bucketId);
     if (existing) {
-      existing.cost_cents += deviceCost;
+      existing.cost_cents += cost;
     } else {
-      byUser.set(device.user_id, { name, cost_cents: deviceCost });
+      byUser.set(bucketId, {
+        id: bucketId,
+        name:
+          bucketId === UNASSIGNED_USER_ID
+            ? "Unassigned"
+            : (userMeta.get(bucketId) ?? bucketId.slice(0, 8)),
+        cost_cents: cost,
+      });
     }
   }
 
   return Array.from(byUser.values())
     .filter((u) => u.cost_cents > 0)
-    .sort((a, b) => b.cost_cents - a.cost_cents);
+    .sort((a, b) => {
+      // Keep "Unassigned" at the end regardless of its magnitude.
+      if (a.id === UNASSIGNED_USER_ID) return 1;
+      if (b.id === UNASSIGNED_USER_ID) return -1;
+      return b.cost_cents - a.cost_cents;
+    });
+}
+
+interface UserLookup {
+  id: string;
+  display_name: string | null;
+  email: string | null;
+  org_id: string | null;
 }
 
 /**
