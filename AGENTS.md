@@ -1,7 +1,5 @@
-<!-- BEGIN:nextjs-agent-rules -->
+# AGENTS.md
 
-# This is NOT the Next.js you know
+Canonical AI-agent repository guidance lives in `SOUL.md`.
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-
-<!-- END:nextjs-agent-rules -->
+This file is kept only as a compatibility pointer for tools that still look for `AGENTS.md`.

@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# Next.js build output
+.next/
+out/
+
+# Build / coverage
+build/
+dist/
+coverage/
+
+# Env / secrets
+.env
+.env.*
+!.env.local.example
+
+# Deploy tooling
+.vercel/
+.netlify/
+
+# Supabase local artifacts
+supabase/.temp/
+supabase/.branches/
+
+# Logs
+*.log
+
+# TypeScript build cache
+*.tsbuildinfo
+next-env.d.ts
+
+# Lockfiles
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Binary / media
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.ico
+*.mp4
+*.mov
+*.pdf
+*.woff
+*.woff2
+*.ttf
+*.otf
