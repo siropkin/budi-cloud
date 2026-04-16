@@ -32,23 +32,14 @@ export default async function OverviewPage({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total Cost"
-          value={fmtCost(stats.totalCostCents)}
-        />
+        <StatCard title="Total Cost" value={fmtCost(stats.totalCostCents)} />
         <StatCard
           title="Total Tokens"
           value={fmtNum(stats.totalInputTokens + stats.totalOutputTokens)}
           subtitle={`${fmtNum(stats.totalInputTokens)} in / ${fmtNum(stats.totalOutputTokens)} out`}
         />
-        <StatCard
-          title="Messages"
-          value={fmtNum(stats.totalMessages)}
-        />
-        <StatCard
-          title="Sessions"
-          value={fmtNum(stats.totalSessions)}
-        />
+        <StatCard title="Messages" value={fmtNum(stats.totalMessages)} />
+        <StatCard title="Sessions" value={fmtNum(stats.totalSessions)} />
       </div>
 
       <Card>

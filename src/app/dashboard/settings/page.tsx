@@ -33,9 +33,7 @@ export default async function SettingsPage() {
             </div>
             <div className="flex justify-between">
               <dt className="text-zinc-400">Org ID</dt>
-              <dd className="font-mono text-xs text-zinc-400">
-                {user.org_id}
-              </dd>
+              <dd className="font-mono text-xs text-zinc-400">{user.org_id}</dd>
             </div>
           </dl>
         </CardContent>
