@@ -1,10 +1,19 @@
 import { Suspense } from "react";
-import { getCurrentUser, getOverviewStats, getDailyActivity } from "@/lib/dal";
+import {
+  getCurrentUser,
+  getOverviewStats,
+  getDailyActivity,
+  getSyncFreshness,
+} from "@/lib/dal";
 import { dateRangeFromDays } from "@/lib/date-range";
 import { fmtCost, fmtNum } from "@/lib/format";
 import { StatCard } from "@/components/stat-card";
 import { PeriodSelector } from "@/components/period-selector";
 import { ActivityChart } from "@/components/charts/activity-chart";
+import {
+  LinkDaemonBanner,
+  FirstSyncInProgressBanner,
+} from "@/components/link-daemon-banner";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 export default async function OverviewPage({
@@ -17,10 +26,19 @@ export default async function OverviewPage({
   if (!user?.org_id) return null;
 
   const range = dateRangeFromDays(params.days);
-  const [stats, activity] = await Promise.all([
+  const [stats, activity, freshness] = await Promise.all([
     getOverviewStats(user, range),
     getDailyActivity(user, range),
+    getSyncFreshness(user),
   ]);
+
+  // Decide which empty-state banner (if any) is most informative. The
+  // freshness snapshot lets us tell "no devices yet" apart from "devices
+  // exist but nothing synced yet" apart from "devices + data, just a quiet
+  // window". Without this, all three used to collapse into "chart is empty".
+  const showLinkBanner = freshness.deviceCount === 0;
+  const showFirstSyncBanner =
+    freshness.deviceCount > 0 && freshness.lastRollupAt === null;
 
   return (
     <div className="space-y-6">
@@ -30,6 +48,9 @@ export default async function OverviewPage({
           <PeriodSelector />
         </Suspense>
       </div>
+
+      {showLinkBanner && <LinkDaemonBanner apiKey={user.api_key} />}
+      {showFirstSyncBanner && <FirstSyncInProgressBanner />}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard title="Total Cost" value={fmtCost(stats.totalCostCents)} />

@@ -136,6 +136,82 @@ async function loadDal() {
   return await import("@/lib/dal");
 }
 
+describe("getSyncFreshness (linking / freshness snapshot)", () => {
+  const baseUser = {
+    id: "usr_ivan",
+    org_id: "org_solo",
+    role: "manager" as const,
+    api_key: "budi_x",
+    display_name: "Ivan",
+    email: "ivan@example.com",
+  };
+
+  it("reports not-linked when the account has no devices", async () => {
+    fake.seed("orgs", [{ id: "org_solo", name: "solo" }]);
+    fake.seed("users", [{ ...baseUser }]);
+    fake.seed("devices", []);
+    fake.seed("daily_rollups", []);
+
+    const { getSyncFreshness } = await loadDal();
+    const snap = await getSyncFreshness(baseUser);
+    expect(snap).toEqual({
+      deviceCount: 0,
+      lastSeenAt: null,
+      lastRollupAt: null,
+    });
+  });
+
+  it("reports linked-but-no-rollups when devices exist but nothing has been ingested", async () => {
+    fake.seed("orgs", [{ id: "org_solo", name: "solo" }]);
+    fake.seed("users", [{ ...baseUser }]);
+    fake.seed("devices", [
+      {
+        id: "dev_laptop",
+        user_id: "usr_ivan",
+        last_seen: "2026-04-18T11:00:00Z",
+      },
+    ]);
+    fake.seed("daily_rollups", []);
+
+    const { getSyncFreshness } = await loadDal();
+    const snap = await getSyncFreshness(baseUser);
+    expect(snap.deviceCount).toBe(1);
+    expect(snap.lastSeenAt).toBe("2026-04-18T11:00:00Z");
+    expect(snap.lastRollupAt).toBeNull();
+  });
+
+  it("reports the most recent rollup synced_at across visible devices", async () => {
+    fake.seed("orgs", [{ id: "org_solo", name: "solo" }]);
+    fake.seed("users", [{ ...baseUser }]);
+    fake.seed("devices", [
+      {
+        id: "dev_laptop",
+        user_id: "usr_ivan",
+        last_seen: "2026-04-18T11:00:00Z",
+      },
+      {
+        id: "dev_desktop",
+        user_id: "usr_ivan",
+        last_seen: "2026-04-17T11:00:00Z",
+      },
+    ]);
+    fake.seed("daily_rollups", [
+      rollup("dev_laptop", "2026-04-18", 100, {
+        synced_at: "2026-04-18T10:30:00Z",
+      }),
+      rollup("dev_desktop", "2026-04-17", 50, {
+        synced_at: "2026-04-17T09:00:00Z",
+      }),
+    ]);
+
+    const { getSyncFreshness } = await loadDal();
+    const snap = await getSyncFreshness(baseUser);
+    expect(snap.deviceCount).toBe(2);
+    expect(snap.lastSeenAt).toBe("2026-04-18T11:00:00Z");
+    expect(snap.lastRollupAt).toBe("2026-04-18T10:30:00Z");
+  });
+});
+
 describe("Overview ↔ Team reconciliation (#15)", () => {
   it("single-member org: org_total === sum(member_totals)", async () => {
     fake.seed("orgs", [{ id: "org_solo", name: "solo" }]);

@@ -411,6 +411,59 @@ export async function getSessions(user: BudiUser, range: DateRange) {
 }
 
 /**
+ * Sync freshness snapshot for the viewer.
+ *
+ * Used by the dashboard header to render a "Last synced X ago" indicator and
+ * to distinguish *not linked yet* from *linked, waiting for first sync* from
+ * *stalled*.
+ *
+ * - `deviceCount` is the number of daemons the viewer can see. Zero means the
+ *   account exists on cloud but no local daemon has ever called `/v1/ingest`
+ *   with this API key yet — the "not linked yet" state.
+ * - `lastSeenAt` is the most recent `devices.last_seen` across the visible
+ *   devices. It advances on every successful ingest, even when the payload
+ *   contains zero rollups, so it's the authoritative "is the daemon talking
+ *   to us" signal.
+ * - `lastRollupAt` is the most recent `daily_rollups.synced_at` across the
+ *   visible devices. If `deviceCount > 0` but `lastRollupAt` is null, the
+ *   daemon is linked but hasn't pushed any usage rows yet — that's the
+ *   "initial sync in progress / no data yet" state.
+ */
+export async function getSyncFreshness(user: BudiUser): Promise<{
+  deviceCount: number;
+  lastSeenAt: string | null;
+  lastRollupAt: string | null;
+}> {
+  const admin = createAdminClient();
+  const deviceIds = await getVisibleDeviceIds(admin, user);
+  if (deviceIds.length === 0) {
+    return { deviceCount: 0, lastSeenAt: null, lastRollupAt: null };
+  }
+
+  const { data: lastSeenRow } = await admin
+    .from("devices")
+    .select("last_seen")
+    .in("id", deviceIds)
+    .order("last_seen", { ascending: false })
+    .limit(1)
+    .single();
+
+  const { data: lastRollupRow } = await admin
+    .from("daily_rollups")
+    .select("synced_at")
+    .in("device_id", deviceIds)
+    .order("synced_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  return {
+    deviceCount: deviceIds.length,
+    lastSeenAt: (lastSeenRow?.last_seen as string | null) ?? null,
+    lastRollupAt: (lastRollupRow?.synced_at as string | null) ?? null,
+  };
+}
+
+/**
  * Get org members list.
  */
 export async function getOrgMembers(orgId: string) {

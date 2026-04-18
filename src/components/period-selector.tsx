@@ -2,17 +2,12 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { clsx } from "clsx";
-
-const PERIODS = [
-  { label: "7d", value: "7" },
-  { label: "30d", value: "30" },
-  { label: "90d", value: "90" },
-] as const;
+import { DEFAULT_PERIOD_DAYS, PERIODS } from "@/lib/periods";
 
 export function PeriodSelector() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const current = searchParams.get("days") ?? "30";
+  const current = searchParams.get("days") ?? String(DEFAULT_PERIOD_DAYS);
 
   function selectPeriod(days: string) {
     const params = new URLSearchParams(searchParams.toString());
