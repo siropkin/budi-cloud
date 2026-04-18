@@ -98,6 +98,16 @@ class FakeQuery {
     };
   }
 
+  async maybeSingle() {
+    const rows = this.materialize();
+    if (rows.length === 0) return { data: null, error: null };
+    if (rows.length === 1) return { data: rows[0], error: null };
+    return {
+      data: null,
+      error: { message: `expected 0 or 1 row, got ${rows.length}` },
+    };
+  }
+
   then<T>(
     onFulfilled: (r: { data: Row[]; error: null; count: number | null }) => T
   ) {

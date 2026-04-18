@@ -448,13 +448,18 @@ export async function getSyncFreshness(user: BudiUser): Promise<{
     .limit(1)
     .single();
 
+  // `.maybeSingle()` because the "linked but no rollups yet" first-run state
+  // legitimately returns zero rows (covered by `FirstSyncInProgressBanner`).
+  // `.single()` would emit a PGRST116 / HTTP 406 row in production logs on
+  // every freshly-linked-no-data render even though the call site already
+  // tolerates `data: null` (see #22).
   const { data: lastRollupRow } = await admin
     .from("daily_rollups")
     .select("synced_at")
     .in("device_id", deviceIds)
     .order("synced_at", { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   return {
     deviceCount: deviceIds.length,
