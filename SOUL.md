@@ -73,12 +73,20 @@ The daemon pushes **pre-aggregated daily rollups and session summaries** — num
 
 ## Pages
 
-- `/overview` — org-wide totals, trends, top models, top repos
-- `/team` — members, per-member spend (manager only)
-- `/models` — breakdown by model / provider
-- `/repos` — breakdown by repo / branch
-- `/sessions` — session list with health signals
-- `/settings` — org settings, API keys, retention
+All dashboard pages live under `/dashboard`:
+
+- `/dashboard` — org-wide Overview (totals, trends, top models, top repos)
+- `/dashboard/team` — members, per-member spend (manager only)
+- `/dashboard/models` — breakdown by model / provider
+- `/dashboard/repos` — breakdown by repo / branch
+- `/dashboard/sessions` — session list with health signals
+- `/dashboard/settings` — org settings, API keys, retention
+
+## Window contract and local→cloud linking (8.1)
+
+- **Time-window filters are `1d` / `7d` / `30d`** (default `7d`), matching the local Budi contract so the local and cloud surfaces tell the same story (ADR-0088 §7, siropkin/budi#235). `?days=30` deep links still resolve; only the default and the selector presets changed — the old `7d` / `30d` / `90d` presets were retired. Any positive integer passed through `?days=` still renders a valid custom window.
+- **Local→cloud linking flow** is owned end to end by this repo. The header badge shows one of `not_linked` / `linked_no_data` / `ok` / `stalled` via `getSyncFreshness`, the Overview page renders a `LinkDaemonBanner` with a copyable `budi cloud join --api-key …` command for brand-new accounts, and a `FirstSyncInProgressBanner` covers the window between link and first ingest so a just-linked account is never indistinguishable from a broken one. The cloud cannot initiate connections back to a developer machine (push-only, ADR-0083); freshness is inferred from the most recent `daily_rollups.synced_at`.
+- **Provider-scoped tiles reuse the shared status contract** (`docs/statusline-contract.md` in the main repo). Tiles that claim to show "Cursor" or "Claude Code" must filter by that provider — never blend multi-provider totals in a provider-scoped tile.
 
 ## Key directories
 
