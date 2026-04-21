@@ -1,6 +1,7 @@
 import { Suspense } from "react";
-import { getCurrentUser, getSessions } from "@/lib/dal";
+import { getCurrentUser, getEarliestActivity, getSessions } from "@/lib/dal";
 import { dateRangeFromDays } from "@/lib/date-range";
+import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { fmtCost, fmtNum, repoName } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -33,7 +34,9 @@ export default async function SessionsPage({
   const user = await getCurrentUser();
   if (!user?.org_id) return null;
 
-  const range = dateRangeFromDays(params.days);
+  const earliestActivity =
+    params.days === ALL_PERIOD_VALUE ? await getEarliestActivity(user) : null;
+  const range = dateRangeFromDays(params.days, earliestActivity);
   const sessions = await getSessions(user, range);
 
   return (
