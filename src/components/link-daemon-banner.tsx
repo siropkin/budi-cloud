@@ -14,13 +14,7 @@ import { Terminal, Copy, Check } from "lucide-react";
  */
 export function LinkDaemonBanner({ apiKey }: { apiKey: string }) {
   const [copied, setCopied] = useState(false);
-  // Budi 8.2.x has no `budi cloud` link verb — users configure cloud sync
-  // by writing ~/.config/budi/cloud.toml directly. A one-shot
-  // `budi cloud init --api-key` is tracked for 8.3 in siropkin/budi#446.
-  const command = `mkdir -p ~/.config/budi && cat >~/.config/budi/cloud.toml <<'TOML'
-enabled = true
-api_key = "${apiKey}"
-TOML`;
+  const command = `budi cloud init --api-key ${apiKey}`;
 
   function handleCopy() {
     navigator.clipboard.writeText(command);
@@ -41,12 +35,9 @@ TOML`;
                 Link your local Budi to finish setup
               </h2>
               <p className="mt-1 text-sm text-zinc-400">
-                Paste this in your terminal on the machine where{" "}
-                <code className="text-zinc-300">budi</code> is installed — it
-                writes <code className="text-zinc-300">cloud.toml</code> so
-                the daemon picks up your key on its next cycle. A one-command{" "}
-                <code className="text-zinc-300">budi cloud init</code> flow is
-                coming in Budi 8.3.
+                Run this in your terminal on the machine where{" "}
+                <code className="text-zinc-300">budi</code> is installed — the
+                daemon picks up your key on its next cycle.
               </p>
             </div>
             <div className="flex items-start gap-2">
