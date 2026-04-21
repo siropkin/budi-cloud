@@ -1,6 +1,6 @@
 # SOUL.md
 
-Cloud dashboard and ingest API for **budi**. Next.js 16 + Supabase, deployed to `app.getbudi.dev`. Receives pre-aggregated daily rollups and session summaries from the budi daemon over HTTPS and renders them as a team-wide dashboard.
+Cloud dashboard and ingest API for **budi**. Next.js 16 + React 19 + Supabase, deployed to `app.getbudi.dev`. Receives pre-aggregated daily rollups and session summaries from the budi daemon over HTTPS and renders them as a team-wide dashboard.
 
 This repo is the **optional, opt-in cloud layer**. The product is complete without it. Local-first is the default; the cloud never initiates a connection to a user machine.
 
@@ -67,43 +67,44 @@ The daemon pushes **pre-aggregated daily rollups and session summaries** — num
 
 ## Ingest API contract
 
-- `POST /v1/ingest` — receives the sync envelope (daily_rollups + session_summaries). Returns 200 on success, 401 on auth failure (daemon stops syncing), 422 on schema mismatch (daemon pauses until update), 429/5xx triggers daemon retry with exponential backoff (1s → 2s → … → 5min cap).
-- `GET /v1/ingest/status` — returns watermark + last-sync timestamp for the caller's API key.
+- `POST /v1/ingest` — receives the sync envelope (daily_rollups + session_summaries). Returns 200 on success, 401 on auth failure (daemon stops syncing), 422 on schema mismatch (daemon pauses until update), 429/5xx triggers daemon retry with exponential backoff (1s → 2s → … → 5 min cap).
+- `GET /v1/ingest/status?device_id=…` — returns watermark, last-seen timestamp, and record counts for the caller's device.
 - Schema for the envelope: see ADR-0083 §2 in the main repo.
 
 ## Pages
 
 All dashboard pages live under `/dashboard`:
 
-- `/dashboard` — org-wide Overview (totals, trends, top models, top repos)
-- `/dashboard/team` — members, per-member spend (manager only)
+- `/dashboard` — org-wide Overview (totals, trends, daily activity)
+- `/dashboard/team` — per-member spend (managers see the full org; members see only their own row)
 - `/dashboard/models` — breakdown by model / provider
-- `/dashboard/repos` — breakdown by repo / branch
+- `/dashboard/repos` — breakdown by repo / branch / ticket
 - `/dashboard/sessions` — session list with health signals
-- `/dashboard/settings` — org settings, API keys, retention
+- `/dashboard/settings` — org info, the viewer's API key, members list, and (managers) invite link generation
 
-## Window contract and local→cloud linking (8.1)
+## Window contract and local→cloud linking
 
-- **Time-window filters are `1d` / `7d` / `30d`** (default `7d`), matching the local Budi contract so the local and cloud surfaces tell the same story (ADR-0088 §7, siropkin/budi#235). `?days=30` deep links still resolve; only the default and the selector presets changed — the old `7d` / `30d` / `90d` presets were retired. Any positive integer passed through `?days=` still renders a valid custom window. The cloud additionally exposes `?days=all` as a lifetime preset backed by a per-org earliest-activity lookup — local Budi has no equivalent because local stats are ephemeral, so this is a cloud-only extension of the contract.
+- **Time-window filters are `1d` / `7d` / `30d` / `All`** (default `7d`), matching the local Budi contract so the local and cloud surfaces tell the same story (ADR-0088 §7). Any positive integer in `?days=` is also accepted as a custom window. `?days=all` is a cloud-only lifetime preset backed by a per-org earliest-activity lookup — local Budi has no equivalent because local stats are ephemeral. The preset list and default live in `src/lib/periods.ts`.
 - **Local→cloud linking flow** is owned end to end by this repo. The header badge shows one of `not_linked` / `linked_no_data` / `ok` / `stalled` via `getSyncFreshness`, the Overview page renders a `LinkDaemonBanner` with a copyable `budi cloud init --api-key …` command for brand-new accounts, and a `FirstSyncInProgressBanner` covers the window between link and first ingest so a just-linked account is never indistinguishable from a broken one. The cloud cannot initiate connections back to a developer machine (push-only, ADR-0083); freshness is inferred from the most recent `daily_rollups.synced_at`.
 - **Provider-scoped tiles reuse the shared status contract** (`docs/statusline-contract.md` in the main repo). Tiles that claim to show "Cursor" or "Claude Code" must filter by that provider — never blend multi-provider totals in a provider-scoped tile.
 
 ## Key directories
 
-- `src/app/` — Next.js App Router pages and layouts
+- `src/app/` — Next.js App Router pages, route handlers, and server actions
+- `src/app/api/v1/ingest/` — ingest + status route handlers
 - `src/components/` — UI components (Tailwind)
-- `src/lib/` — Supabase client, ingest validation, auth helpers
-- `src/proxy.ts` — edge/middleware routing (if used)
-- `supabase/migrations/` — Postgres schema migrations
-- `supabase/functions/` — Supabase Edge Functions (if any)
+- `src/lib/dal.ts` — data access layer; every dashboard query routes through here
+- `src/lib/supabase/` — Supabase clients (anon, server, admin/service-role)
+- `src/proxy.ts` — Next.js 16 proxy (formerly middleware): refreshes the Supabase session and gates `/dashboard/*`
+- `supabase/migrations/` — Postgres schema migrations (apply in order)
 
 ## Dev notes
 
 - **Read the privacy contract before adding fields**: every new column on an ingest table must be justified against ADR-0083. If it's a prompt, a file path, an email, or a raw payload, it does not belong here — stop and push back.
 - **The cloud is optional**: users can run budi forever without it. Do not design features that silently require cloud sync.
 - **Idempotency matters**: all ingest handlers must be safe to retry. Deterministic keys, UPSERT, no side effects outside the transaction.
-- **Manager-only endpoints are enforced at the Supabase RLS layer**, not just in the Next.js handlers. If you add a new query, add or verify the corresponding RLS policy.
+- **Admin client vs RLS**: the dashboard reads via the service-role admin client and gates manager/member visibility in `src/lib/dal.ts` (see `getVisibleDeviceIds` and the `user.role === "manager"` branches). RLS is enabled on the ingest tables as defense in depth, but the dashboard does not rely on it — add the same JS-side scoping whenever you add a new query.
 - **Next.js 16 quirks**: check `node_modules/next/dist/docs/` before assuming App Router / Server Action / caching behavior matches what you remember. See the warning at the top of this file.
 - **Lockfile**: commit `package-lock.json`. Deploys must be reproducible.
 - **Deployment**: Vercel. Production environment variables are set in the Vercel dashboard; local uses `.env.local`. Never commit real Supabase service-role keys.
-- **Error surfaces**: when a new API key fails ingest, surface a clear error in the dashboard's Settings page — do not make users dig through logs. The daemon will stop syncing on 401 and this is the only place they'll see why.
+- **Error surfaces**: when ingest is rejected (bad key, org mismatch, schema drift), surface a clear error in the dashboard's Settings page — the daemon will simply stop syncing on 401 and the dashboard is the only place a user will see why.
