@@ -4,8 +4,10 @@ import {
   getCostByRepo,
   getCostByBranch,
   getCostByTicket,
+  getEarliestActivity,
 } from "@/lib/dal";
 import { dateRangeFromDays } from "@/lib/date-range";
+import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { repoName } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
 import { CostBarChart } from "@/components/charts/cost-bar-chart";
@@ -20,7 +22,9 @@ export default async function ReposPage({
   const user = await getCurrentUser();
   if (!user?.org_id) return null;
 
-  const range = dateRangeFromDays(params.days);
+  const earliestActivity =
+    params.days === ALL_PERIOD_VALUE ? await getEarliestActivity(user) : null;
+  const range = dateRangeFromDays(params.days, earliestActivity);
   const [repos, branches, tickets] = await Promise.all([
     getCostByRepo(user, range),
     getCostByBranch(user, range),

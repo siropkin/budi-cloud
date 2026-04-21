@@ -52,4 +52,19 @@ describe("dateRangeFromDays (1d/7d/30d window contract)", () => {
     expect(r.from).toBe("2026-04-05");
     expect(r.to).toBe("2026-04-18");
   });
+
+  it("'all' uses the provided earliest activity date as the lower bound", () => {
+    const r = dateRangeFromDays("all", "2026-01-15");
+    expect(r.from).toBe("2026-01-15");
+    expect(r.to).toBe("2026-04-18");
+  });
+
+  it("'all' without an earliest activity date falls back to the default window", () => {
+    // Defensive — the calling page is expected to provide it, but a brand-new
+    // org with no rollups yet should still render like the default 7d view
+    // rather than crashing.
+    const r = dateRangeFromDays("all");
+    expect(r.from).toBe("2026-04-12");
+    expect(r.to).toBe("2026-04-18");
+  });
 });

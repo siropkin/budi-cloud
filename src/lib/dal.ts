@@ -141,6 +141,30 @@ export async function getDailyActivity(user: BudiUser, range: DateRange) {
     .map(([day, data]) => ({ bucket_day: day, ...data }));
 }
 
+/**
+ * Earliest day (`YYYY-MM-DD`) with a rollup for any device visible to the
+ * viewer, or `null` if the org has never synced anything. Used to materialize
+ * the `?days=all` sentinel into a concrete `from` before hitting the
+ * range-scoped queries so their signatures stay unchanged.
+ */
+export async function getEarliestActivity(
+  user: BudiUser
+): Promise<string | null> {
+  const admin = createAdminClient();
+  const deviceIds = await getVisibleDeviceIds(admin, user);
+  if (deviceIds.length === 0) return null;
+
+  const { data } = await admin
+    .from("daily_rollups")
+    .select("bucket_day")
+    .in("device_id", deviceIds)
+    .order("bucket_day", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  return (data?.bucket_day as string | null) ?? null;
+}
+
 /** Synthetic user id used to group rollups whose owner we can't surface. */
 export const UNASSIGNED_USER_ID = "__unassigned__";
 
