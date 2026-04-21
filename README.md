@@ -39,7 +39,7 @@ The cloud alpha supports small teams (1–20 developers):
 ## Auth
 
 - **Web dashboard**: Supabase Auth with GitHub, Google, and magic link sign-in
-- **Daemon sync**: API key (`budi_<key>`) in `Authorization: Bearer` header. Keys are stored locally in `~/.config/budi/cloud.toml`
+- **Daemon sync**: API key (`budi_<key>`) in `Authorization: Bearer` header. Users link a local daemon to their cloud account with `budi cloud init --api-key <key>`; the daemon then owns the on-disk key storage.
 - **Ingest API**: `POST /v1/ingest` receives the sync payload; `GET /v1/ingest/status` returns watermark and sync health
 
 ## Setup
