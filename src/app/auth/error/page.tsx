@@ -10,19 +10,15 @@ const ERROR_MESSAGES: Record<string, string> = {
 const DEFAULT_MESSAGE =
   "Something went wrong during authentication. Please try signing in again.";
 
-export default function AuthErrorPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ reason?: string }>;
-}) {
+export default function AuthErrorPage() {
   async function handleSignOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
     window.location.href = "/login";
   }
 
-  // Use React.use() would be needed for async searchParams in Next 16,
-  // but for a simple client component we read from the URL directly
+  // Client component: read directly from the URL rather than routing through
+  // the server `searchParams` prop (which would require React.use() in N16).
   const reason =
     typeof window !== "undefined"
       ? new URLSearchParams(window.location.search).get("reason")

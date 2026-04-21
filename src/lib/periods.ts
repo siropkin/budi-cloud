@@ -17,15 +17,8 @@ export const PERIODS = [
   { label: "All", value: "all" },
 ] as const;
 
-export type PeriodValue = (typeof PERIODS)[number]["value"];
-
 /** Sentinel `?days=` value for the lifetime window. */
 export const ALL_PERIOD_VALUE = "all";
 
 /** Default landing window when no `?days=` is provided. */
 export const DEFAULT_PERIOD_DAYS = 7;
-
-/** Accepted numeric values for the core windows. */
-export const ALLOWED_PERIOD_DAYS: ReadonlyArray<number> = PERIODS.filter(
-  (p) => p.value !== ALL_PERIOD_VALUE
-).map((p) => Number(p.value));

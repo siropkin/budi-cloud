@@ -14,17 +14,15 @@ import { clsx } from "clsx";
  */
 const STALLED_AFTER_MS = 24 * 60 * 60 * 1000;
 
-export interface SyncFreshnessProps {
-  deviceCount: number;
-  lastSeenAt: string | null;
-  lastRollupAt: string | null;
-}
-
 export function SyncFreshness({
   deviceCount,
   lastSeenAt,
   lastRollupAt,
-}: SyncFreshnessProps) {
+}: {
+  deviceCount: number;
+  lastSeenAt: string | null;
+  lastRollupAt: string | null;
+}) {
   // Not-linked is rendered as a call-to-action so it's obvious what to do
   // next instead of looking like a silent empty dashboard.
   if (deviceCount === 0) {
