@@ -4,11 +4,11 @@ Cloud dashboard and ingest API for [budi](https://github.com/siropkin/budi). Pro
 
 ## Overview
 
-- **Dashboard** at `app.getbudi.dev` — overview, team, models, repos, sessions, settings pages
+- **Dashboard** at `app.getbudi.dev` — Overview, Team, Models, Repos, Sessions, and Settings pages
 - **Ingest API** — receives pre-aggregated daily rollups and session summaries from the budi daemon
 - **Auth** — Supabase Auth (GitHub, Google, magic link) with org-based access control
 
-Built with Next.js 16, Supabase, and Tailwind CSS.
+Built with Next.js 16, React 19, Supabase, and Tailwind CSS 4.
 
 ## What data the cloud receives
 
@@ -40,7 +40,7 @@ The cloud alpha supports small teams (1–20 developers):
 
 - **Web dashboard**: Supabase Auth with GitHub, Google, and magic link sign-in
 - **Daemon sync**: API key (`budi_<key>`) in `Authorization: Bearer` header. Users link a local daemon to their cloud account with `budi cloud init --api-key <key>`; the daemon then owns the on-disk key storage.
-- **Ingest API**: `POST /v1/ingest` receives the sync payload; `GET /v1/ingest/status` returns watermark and sync health
+- **Ingest API**: `POST /v1/ingest` accepts the sync envelope; `GET /v1/ingest/status?device_id=…` returns watermark and sync health for a linked device.
 
 ## Setup
 
