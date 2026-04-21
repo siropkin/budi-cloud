@@ -18,6 +18,10 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
+button:not(:disabled) {
+  cursor: pointer;
+}
+
 /* Recharts tooltip overrides for dark theme */
 .recharts-tooltip-wrapper {
   outline: none;
