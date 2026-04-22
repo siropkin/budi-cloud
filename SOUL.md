@@ -84,9 +84,9 @@ All dashboard pages live under `/dashboard`:
 
 ## Window contract and local→cloud linking
 
-- **Time-window filters are `1d` / `7d` / `30d` / `All`** (default `7d`), matching the local Budi contract so the local and cloud surfaces tell the same story (ADR-0088 §7). Any positive integer in `?days=` is also accepted as a custom window. `?days=all` is a cloud-only lifetime preset backed by a per-org earliest-activity lookup — local Budi has no equivalent because local stats are ephemeral. The preset list and default live in `src/lib/periods.ts`.
-- **Local→cloud linking flow** is owned end to end by this repo. The header badge shows one of `not_linked` / `linked_no_data` / `ok` / `stalled` via `getSyncFreshness`, the Overview page renders a `LinkDaemonBanner` with a copyable `budi cloud init --api-key …` command for brand-new accounts, and a `FirstSyncInProgressBanner` covers the window between link and first ingest so a just-linked account is never indistinguishable from a broken one. The cloud cannot initiate connections back to a developer machine (push-only, ADR-0083); freshness is inferred from the most recent `daily_rollups.synced_at`.
-- **Provider-scoped tiles reuse the shared status contract** (`docs/statusline-contract.md` in the main repo). Tiles that claim to show "Cursor" or "Claude Code" must filter by that provider — never blend multi-provider totals in a provider-scoped tile.
+- **Time-window filters** — `1d` / `7d` / `30d` / `All` (default `7d`), matching the local Budi contract (ADR-0088 §7). `?days=<N>` accepts any positive integer; `?days=all` is a cloud-only lifetime preset backed by a per-org earliest-activity lookup. Presets and default live in `src/lib/periods.ts`.
+- **Local→cloud linking** is owned end-to-end here. The header badge (`getSyncFreshness`) reports `not_linked` / `linked_no_data` / `ok` / `stalled`; `LinkDaemonBanner` prompts brand-new accounts with a copyable `budi cloud init --api-key …`; `FirstSyncInProgressBanner` covers the gap between link and first ingest so a just-linked account is never indistinguishable from a broken one. Freshness is inferred from `daily_rollups.synced_at` — push-only, no callback (ADR-0083).
+- **Provider-scoped tiles** reuse the shared status contract (`docs/statusline-contract.md` in the main repo). Never blend multi-provider totals into a tile scoped to a single provider like "Cursor" or "Claude Code".
 
 ## Key directories
 
