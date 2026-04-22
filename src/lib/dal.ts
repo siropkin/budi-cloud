@@ -7,7 +7,7 @@ export interface DateRange {
   to: string; // YYYY-MM-DD
 }
 
-export interface BudiUser {
+interface BudiUser {
   id: string;
   org_id: string | null;
   role: string;
@@ -166,7 +166,7 @@ export async function getEarliestActivity(
 }
 
 /** Synthetic user id used to group rollups whose owner we can't surface. */
-export const UNASSIGNED_USER_ID = "__unassigned__";
+const UNASSIGNED_USER_ID = "__unassigned__";
 
 /**
  * Get cost breakdown by user/device.
