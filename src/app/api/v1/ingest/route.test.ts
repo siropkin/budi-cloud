@@ -27,7 +27,7 @@ class FakeSupabase {
 
   from(name: string) {
     if (!this.tables.has(name)) this.tables.set(name, []);
-    return new FakeQuery(this.tables.get(name)!, name);
+    return new FakeQuery(this.tables.get(name)!);
   }
 
   seed(name: string, rows: Row[]) {
@@ -44,17 +44,12 @@ class FakeQuery {
   private _orderKey: string | null = null;
   private _orderAsc = true;
   private _limit: number | null = null;
-  private _selectCols: string | null = null;
   private _head = false;
   private _countMode: "exact" | null = null;
 
-  constructor(
-    private readonly rows: Row[],
-    private readonly name: string
-  ) {}
+  constructor(private readonly rows: Row[]) {}
 
-  select(cols?: string, opts?: { count?: "exact"; head?: boolean }) {
-    this._selectCols = cols ?? null;
+  select(_cols?: string, opts?: { count?: "exact"; head?: boolean }) {
     this._countMode = opts?.count ?? null;
     this._head = opts?.head ?? false;
     return this;
