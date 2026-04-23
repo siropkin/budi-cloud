@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ApiKeySection } from "./api-key-section";
 import { InviteSection } from "./invite-section";
+import { DangerZone } from "./danger-zone";
 
 export default async function SettingsPage() {
   const user = await getCurrentUser();
@@ -84,6 +85,8 @@ export default async function SettingsPage() {
       </Card>
 
       {user.role === "manager" && <InviteSection />}
+
+      <DangerZone userRole={user.role} orgName={org?.name ?? ""} />
     </div>
   );
 }
