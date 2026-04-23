@@ -1,3 +1,4 @@
+import { clsx } from "clsx";
 import { getCurrentUser, getOrgMembers } from "@/lib/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -67,11 +68,12 @@ export default async function SettingsPage() {
                     <td className="py-2 text-zinc-400">{m.email || "-"}</td>
                     <td className="py-2">
                       <span
-                        className={
+                        className={clsx(
+                          "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium",
                           m.role === "manager"
-                            ? "text-blue-400"
-                            : "text-zinc-400"
-                        }
+                            ? "border-blue-500/30 bg-blue-500/10 text-blue-300"
+                            : "border-zinc-500/30 bg-zinc-500/10 text-zinc-400"
+                        )}
                       >
                         {m.role}
                       </span>
