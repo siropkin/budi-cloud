@@ -103,6 +103,17 @@ export function CostBarChart({
           fill="#3b82f6"
           barSize={BAR_SIZE}
           radius={[5, 5, 5, 5]}
+          // Sub-dollar rows otherwise render at <1px next to a double-digit
+          // leader. Floor the rendered width so every >0 row is still a
+          // recognizable sliver; the cost label to the right is the
+          // authoritative magnitude signal (#41).
+          minPointSize={4}
+          // recharts v3 gates LabelList on animation completion; if the Bar
+          // ever fails to emit `onAnimationEnd` (e.g. under strict mode or
+          // when re-rendered mid-animation) `<LabelList>` stays empty and the
+          // `$X.XX` suffix is silently missing. Skip the animation so labels
+          // render on first paint.
+          isAnimationActive={false}
         >
           <LabelList
             dataKey="cost_cents"
