@@ -55,37 +55,51 @@ export default async function SettingsPage() {
           {members.length === 0 ? (
             <p className="text-sm text-zinc-500">No members yet</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/10 text-left text-zinc-400">
-                  <th className="pb-2 font-medium">Name</th>
-                  <th className="pb-2 font-medium">Email</th>
-                  <th className="pb-2 font-medium">Role</th>
-                </tr>
-              </thead>
-              <tbody>
-                {members.map((m) => (
-                  <tr key={m.id} className="border-b border-white/5">
-                    <td className="py-2 text-zinc-200">
-                      {m.display_name || "-"}
-                    </td>
-                    <td className="py-2 text-zinc-400">{m.email || "-"}</td>
-                    <td className="py-2">
-                      <span
-                        className={clsx(
-                          "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium",
-                          m.role === "manager"
-                            ? "border-blue-500/30 bg-blue-500/10 text-blue-300"
-                            : "border-zinc-500/30 bg-zinc-500/10 text-zinc-400"
-                        )}
-                      >
-                        {m.role}
-                      </span>
-                    </td>
+            <>
+              {/* Table on sm+ stays the same; below `sm` render each member
+                  as a stacked card (name+role pill on the first row, email
+                  on the second) so the cluster doesn't overflow horizontally
+                  at phone widths. */}
+              <table className="hidden w-full text-sm sm:table">
+                <thead>
+                  <tr className="border-b border-white/10 text-left text-zinc-400">
+                    <th className="pb-2 font-medium">Name</th>
+                    <th className="pb-2 font-medium">Email</th>
+                    <th className="pb-2 font-medium">Role</th>
                   </tr>
+                </thead>
+                <tbody>
+                  {members.map((m) => (
+                    <tr key={m.id} className="border-b border-white/5">
+                      <td className="py-2 text-zinc-200">
+                        {m.display_name || "-"}
+                      </td>
+                      <td className="py-2 text-zinc-400">{m.email || "-"}</td>
+                      <td className="py-2">
+                        <RoleBadge role={m.role} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <ul className="divide-y divide-white/5 text-sm sm:hidden">
+                {members.map((m) => (
+                  <li key={m.id} className="space-y-1 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-zinc-200">
+                        {m.display_name || "-"}
+                      </span>
+                      <RoleBadge role={m.role} />
+                    </div>
+                    {m.email && (
+                      <p className="truncate text-xs text-zinc-500">
+                        {m.email}
+                      </p>
+                    )}
+                  </li>
                 ))}
-              </tbody>
-            </table>
+              </ul>
+            </>
           )}
         </CardContent>
       </Card>
@@ -94,5 +108,20 @@ export default async function SettingsPage() {
 
       <DangerZone userRole={user.role} orgName={org?.name ?? ""} />
     </div>
+  );
+}
+
+function RoleBadge({ role }: { role: string }) {
+  return (
+    <span
+      className={clsx(
+        "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium",
+        role === "manager"
+          ? "border-blue-500/30 bg-blue-500/10 text-blue-300"
+          : "border-zinc-500/30 bg-zinc-500/10 text-zinc-400"
+      )}
+    >
+      {role}
+    </span>
   );
 }

@@ -32,9 +32,14 @@ export function SyncFreshness({
         className="group inline-flex items-center gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-xs font-medium text-amber-300 transition-colors hover:border-amber-400/60 hover:bg-amber-400/20"
         data-testid="sync-freshness"
         data-sync-state="not_linked"
+        title="Not linked yet — link your local Budi"
       >
         <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
-        Not linked yet — link your local Budi
+        {/* Below `sm` the full CTA wraps the header; keep just "Link Budi". */}
+        <span className="hidden sm:inline">
+          Not linked yet — link your local Budi
+        </span>
+        <span className="sm:hidden">Link Budi</span>
       </Link>
     );
   }
@@ -109,12 +114,27 @@ function SyncFreshnessLabel({
   now: number;
 }) {
   if (state === "linked_no_data") {
-    return <>Linked — waiting for first sync…</>;
+    return (
+      <>
+        {/* Below `sm` the dot already conveys the state; shorten the copy. */}
+        <span className="hidden sm:inline">
+          Linked — waiting for first sync…
+        </span>
+        <span className="sm:hidden">Waiting…</span>
+      </>
+    );
   }
   if (!effective) return <>Unknown</>;
   return (
     <>
-      {state === "stalled" ? "Stalled — last synced " : "Synced "}
+      {/*
+        Prefix ("Synced" / "Stalled — last synced") is redundant with the
+        colored dot at mobile widths. Drop it below `sm` so the whole badge
+        fits next to the hamburger + logout icon on a 390px viewport.
+      */}
+      <span className="hidden sm:inline">
+        {state === "stalled" ? "Stalled — last synced " : "Synced "}
+      </span>
       <span>{formatRelative(Date.parse(effective), now)}</span>
     </>
   );

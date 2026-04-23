@@ -51,7 +51,8 @@ export default async function TeamPage({
             <CardTitle>Team Members</CardTitle>
           </CardHeader>
           <CardContent>
-            <table className="w-full text-sm">
+            {/* Table on sm+; stacked rows below. */}
+            <table className="hidden w-full text-sm sm:table">
               <thead>
                 <tr className="border-b border-white/10 text-left text-zinc-400">
                   <th className="pb-2 font-medium">Name</th>
@@ -69,6 +70,19 @@ export default async function TeamPage({
                 ))}
               </tbody>
             </table>
+            <ul className="divide-y divide-white/5 text-sm sm:hidden">
+              {userCosts.map((u, i) => (
+                <li
+                  key={i}
+                  className="flex items-center justify-between py-2"
+                >
+                  <span className="text-zinc-200">{u.name}</span>
+                  <span className="tabular-nums text-zinc-300">
+                    {fmtCost(u.cost_cents)}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
       )}

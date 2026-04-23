@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Sidebar } from "@/components/sidebar";
+import { MobileSidebar, Sidebar } from "@/components/sidebar";
 import { UserMenu } from "@/components/user-menu";
 import { SyncFreshness } from "@/components/sync-freshness";
 import { getCurrentUser, getSyncFreshness } from "@/lib/dal";
@@ -25,7 +25,9 @@ export default async function DashboardLayout({
     <div className="flex h-screen bg-[#0a0a0a] text-white">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 items-center justify-end gap-4 border-b border-white/10 px-6">
+        <header className="flex h-14 items-center gap-2 border-b border-white/10 px-3 sm:gap-3 sm:px-4 md:justify-end md:px-6">
+          <MobileSidebar />
+          <div className="flex-1 md:hidden" />
           <SyncFreshness
             deviceCount={freshness.deviceCount}
             lastSeenAt={freshness.lastSeenAt}
@@ -33,7 +35,9 @@ export default async function DashboardLayout({
           />
           <UserMenu displayName={user.display_name} email={user.email} />
         </header>
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 sm:p-5 md:p-6">
+          {children}
+        </main>
       </div>
     </div>
   );
