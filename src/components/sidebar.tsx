@@ -10,6 +10,7 @@ import {
   GitBranch,
   LayoutDashboard,
   Cpu,
+  Laptop,
   Menu,
   Settings,
   Timer,
@@ -20,6 +21,7 @@ import {
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard/team", label: "Team", icon: Users },
+  { href: "/dashboard/devices", label: "Devices", icon: Laptop },
   { href: "/dashboard/models", label: "Models", icon: Cpu },
   { href: "/dashboard/repos", label: "Repos", icon: GitBranch },
   { href: "/dashboard/sessions", label: "Sessions", icon: Timer },

@@ -350,6 +350,147 @@ describe("Overview ↔ Team reconciliation (#15)", () => {
   });
 });
 
+describe("getCostByDevice", () => {
+  it("manager sees every device, annotates owner, and reconciles with Overview", async () => {
+    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("users", [
+      {
+        id: "usr_ivan",
+        org_id: "org_team",
+        role: "manager",
+        api_key: "budi_i",
+        display_name: "Ivan",
+        email: "ivan@example.com",
+      },
+      {
+        id: "usr_jane",
+        org_id: "org_team",
+        role: "member",
+        api_key: "budi_j",
+        display_name: "Jane",
+        email: "jane@example.com",
+      },
+    ]);
+    fake.seed("devices", [
+      {
+        id: "dev_ivan_laptop",
+        user_id: "usr_ivan",
+        label: "laptop",
+        last_seen: "2026-04-23T10:00:00Z",
+      },
+      {
+        id: "dev_ivan_desktop",
+        user_id: "usr_ivan",
+        label: null,
+        last_seen: "2026-04-20T09:00:00Z",
+      },
+      {
+        id: "dev_jane_laptop",
+        user_id: "usr_jane",
+        label: "laptop",
+        last_seen: "2026-04-22T12:00:00Z",
+      },
+    ]);
+    fake.seed("daily_rollups", [
+      rollup("dev_ivan_laptop", "2026-04-10", 800_00),
+      rollup("dev_ivan_laptop", "2026-04-11", 400_00),
+      rollup("dev_jane_laptop", "2026-04-10", 1500_00),
+      // dev_ivan_desktop has zero rollups — it should still surface so a
+      // freshly-linked daemon isn't invisible.
+    ]);
+
+    const { getOverviewStats, getCostByDevice } = await loadDal();
+
+    const manager = {
+      id: "usr_ivan",
+      org_id: "org_team",
+      role: "manager",
+      api_key: "budi_i",
+      display_name: "Ivan",
+      email: "ivan@example.com",
+    };
+    const range = { from: "2026-04-01", to: "2026-04-30" };
+
+    const byDevice = await getCostByDevice(manager, range);
+    const overview = await getOverviewStats(manager, range);
+
+    // Every org device is listed, sorted by cost desc, zero-cost rows last.
+    expect(byDevice.map((d) => d.id)).toEqual([
+      "dev_jane_laptop",
+      "dev_ivan_laptop",
+      "dev_ivan_desktop",
+    ]);
+    expect(byDevice.map((d) => d.cost_cents)).toEqual([1500_00, 1200_00, 0]);
+
+    // Owner is annotated for the manager view; same-label laptops under
+    // different owners stay distinguishable.
+    const jane = byDevice.find((d) => d.id === "dev_jane_laptop");
+    expect(jane?.owner_name).toBe("Jane");
+    const ivanLaptop = byDevice.find((d) => d.id === "dev_ivan_laptop");
+    expect(ivanLaptop?.owner_name).toBe("Ivan");
+
+    // Sum of device costs matches Overview total for the same (user, range).
+    expect(byDevice.reduce((s, d) => s + d.cost_cents, 0)).toBe(
+      overview.totalCostCents
+    );
+  });
+
+  it("member only sees their own device and leaves owner_name unset", async () => {
+    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("users", [
+      {
+        id: "usr_ivan",
+        org_id: "org_team",
+        role: "manager",
+        api_key: "budi_i",
+        display_name: "Ivan",
+        email: "ivan@example.com",
+      },
+      {
+        id: "usr_jane",
+        org_id: "org_team",
+        role: "member",
+        api_key: "budi_j",
+        display_name: "Jane",
+        email: "jane@example.com",
+      },
+    ]);
+    fake.seed("devices", [
+      { id: "dev_ivan", user_id: "usr_ivan", label: "ivan-mbp" },
+      { id: "dev_jane", user_id: "usr_jane", label: "jane-mbp" },
+    ]);
+    fake.seed("daily_rollups", [
+      rollup("dev_ivan", "2026-04-10", 800_00),
+      rollup("dev_jane", "2026-04-10", 1500_00),
+    ]);
+
+    const { getCostByDevice } = await loadDal();
+
+    const jane = {
+      id: "usr_jane",
+      org_id: "org_team",
+      role: "member",
+      api_key: "budi_j",
+      display_name: "Jane",
+      email: "jane@example.com",
+    };
+    const byDevice = await getCostByDevice(jane, {
+      from: "2026-04-01",
+      to: "2026-04-30",
+    });
+
+    expect(byDevice).toEqual([
+      {
+        id: "dev_jane",
+        label: "jane-mbp",
+        owner_name: null,
+        last_seen: null,
+        cost_cents: 1500_00,
+      },
+    ]);
+  });
+});
+
 function rollup(
   deviceId: string,
   bucketDay: string,
