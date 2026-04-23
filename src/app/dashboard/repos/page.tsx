@@ -53,6 +53,22 @@ export default async function ReposPage({
               }))}
               emptyLabel="No project data for this period"
             />
+            <p className="mt-3 text-xs text-zinc-500">
+              <span className="text-zinc-400">Unassigned</span> and{" "}
+              <span className="text-zinc-400">(untagged)</span> aggregate spend
+              from sessions whose directory didn&rsquo;t map to a known git
+              remote. Your local Budi&rsquo;s privacy layer strips the repo
+              identifier in that case; see{" "}
+              <a
+                className="underline decoration-dotted underline-offset-2 hover:text-zinc-300"
+                href="https://github.com/siropkin/budi/blob/main/docs/adr/0083-cloud-ingest-identity-and-privacy-contract.md"
+                target="_blank"
+                rel="noreferrer"
+              >
+                ADR-0083
+              </a>
+              .
+            </p>
           </CardContent>
         </Card>
 

@@ -10,7 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import { differenceInDays, format, startOfMonth, startOfWeek } from "date-fns";
-import { fmtDate, fmtNum } from "@/lib/format";
+import { fmtDate, fmtFullDate, fmtNum } from "@/lib/format";
 
 interface ActivityData {
   bucket_day: string;
@@ -91,6 +91,13 @@ export function ActivityChart({ data }: { data: ActivityData[] }) {
           tick={{ fill: "#71717a", fontSize: 12 }}
           tickLine={false}
           axisLine={false}
+          label={{
+            value: "Tokens",
+            angle: -90,
+            position: "insideLeft",
+            offset: 8,
+            style: { fill: "#71717a", fontSize: 12, textAnchor: "middle" },
+          }}
         />
         <Tooltip
           contentStyle={{
@@ -99,7 +106,7 @@ export function ActivityChart({ data }: { data: ActivityData[] }) {
             borderRadius: "8px",
             fontSize: "13px",
           }}
-          labelFormatter={(label) => fmtDate(String(label))}
+          labelFormatter={(label) => fmtFullDate(String(label))}
           formatter={(value, name) => [
             fmtNum(Number(value)),
             String(name) === "input_tokens" ? "Input" : "Output",
