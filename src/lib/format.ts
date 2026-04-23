@@ -19,9 +19,17 @@ export function fmtNum(n: number): string {
   return n.toLocaleString("en-US");
 }
 
-/** Extract a short repo name from a hashed repo_id. */
+/**
+ * Extract a short repo name from a hashed repo_id.
+ *
+ * The daemon emits two historical sentinels when a session's directory has
+ * no resolvable git remote — `"Unassigned"` (legacy) and `"(untagged)"`
+ * (current). Both mean the same thing to the viewer, so collapse them to a
+ * single display bucket. Don't rewrite DB values; just unify at render time.
+ */
 export function repoName(repoId: string | null): string {
   if (!repoId) return "(unknown)";
+  if (repoId === "Unassigned" || repoId === "(untagged)") return "(no repo)";
   if (repoId.startsWith("sha256:")) return repoId.slice(7, 15) + "...";
   if (repoId.length > 16) return repoId.slice(0, 12) + "...";
   return repoId;
