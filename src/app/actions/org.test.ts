@@ -192,7 +192,8 @@ async function loadActions() {
 describe("deleteOrganization", () => {
   it("cascades through session summaries, rollups, devices, invites, users, then the org itself", async () => {
     seedSoloManagerWithData();
-    const { deleteOrganization, ORG_CASCADE_ORDER } = await loadActions();
+    const { deleteOrganization } = await loadActions();
+    const { ORG_CASCADE_ORDER } = await import("@/app/actions/org-cascade");
 
     // Snapshot the declared order alongside the test so a change to one
     // without the other fails loudly.

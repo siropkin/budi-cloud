@@ -5,24 +5,6 @@ import { randomBytes } from "crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-/**
- * Dependency order for wiping an org's data.
- *
- * None of the FKs in `001_ingest_schema.sql` declare `ON DELETE CASCADE`, so
- * we delete leaves first. This list is reused by the tests to document and
- * pin the expected sequence.
- */
-const ORG_CASCADE_ORDER = [
-  "session_summaries",
-  "daily_rollups",
-  "devices",
-  "invite_tokens",
-  "users",
-  "orgs",
-] as const;
-
-export { ORG_CASCADE_ORDER };
-
 export async function createOrg(
   _prevState: { error: string } | undefined,
   formData: FormData
@@ -99,9 +81,10 @@ export async function generateInviteToken() {
  * both the role and the confirmation text on the server so a crafted request
  * can't skip either check.
  *
- * Deletion cascades in dependency order (see `ORG_CASCADE_ORDER`). Supabase
- * auth rows (`auth.users`) are intentionally left intact so former members
- * can still sign in and create/join a different org.
+ * Deletion cascades in dependency order (see `ORG_CASCADE_ORDER` in
+ * `./org-cascade.ts`). Supabase auth rows (`auth.users`) are intentionally
+ * left intact so former members can still sign in and create/join a
+ * different org.
  */
 export async function deleteOrganization(
   _prevState: { error: string } | undefined,
