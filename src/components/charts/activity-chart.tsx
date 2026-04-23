@@ -72,7 +72,7 @@ export function ActivityChart({ data }: { data: ActivityData[] }) {
     <ResponsiveContainer width="100%" height={300}>
       <BarChart
         data={bucketed}
-        margin={{ left: 12, right: 8, top: 8, bottom: 8 }}
+        margin={{ left: 16, right: 8, top: 8, bottom: 8 }}
       >
         <CartesianGrid
           strokeDasharray="3 3"
@@ -91,11 +91,13 @@ export function ActivityChart({ data }: { data: ActivityData[] }) {
           tick={{ fill: "#71717a", fontSize: 12 }}
           tickLine={false}
           axisLine={false}
+          width={72}
           label={{
             value: "Tokens",
             angle: -90,
             position: "insideLeft",
-            offset: 8,
+            offset: 0,
+            dx: -8,
             style: { fill: "#71717a", fontSize: 12, textAnchor: "middle" },
           }}
         />
