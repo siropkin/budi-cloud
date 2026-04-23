@@ -10,6 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import { fmtCost } from "@/lib/format";
+import { useMediaQuery } from "@/lib/use-media-query";
 
 interface CostBarDatum {
   label: string;
@@ -36,6 +37,15 @@ export function CostBarChart({
   data: CostBarDatum[];
   emptyLabel: string;
 }) {
+  // At 390px the 180px label column plus 56px right padding claims ~60% of
+  // the chart, leaving bars with no room. Shrink both below `sm` and leave
+  // the desktop look untouched above it (#43).
+  const isCompact = useMediaQuery("(max-width: 639px)");
+  const yAxisWidth = isCompact ? 110 : 180;
+  const rightMargin = isCompact ? 24 : 56;
+  const leftMargin = isCompact ? 4 : 20;
+  const labelMaxLen = isCompact ? 18 : 28;
+
   const sorted = [...data]
     .sort((a, b) => b.cost_cents - a.cost_cents)
     .slice(0, MAX_ITEMS);
@@ -56,14 +66,14 @@ export function CostBarChart({
         data={sorted}
         layout="vertical"
         barCategoryGap={BAR_GAP}
-        margin={{ left: 20, right: 56, top: 6, bottom: 6 }}
+        margin={{ left: leftMargin, right: rightMargin, top: 6, bottom: 6 }}
       >
         <YAxis
           dataKey="label"
           type="category"
           tickLine={false}
           axisLine={false}
-          width={180}
+          width={yAxisWidth}
           interval={0}
           tick={({ x, y, payload }) => (
             <g transform={`translate(${x},${y})`}>
@@ -76,7 +86,7 @@ export function CostBarChart({
                 fontSize={12}
               >
                 <title>{payload.value}</title>
-                {truncateLabel(payload.value)}
+                {truncateLabel(payload.value, labelMaxLen)}
               </text>
             </g>
           )}

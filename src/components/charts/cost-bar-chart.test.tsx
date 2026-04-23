@@ -1,8 +1,18 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { ReactElement } from "react";
 import { Bar, LabelList } from "recharts";
-import { CostBarChart } from "./cost-bar-chart";
 import { fmtCost } from "@/lib/format";
+
+// CostBarChart now calls `useMediaQuery` to shrink the y-axis column on
+// narrow viewports. The test walks the React element tree without rendering,
+// so stub the hook with a plain function — this keeps the test in the node
+// env and still exercises the non-compact prop values.
+vi.mock("@/lib/use-media-query", () => ({
+  useMediaQuery: () => false,
+}));
+
+// Lazy import so the mock is applied before the component module evaluates.
+const { CostBarChart } = await import("./cost-bar-chart");
 
 /**
  * Walk a React element tree (without rendering) and yield every element node.
