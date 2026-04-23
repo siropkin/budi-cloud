@@ -275,6 +275,107 @@ interface UserLookup {
   org_id: string | null;
 }
 
+export interface DeviceCost {
+  id: string;
+  label: string | null;
+  owner_name: string | null;
+  last_seen: string | null;
+  cost_cents: number;
+}
+
+/**
+ * Get cost breakdown by device.
+ * Manager sees every device in the org; member sees only their own (ADR-0083 §6).
+ *
+ * Reuses `getVisibleDeviceIds` so the device set — and therefore the rollup
+ * sum — matches Overview / Team for the same (user, range). For any visible
+ * user, the Overview total equals the sum of `cost_cents` returned here.
+ *
+ * `owner_name` is populated in the manager view so the table can disambiguate
+ * two laptops labelled `"laptop"` sitting under different owners. For members
+ * it stays `null` — the member already knows every row is theirs and the
+ * extra column would just be noise.
+ */
+export async function getCostByDevice(
+  user: BudiUser,
+  range: DateRange
+): Promise<DeviceCost[]> {
+  const admin = createAdminClient();
+  const deviceIds = await getVisibleDeviceIds(admin, user);
+  if (deviceIds.length === 0) return [];
+
+  const { data: rollups } = await admin
+    .from("daily_rollups")
+    .select("device_id, cost_cents")
+    .in("device_id", deviceIds)
+    .gte("bucket_day", range.from)
+    .lte("bucket_day", range.to)
+    // Match the cap used elsewhere so we never silently truncate the sum.
+    .limit(100_000);
+
+  const { data: devices } = await admin
+    .from("devices")
+    .select("id, label, user_id, last_seen")
+    .in("id", deviceIds);
+
+  const deviceMeta = new Map<
+    string,
+    { label: string | null; user_id: string; last_seen: string | null }
+  >();
+  for (const d of devices ?? []) {
+    deviceMeta.set(d.id as string, {
+      label: (d.label as string | null) ?? null,
+      user_id: d.user_id as string,
+      last_seen: (d.last_seen as string | null) ?? null,
+    });
+  }
+
+  let ownerLookup = new Map<string, string>();
+  if (user.role === "manager") {
+    const ownerIds = Array.from(
+      new Set(Array.from(deviceMeta.values()).map((d) => d.user_id))
+    );
+    if (ownerIds.length > 0) {
+      const { data: owners } = await admin
+        .from("users")
+        .select("id, display_name, email")
+        .in("id", ownerIds);
+      ownerLookup = new Map(
+        (owners ?? []).map((u) => [
+          u.id as string,
+          (u.display_name as string | null) ||
+            (u.email as string | null) ||
+            (u.id as string).slice(0, 8),
+        ])
+      );
+    }
+  }
+
+  const costByDevice = new Map<string, number>();
+  for (const r of rollups ?? []) {
+    const id = r.device_id as string;
+    costByDevice.set(id, (costByDevice.get(id) ?? 0) + Number(r.cost_cents));
+  }
+
+  // Surface every visible device — including zero-cost ones — so a brand-new
+  // daemon shows up the moment it registers, even before it has pushed a
+  // rollup. That matters most during the "linked, waiting for first sync"
+  // gap covered by FirstSyncInProgressBanner on Overview.
+  const result: DeviceCost[] = [];
+  for (const [id, meta] of deviceMeta) {
+    result.push({
+      id,
+      label: meta.label,
+      owner_name:
+        user.role === "manager" ? (ownerLookup.get(meta.user_id) ?? null) : null,
+      last_seen: meta.last_seen,
+      cost_cents: costByDevice.get(id) ?? 0,
+    });
+  }
+
+  return result.sort((a, b) => b.cost_cents - a.cost_cents);
+}
+
 /**
  * Get cost breakdown by model.
  * Manager sees full org; member sees own devices only (ADR-0083 §6).
