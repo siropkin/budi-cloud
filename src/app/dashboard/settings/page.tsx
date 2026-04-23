@@ -3,6 +3,7 @@ import { getCurrentUser, getOrgMembers } from "@/lib/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ApiKeySection } from "./api-key-section";
+import { CopyButton } from "./copy-button";
 import { InviteSection } from "./invite-section";
 import { DangerZone } from "./danger-zone";
 
@@ -33,9 +34,12 @@ export default async function SettingsPage() {
               <dt className="text-zinc-400">Name</dt>
               <dd className="text-zinc-200">{org?.name ?? "-"}</dd>
             </div>
-            <div className="flex justify-between">
+            <div className="flex items-center justify-between">
               <dt className="text-zinc-400">Org ID</dt>
-              <dd className="font-mono text-xs text-zinc-400">{user.org_id}</dd>
+              <dd className="flex items-center gap-1 font-mono text-xs text-zinc-400">
+                <span>{user.org_id}</span>
+                <CopyButton value={user.org_id} label="Copy Org ID" />
+              </dd>
             </div>
           </dl>
         </CardContent>
