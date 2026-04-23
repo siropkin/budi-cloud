@@ -31,6 +31,20 @@ export default async function ReposPage({
     getCostByTicket(user, range),
   ]);
 
+  // Multiple raw `repo_id` sentinels can collapse to the same display label
+  // (e.g. `"Unassigned"` and `"(untagged)"` both render as `"(no repo)"`),
+  // which would otherwise show up as duplicate bars. Merge by label so the
+  // chart has one row per bucket the user actually sees.
+  const repoBuckets = new Map<string, number>();
+  for (const r of repos) {
+    const label = repoName(r.repo_id);
+    repoBuckets.set(label, (repoBuckets.get(label) ?? 0) + r.cost_cents);
+  }
+  const repoChartData = Array.from(repoBuckets, ([label, cost_cents]) => ({
+    label,
+    cost_cents,
+  })).sort((a, b) => b.cost_cents - a.cost_cents);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -47,15 +61,11 @@ export default async function ReposPage({
           </CardHeader>
           <CardContent>
             <CostBarChart
-              data={repos.map((r) => ({
-                label: repoName(r.repo_id),
-                cost_cents: r.cost_cents,
-              }))}
+              data={repoChartData}
               emptyLabel="No project data for this period"
             />
             <p className="mt-3 text-xs text-zinc-500">
-              <span className="text-zinc-400">Unassigned</span> and{" "}
-              <span className="text-zinc-400">(untagged)</span> aggregate spend
+              <span className="text-zinc-400">(no repo)</span> aggregates spend
               from sessions whose directory didn&rsquo;t map to a known git
               remote. Your local Budi&rsquo;s privacy layer strips the repo
               identifier in that case; see{" "}
