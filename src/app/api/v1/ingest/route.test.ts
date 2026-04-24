@@ -428,3 +428,143 @@ describe("POST /v1/ingest + dashboard read path (#14)", () => {
     expect(sessions[0].message_count).toBe(2);
   });
 });
+
+describe("POST /v1/ingest — device label persistence (#60)", () => {
+  function seedUser() {
+    fake.seed("orgs", [{ id: "org_test", name: "test" }]);
+    fake.seed("users", [
+      {
+        id: "usr_test",
+        org_id: "org_test",
+        role: "manager",
+        api_key: "budi_testkey",
+        display_name: "Test",
+        email: "t@example.com",
+      },
+    ]);
+  }
+
+  function mkReq(body: Record<string, unknown>): Request {
+    return new Request("http://localhost/v1/ingest", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer budi_testkey",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  const baseEnvelope = {
+    schema_version: 1,
+    device_id: "dev_test",
+    org_id: "org_test",
+    synced_at: "2026-04-15T12:00:00Z",
+    payload: { daily_rollups: [], session_summaries: [] },
+  };
+
+  it("persists label on auto-register when the envelope carries one", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    await POST(
+      mkReq({ ...baseEnvelope, label: "ivan-mbp" }) as unknown as Parameters<
+        typeof POST
+      >[0]
+    );
+
+    const [device] = fake.rows("devices");
+    expect(device.label).toBe("ivan-mbp");
+  });
+
+  it("auto-registers with label=null when the envelope omits the field (old daemon)", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    await POST(mkReq(baseEnvelope) as unknown as Parameters<typeof POST>[0]);
+
+    const [device] = fake.rows("devices");
+    expect(device.label).toBeNull();
+  });
+
+  it("updates the label when a subsequent ingest carries a new one", async () => {
+    seedUser();
+    fake.seed("devices", [
+      {
+        id: "dev_test",
+        user_id: "usr_test",
+        label: "old-name",
+        last_seen: "2026-04-14T00:00:00Z",
+      },
+    ]);
+    const { POST } = await import("./route");
+
+    await POST(
+      mkReq({ ...baseEnvelope, label: "  new-name  " }) as unknown as Parameters<
+        typeof POST
+      >[0]
+    );
+
+    const [device] = fake.rows("devices");
+    // Trimmed, case preserved, length within cap.
+    expect(device.label).toBe("new-name");
+  });
+
+  it("leaves an existing label untouched when the envelope omits the field", async () => {
+    seedUser();
+    fake.seed("devices", [
+      {
+        id: "dev_test",
+        user_id: "usr_test",
+        label: "already-set",
+        last_seen: "2026-04-14T00:00:00Z",
+      },
+    ]);
+    const { POST } = await import("./route");
+
+    // No `label` key → old daemon. Must not clobber what a newer daemon set.
+    await POST(mkReq(baseEnvelope) as unknown as Parameters<typeof POST>[0]);
+
+    const [device] = fake.rows("devices");
+    expect(device.label).toBe("already-set");
+  });
+
+  it("clears a stale label when the envelope explicitly sends empty string", async () => {
+    seedUser();
+    fake.seed("devices", [
+      {
+        id: "dev_test",
+        user_id: "usr_test",
+        label: "going-away",
+        last_seen: "2026-04-14T00:00:00Z",
+      },
+    ]);
+    const { POST } = await import("./route");
+
+    // Explicit opt-out: user set `label = ""` in cloud.toml. Cloud must honour
+    // that and wipe the stored label, not treat it as "no update".
+    await POST(
+      mkReq({ ...baseEnvelope, label: "" }) as unknown as Parameters<
+        typeof POST
+      >[0]
+    );
+
+    const [device] = fake.rows("devices");
+    expect(device.label).toBeNull();
+  });
+
+  it("caps over-long labels at 128 chars so a bad envelope can't flood the column", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    const longLabel = "a".repeat(500);
+    await POST(
+      mkReq({ ...baseEnvelope, label: longLabel }) as unknown as Parameters<
+        typeof POST
+      >[0]
+    );
+
+    const [device] = fake.rows("devices");
+    expect((device.label as string).length).toBe(128);
+  });
+});

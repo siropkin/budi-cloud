@@ -12,15 +12,43 @@ const MAX_BODY_BYTES = 1024 * 1024;
 
 const CURRENT_SCHEMA_VERSION = 1;
 
+// Cap the stored label so a malformed envelope can't flood the devices table.
+// 128 chars is comfortably above any sane hostname or user-chosen nickname.
+const MAX_LABEL_LENGTH = 128;
+
 interface SyncEnvelope {
   schema_version: number;
   device_id: string;
   org_id: string;
   synced_at: string;
+  // User-controlled display name for this device. Daemon default is the OS
+  // hostname, but the user can override (or blank) via `cloud.toml` — so this
+  // is treated as an opaque string, not PII the cloud mandates. See the
+  // privacy note in ADR-0083 §1 and the paired daemon ticket on siropkin/budi.
+  label?: string | null;
   payload: {
     daily_rollups: IngestDailyRollup[];
     session_summaries: IngestSessionSummary[];
   };
+}
+
+/**
+ * Interpret the envelope's `label` field:
+ *   - key absent (undefined): don't touch the stored value — old daemon compat.
+ *   - present but non-string / null: explicit clear → store `null`.
+ *   - empty / whitespace-only: explicit clear → store `null`.
+ *   - non-empty string: trim + cap at MAX_LABEL_LENGTH, store that.
+ *
+ * Returning `undefined` signals "no update"; `null` or a string signals a
+ * write (so an empty or explicit-null envelope entry clears a stale label).
+ */
+function normalizeLabel(raw: unknown): string | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return null;
+  return trimmed.slice(0, MAX_LABEL_LENGTH);
 }
 
 /**
@@ -136,13 +164,19 @@ export async function POST(request: NextRequest) {
     .eq("id", body.device_id)
     .single();
 
+  const labelUpdate = normalizeLabel(body.label);
+  const now = new Date().toISOString();
+
   if (deviceError || !device) {
-    // Auto-register the device if it doesn't exist yet
+    // Auto-register the device if it doesn't exist yet. `label` is persisted
+    // here (when sent) so the Devices dashboard shows a recognisable name
+    // from the very first sync rather than the truncated id fallback (#60).
     const { error: insertError } = await supabase.from("devices").insert({
       id: body.device_id,
       user_id: user.id,
-      first_seen: new Date().toISOString(),
-      last_seen: new Date().toISOString(),
+      first_seen: now,
+      last_seen: now,
+      label: labelUpdate ?? null,
     });
     if (insertError) {
       console.error("Failed to register device:", insertError);
@@ -166,11 +200,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update last_seen
-    await supabase
-      .from("devices")
-      .update({ last_seen: new Date().toISOString() })
-      .eq("id", body.device_id);
+    // Update last_seen. Only overwrite `label` when the envelope explicitly
+    // carried one — an old daemon (key absent) must not clobber a label that
+    // a newer daemon previously set on the same device.
+    const patch: { last_seen: string; label?: string | null } = {
+      last_seen: now,
+    };
+    if (labelUpdate !== undefined) patch.label = labelUpdate;
+    await supabase.from("devices").update(patch).eq("id", body.device_id);
   }
 
   // --- UPSERT daily rollups (ADR-0083 §5) ---
