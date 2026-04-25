@@ -18,9 +18,13 @@ import {
   X,
 } from "lucide-react";
 
+// `managerOnly: true` means the link is rendered only for `role === "manager"`.
+// `/dashboard/team` is scoped to the viewer's own devices (ADR-0083 §6), so for
+// a member it can only ever show themselves — Settings already lists the org
+// roster, so members never need this entry (#64).
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-  { href: "/dashboard/team", label: "Team", icon: Users },
+  { href: "/dashboard/team", label: "Team", icon: Users, managerOnly: true },
   { href: "/dashboard/devices", label: "Devices", icon: Laptop },
   { href: "/dashboard/models", label: "Models", icon: Cpu },
   { href: "/dashboard/repos", label: "Repos", icon: GitBranch },
@@ -28,15 +32,21 @@ const NAV_ITEMS = [
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ] as const;
 
+function visibleNavItems(role: string) {
+  return NAV_ITEMS.filter(
+    (item) => !("managerOnly" in item && item.managerOnly) || role === "manager"
+  );
+}
+
 /**
  * Desktop rail. Hidden below `md` — the mobile drawer (below) takes over
  * there so the 224px rail doesn't eat >50% of a 390px viewport.
  */
-export function Sidebar() {
+export function Sidebar({ role }: { role: string }) {
   return (
     <nav className="hidden w-56 flex-col border-r border-white/10 bg-[#0a0a0a] px-3 py-4 md:flex">
       <BrandLink />
-      <NavList />
+      <NavList items={visibleNavItems(role)} />
     </nav>
   );
 }
@@ -45,7 +55,7 @@ export function Sidebar() {
  * Hamburger button + slide-in drawer for narrow viewports. Rendered inline in
  * the dashboard header so it sits at the top-left where users expect it.
  */
-export function MobileSidebar() {
+export function MobileSidebar({ role }: { role: string }) {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
 
@@ -98,7 +108,7 @@ export function MobileSidebar() {
             </div>
             {/* onNavigate fires before the router commits the new pathname, so
                 the drawer closes as the destination page mounts. */}
-            <NavList onNavigate={close} />
+            <NavList items={visibleNavItems(role)} onNavigate={close} />
           </nav>
         </div>
       )}
@@ -119,11 +129,17 @@ function BrandLink({ onNavigate }: { onNavigate?: MouseEventHandler }) {
   );
 }
 
-function NavList({ onNavigate }: { onNavigate?: MouseEventHandler }) {
+function NavList({
+  items,
+  onNavigate,
+}: {
+  items: ReadonlyArray<(typeof NAV_ITEMS)[number]>;
+  onNavigate?: MouseEventHandler;
+}) {
   const pathname = usePathname();
   return (
     <ul className="space-y-1">
-      {NAV_ITEMS.map((item) => {
+      {items.map((item) => {
         const isActive =
           item.href === "/dashboard"
             ? pathname === "/dashboard"

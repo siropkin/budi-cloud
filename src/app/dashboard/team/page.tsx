@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { getCurrentUser, getCostByUser, getEarliestActivity } from "@/lib/dal";
 import { dateRangeFromDays } from "@/lib/date-range";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
@@ -15,6 +16,10 @@ export default async function TeamPage({
   const params = await searchParams;
   const user = await getCurrentUser();
   if (!user?.org_id) return null;
+  // Defense-in-depth alongside the sidebar gating in `components/sidebar.tsx`:
+  // the page is scoped to the viewer's own devices (ADR-0083 §6), so for a
+  // member it can only ever show themselves — send them back to Overview (#64).
+  if (user.role !== "manager") redirect("/dashboard");
 
   const earliestActivity =
     params.days === ALL_PERIOD_VALUE ? await getEarliestActivity(user) : null;
