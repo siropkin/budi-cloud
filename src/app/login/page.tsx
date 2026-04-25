@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { buildAuthCallbackUrl } from "@/lib/auth-redirect";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -9,12 +10,20 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Forward the `?next=<path>` query param through the auth round-trip so
+  // that an invite link (`/login?next=/invite/<token>`) lands the user back
+  // on the invite page after OAuth / magic-link, instead of `/dashboard`.
+  function callbackUrl() {
+    const next = new URLSearchParams(window.location.search).get("next");
+    return buildAuthCallbackUrl(window.location.origin, next);
+  }
+
   async function signInWithProvider(provider: "github" | "google") {
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: callbackUrl(),
       },
     });
     if (error) setError(error.message);
@@ -29,7 +38,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: callbackUrl(),
       },
     });
 
