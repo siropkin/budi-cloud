@@ -23,10 +23,10 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex h-screen bg-[#0a0a0a] text-white">
-      <Sidebar />
+      <Sidebar role={user.role} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="flex h-14 items-center gap-2 border-b border-white/10 px-3 sm:gap-3 sm:px-4 md:justify-end md:px-6">
-          <MobileSidebar />
+          <MobileSidebar role={user.role} />
           <div className="flex-1 md:hidden" />
           <SyncFreshness
             deviceCount={freshness.deviceCount}
