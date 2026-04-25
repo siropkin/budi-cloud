@@ -1,17 +1,28 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isInvitePath } from "@/lib/auth-redirect";
 import { OrgSetupForm } from "./form";
 
 export const dynamic = "force-dynamic";
 
-export default async function SetupPage() {
+export default async function SetupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
+
+  // If the user landed here while in the middle of accepting an invite,
+  // forward to the invite page so they join the inviter's org instead of
+  // creating their own (issue #62).
+  const { next } = await searchParams;
+  if (isInvitePath(next)) redirect(next);
 
   // Check if user already has an org
   const admin = createAdminClient();
