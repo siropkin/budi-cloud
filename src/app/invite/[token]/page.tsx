@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { randomBytes } from "crypto";
+import { CrossOrgSwitch } from "./cross-org-switch";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +59,7 @@ export default async function InvitePage({
   // Check if user already exists
   const { data: existingUser } = await admin
     .from("users")
-    .select("id, org_id")
+    .select("id, org_id, role")
     .eq("id", authUser.id)
     .single();
 
@@ -74,18 +75,49 @@ export default async function InvitePage({
         );
       redirect("/dashboard");
     }
+
+    // Cross-org click: surface an explicit switch path (#72). A manager
+    // switching out would orphan their current org, so they get a refusal
+    // instead of a switch button.
+    const [{ data: currentOrg }, { data: targetOrg }] = await Promise.all([
+      admin.from("orgs").select("id, name").eq("id", existingUser.org_id).single(),
+      admin.from("orgs").select("id, name").eq("id", invite.org_id).single(),
+    ]);
+
+    const currentOrgName = currentOrg?.name ?? existingUser.org_id;
+    const targetOrgName = targetOrg?.name ?? invite.org_id;
+
+    if (existingUser.role === "manager") {
+      return (
+        <main className="flex min-h-screen items-center justify-center bg-[#0a0a0a] p-4">
+          <div className="w-full max-w-md rounded-xl border border-white/10 bg-zinc-950 p-6 text-center shadow-xl">
+            <h1 className="text-xl font-bold text-white">
+              Already in an Organization
+            </h1>
+            <p className="mt-3 text-sm text-zinc-300">
+              You manage <strong>{currentOrgName}</strong>, so you can&rsquo;t
+              switch into <strong>{targetOrgName}</strong> directly. Delete{" "}
+              <strong>{currentOrgName}</strong> first (or hand off ownership),
+              then re-click this invite.
+            </p>
+            <a
+              href="/dashboard"
+              className="mt-5 inline-block rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-zinc-200 hover:bg-white/10"
+            >
+              Back to dashboard
+            </a>
+          </div>
+        </main>
+      );
+    }
+
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
-        <div className="text-center">
-          <h1 className="text-xl font-bold text-white">
-            Already in an Organization
-          </h1>
-          <p className="mt-2 text-zinc-400">
-            You are already a member of another organization. Multi-org is not
-            supported yet.
-          </p>
-        </div>
-      </main>
+      <CrossOrgSwitch
+        token={token}
+        currentOrgName={currentOrgName}
+        targetOrgId={invite.org_id}
+        targetOrgName={targetOrgName}
+      />
     );
   }
 
