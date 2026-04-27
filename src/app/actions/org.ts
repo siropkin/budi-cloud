@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -206,4 +207,78 @@ export async function leaveOrganization(): Promise<{ error: string } | void> {
 
   await supabase.auth.signOut();
   redirect("/login");
+}
+
+/**
+ * Manager-only: change another org member's role between `member` and
+ * `manager`. Self-edits go through the same path so the server's safety
+ * guards (in particular the last-manager check) apply uniformly.
+ *
+ * The admin client bypasses RLS, so this action has to scope every read
+ * and write to the caller's `org_id` itself — a manager from org A must
+ * never be able to flip a user in org B.
+ *
+ * The "last manager" guard mirrors the invariant enforced by
+ * `leaveOrganization`: an org must always have ≥1 manager. Without this
+ * check a sole manager could demote themselves and orphan the org with
+ * no one able to invite, promote, or delete it.
+ */
+export async function updateMemberRole(
+  targetUserId: string,
+  newRole: string
+): Promise<{ ok?: true; error?: string }> {
+  if (newRole !== "member" && newRole !== "manager") {
+    return { error: "Invalid role" };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  if (!authUser) return { error: "Not authenticated" };
+
+  const admin = createAdminClient();
+  const { data: me } = await admin
+    .from("users")
+    .select("id, org_id, role")
+    .eq("id", authUser.id)
+    .single();
+
+  if (!me?.org_id || me.role !== "manager") {
+    return { error: "Only managers can change member roles" };
+  }
+
+  const { data: target } = await admin
+    .from("users")
+    .select("id, org_id, role")
+    .eq("id", targetUserId)
+    .single();
+
+  if (!target || target.org_id !== me.org_id) {
+    return { error: "User is not a member of your organization" };
+  }
+
+  if (target.role === newRole) return { ok: true };
+
+  if (target.role === "manager" && newRole === "member") {
+    const { data: managers } = await admin
+      .from("users")
+      .select("id")
+      .eq("org_id", me.org_id)
+      .eq("role", "manager");
+    if ((managers?.length ?? 0) <= 1) {
+      return {
+        error: "Can't demote the last manager — promote someone else first.",
+      };
+    }
+  }
+
+  const { error: updateError } = await admin
+    .from("users")
+    .update({ role: newRole })
+    .eq("id", targetUserId);
+  if (updateError) return { error: "Failed to update role" };
+
+  revalidatePath("/dashboard/settings");
+  return { ok: true };
 }

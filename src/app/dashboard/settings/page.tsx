@@ -1,4 +1,3 @@
-import { clsx } from "clsx";
 import { getCurrentUser, getOrgMembers } from "@/lib/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -6,6 +5,7 @@ import { ApiKeySection } from "./api-key-section";
 import { CopyButton } from "./copy-button";
 import { InviteSection } from "./invite-section";
 import { DangerZone } from "./danger-zone";
+import { RoleCell } from "./role-cell";
 
 export default async function SettingsPage() {
   const user = await getCurrentUser();
@@ -19,6 +19,7 @@ export default async function SettingsPage() {
     .single();
 
   const members = await getOrgMembers(user.org_id);
+  const canEditRoles = user.role === "manager";
 
   return (
     <div className="space-y-6">
@@ -76,7 +77,11 @@ export default async function SettingsPage() {
                       </td>
                       <td className="py-2 text-zinc-400">{m.email || "-"}</td>
                       <td className="py-2">
-                        <RoleBadge role={m.role} />
+                        <RoleCell
+                          userId={m.id}
+                          initialRole={m.role}
+                          canEdit={canEditRoles}
+                        />
                       </td>
                     </tr>
                   ))}
@@ -89,7 +94,11 @@ export default async function SettingsPage() {
                       <span className="truncate text-zinc-200">
                         {m.display_name || "-"}
                       </span>
-                      <RoleBadge role={m.role} />
+                      <RoleCell
+                        userId={m.id}
+                        initialRole={m.role}
+                        canEdit={canEditRoles}
+                      />
                     </div>
                     {m.email && (
                       <p className="truncate text-xs text-zinc-500">
@@ -108,20 +117,5 @@ export default async function SettingsPage() {
 
       <DangerZone userRole={user.role} orgName={org?.name ?? ""} />
     </div>
-  );
-}
-
-function RoleBadge({ role }: { role: string }) {
-  return (
-    <span
-      className={clsx(
-        "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium",
-        role === "manager"
-          ? "border-blue-500/30 bg-blue-500/10 text-blue-300"
-          : "border-zinc-500/30 bg-zinc-500/10 text-zinc-400"
-      )}
-    >
-      {role}
-    </span>
   );
 }
