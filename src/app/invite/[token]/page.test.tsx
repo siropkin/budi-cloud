@@ -242,8 +242,12 @@ describe("invite/[token] page — multi-use redemption (#68)", () => {
     expect(fake.rows("invite_redemptions")).toHaveLength(1);
   });
 
-  it("blocks a user already in a different org with the cross-org guard", async () => {
+  it("renders the cross-org switch panel for a member already in another org (#72)", async () => {
     seedInvite();
+    fake.seed("orgs", [
+      { id: "org_acme", name: "Acme" },
+      { id: "org_other", name: "Other Inc" },
+    ]);
     fake.seed("users", [
       { id: "usr_alice", org_id: "org_other", role: "member" },
     ]);
@@ -253,13 +257,52 @@ describe("invite/[token] page — multi-use redemption (#68)", () => {
       email: "alice@example.com",
       user_metadata: {},
     };
+    const node = (await visit()) as { props: Record<string, unknown> };
+
+    // Surfaces the explicit switch path — does NOT redirect, does NOT show the
+    // old "Multi-org is not supported yet" dead-end copy. The page hands a
+    // CrossOrgSwitch client component the four props it needs to render the
+    // confirmation flow; pin them all so the page<->component contract can't
+    // drift silently.
+    expect(redirectMock).not.toHaveBeenCalled();
+    expect(node.props).toEqual({
+      token: "tok_xyz",
+      currentOrgName: "Other Inc",
+      targetOrgId: "org_acme",
+      targetOrgName: "Acme",
+    });
+    expect(JSON.stringify(node)).not.toContain("Multi-org is not supported");
+    // The flip-to-Acme write only lands when the user submits the form, so a
+    // pure render must not have moved them.
+    const alice = fake.rows("users").find((u) => u.id === "usr_alice");
+    expect(alice?.org_id).toBe("org_other");
+    expect(fake.rows("invite_redemptions")).toHaveLength(0);
+  });
+
+  it("refuses a manager from a different org without rendering the switch UI", async () => {
+    seedInvite();
+    fake.seed("orgs", [
+      { id: "org_acme", name: "Acme" },
+      { id: "org_other", name: "Other Inc" },
+    ]);
+    fake.seed("users", [
+      { id: "usr_alice", org_id: "org_other", role: "manager" },
+    ]);
+
+    authUser = {
+      id: "usr_alice",
+      email: "alice@example.com",
+      user_metadata: {},
+    };
     const node = await visit();
 
-    // Renders the "Already in an Organization" message — does NOT redirect.
     expect(redirectMock).not.toHaveBeenCalled();
     const html = JSON.stringify(node);
     expect(html).toContain("Already in an Organization");
-    // No redemption row is written for a cross-org bounce.
+    // The switch CTA must not be rendered for a manager — they'd orphan their
+    // current org. Copy nudges them toward delete/hand-off instead.
+    expect(html).not.toContain("Switch organizations?");
+    expect(html).toContain("Delete");
     expect(fake.rows("invite_redemptions")).toHaveLength(0);
   });
 

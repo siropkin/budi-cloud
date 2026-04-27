@@ -69,6 +69,30 @@ class FakeQuery {
     return this.maybeFlushMutating();
   }
 
+  upsert(
+    row: Row,
+    opts: { ignoreDuplicates?: boolean; onConflict?: string } = {}
+  ) {
+    this._op = "select"; // settle so subsequent ops on the same builder are clean
+    const onConflict = (opts.onConflict ?? "")
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean);
+    if (onConflict.length === 0) {
+      this.tables.set(this.table, [...this.rows, row]);
+      return Promise.resolve({ data: null, error: null });
+    }
+    const conflict = this.rows.find((r) =>
+      onConflict.every((c) => r[c] === row[c])
+    );
+    if (conflict) {
+      if (!opts.ignoreDuplicates) Object.assign(conflict, row);
+      return Promise.resolve({ data: null, error: null });
+    }
+    this.tables.set(this.table, [...this.rows, row]);
+    return Promise.resolve({ data: null, error: null });
+  }
+
   async single() {
     const matched = this.rows.filter((r) => this.filters.every((f) => f(r)));
     if (matched.length === 1) return { data: matched[0], error: null };
@@ -151,6 +175,7 @@ beforeEach(() => {
     "daily_rollups",
     "session_summaries",
     "invite_tokens",
+    "invite_redemptions",
   ]) {
     fake.seed(t, []);
   }
@@ -479,5 +504,177 @@ describe("updateMemberRole", () => {
 
     expect(result).toEqual({ ok: true });
     expect(revalidatePathMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("switchOrganization", () => {
+  const FUTURE = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const PAST = new Date(Date.now() - 60 * 1000).toISOString();
+
+  function seedSwitchableMember() {
+    fake.seed("orgs", [
+      { id: "org_acme", name: "Acme Co" },
+      { id: "org_other", name: "Other Inc" },
+    ]);
+    fake.seed("users", [
+      { id: "usr_ivan", org_id: "org_other", role: "manager", api_key: "k1" },
+      { id: "usr_alice", org_id: "org_other", role: "member", api_key: "k2" },
+      { id: "usr_acme_mgr", org_id: "org_acme", role: "manager", api_key: "k3" },
+    ]);
+    fake.seed("devices", [{ id: "dev_alice", user_id: "usr_alice" }]);
+    fake.seed("daily_rollups", [
+      { device_id: "dev_alice", bucket_day: "2026-04-20", cost_cents: 100 },
+    ]);
+    fake.seed("session_summaries", [
+      { device_id: "dev_alice", session_id: "s1" },
+    ]);
+    fake.seed("invite_tokens", [
+      {
+        id: "tok_acme",
+        org_id: "org_acme",
+        role: "member",
+        created_by: "usr_acme_mgr",
+        expires_at: FUTURE,
+      },
+    ]);
+  }
+
+  function fd(values: Record<string, string>): FormData {
+    const f = new FormData();
+    for (const [k, v] of Object.entries(values)) f.set(k, v);
+    return f;
+  }
+
+  it("flips the caller's org_id, leaves devices/data intact, and writes an audit row", async () => {
+    seedSwitchableMember();
+    authUserId = "usr_alice";
+
+    const { switchOrganization } = await loadActions();
+    await expect(
+      switchOrganization(
+        undefined,
+        fd({ token: "tok_acme", targetOrgId: "org_acme", confirm: "Acme Co" })
+      )
+    ).rejects.toThrow("__REDIRECT__");
+
+    const alice = fake.rows("users").find((u) => u.id === "usr_alice");
+    expect(alice?.org_id).toBe("org_acme");
+    expect(alice?.role).toBe("member");
+
+    // Devices + synced data follow the user (FKs are user_id, not org_id).
+    expect(fake.rows("devices")).toHaveLength(1);
+    expect(fake.rows("daily_rollups")).toHaveLength(1);
+    expect(fake.rows("session_summaries")).toHaveLength(1);
+
+    // Audit trail in invite_redemptions, same shape as a fresh join.
+    const redemptions = fake.rows("invite_redemptions");
+    expect(redemptions).toEqual([
+      { token_id: "tok_acme", user_id: "usr_alice" },
+    ]);
+
+    // The token itself is untouched and still redeemable for other teammates.
+    expect(fake.rows("invite_tokens")).toHaveLength(1);
+
+    expect(redirectMock).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("refuses a manager (would orphan the current org)", async () => {
+    seedSwitchableMember();
+    authUserId = "usr_ivan"; // manager of org_other
+
+    const { switchOrganization } = await loadActions();
+    const result = await switchOrganization(
+      undefined,
+      fd({ token: "tok_acme", targetOrgId: "org_acme", confirm: "Acme Co" })
+    );
+
+    expect(result?.error).toMatch(/Managers can't switch/i);
+    const ivan = fake.rows("users").find((u) => u.id === "usr_ivan");
+    expect(ivan?.org_id).toBe("org_other");
+    expect(fake.rows("invite_redemptions")).toHaveLength(0);
+  });
+
+  it("rejects an unauthenticated caller", async () => {
+    seedSwitchableMember();
+    authUserId = null;
+
+    const { switchOrganization } = await loadActions();
+    const result = await switchOrganization(
+      undefined,
+      fd({ token: "tok_acme", targetOrgId: "org_acme", confirm: "Acme Co" })
+    );
+
+    expect(result).toEqual({ error: "Not authenticated" });
+  });
+
+  it("refuses an expired invite even if the form looks valid", async () => {
+    seedSwitchableMember();
+    fake.seed("invite_tokens", [
+      {
+        id: "tok_acme",
+        org_id: "org_acme",
+        role: "member",
+        created_by: "usr_acme_mgr",
+        expires_at: PAST,
+      },
+    ]);
+    authUserId = "usr_alice";
+
+    const { switchOrganization } = await loadActions();
+    const result = await switchOrganization(
+      undefined,
+      fd({ token: "tok_acme", targetOrgId: "org_acme", confirm: "Acme Co" })
+    );
+
+    expect(result).toEqual({ error: "Invite link has expired" });
+    const alice = fake.rows("users").find((u) => u.id === "usr_alice");
+    expect(alice?.org_id).toBe("org_other");
+  });
+
+  it("refuses a missing/forged token", async () => {
+    seedSwitchableMember();
+    authUserId = "usr_alice";
+
+    const { switchOrganization } = await loadActions();
+    const result = await switchOrganization(
+      undefined,
+      fd({ token: "tok_nope", targetOrgId: "org_acme", confirm: "Acme Co" })
+    );
+
+    expect(result).toEqual({ error: "Invite link is invalid" });
+  });
+
+  it("refuses a tampered targetOrgId that doesn't match the token", async () => {
+    seedSwitchableMember();
+    authUserId = "usr_alice";
+
+    const { switchOrganization } = await loadActions();
+    const result = await switchOrganization(
+      undefined,
+      fd({ token: "tok_acme", targetOrgId: "org_other", confirm: "Acme Co" })
+    );
+
+    expect(result).toEqual({
+      error: "Invite link does not match the target organization",
+    });
+    const alice = fake.rows("users").find((u) => u.id === "usr_alice");
+    expect(alice?.org_id).toBe("org_other");
+  });
+
+  it("requires the typed confirmation to match the target org name", async () => {
+    seedSwitchableMember();
+    authUserId = "usr_alice";
+
+    const { switchOrganization } = await loadActions();
+    const result = await switchOrganization(
+      undefined,
+      fd({ token: "tok_acme", targetOrgId: "org_acme", confirm: "acme co" })
+    );
+
+    expect(result).toEqual({
+      error: "Type the organization name exactly to confirm",
+    });
+    const alice = fake.rows("users").find((u) => u.id === "usr_alice");
+    expect(alice?.org_id).toBe("org_other");
   });
 });

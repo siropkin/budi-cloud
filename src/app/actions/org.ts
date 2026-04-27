@@ -210,6 +210,101 @@ export async function leaveOrganization(): Promise<{ error: string } | void> {
 }
 
 /**
+ * Member-only: switch the caller from their current org to the org an invite
+ * token belongs to. The opt-in alternative to the dead-end "Already in an
+ * Organization" screen on `/invite/[token]` (#72).
+ *
+ * Devices, daily rollups, and session summaries are keyed off `user_id`
+ * (transitively through `devices`), so flipping `users.org_id` is enough to
+ * carry every piece of synced data with the user — there's no DELETE in this
+ * action by design. The original org loses visibility on the caller's data
+ * the moment the update commits.
+ *
+ * Managers are refused for the same reason `leaveOrganization` refuses them:
+ * a sole manager switching out would orphan the org with no one able to
+ * invite, promote, or delete. They have to delete the org first (or, once
+ * we ship one, hand off ownership).
+ *
+ * The token is re-validated server-side. The form-supplied `targetOrgId` is
+ * cross-checked against the token's `org_id` so a tampered request can't
+ * land the user in an org the token wasn't issued for.
+ */
+export async function switchOrganization(
+  _prevState: { error: string } | undefined,
+  formData: FormData
+): Promise<{ error: string } | void> {
+  const tokenId = String(formData.get("token") ?? "");
+  const targetOrgId = String(formData.get("targetOrgId") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+
+  const supabase = await createClient();
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  if (!authUser) return { error: "Not authenticated" };
+
+  const admin = createAdminClient();
+  const { data: me } = await admin
+    .from("users")
+    .select("id, org_id, role")
+    .eq("id", authUser.id)
+    .single();
+
+  if (!me?.org_id) return { error: "Not a member of any organization" };
+  if (me.role === "manager") {
+    return {
+      error:
+        "Managers can't switch organizations. Delete this org or hand off ownership first.",
+    };
+  }
+
+  const { data: invite } = await admin
+    .from("invite_tokens")
+    .select("id, org_id, role, expires_at")
+    .eq("id", tokenId)
+    .single();
+
+  if (!invite) return { error: "Invite link is invalid" };
+  if (new Date(invite.expires_at as string) < new Date()) {
+    return { error: "Invite link has expired" };
+  }
+  if (invite.org_id !== targetOrgId) {
+    return { error: "Invite link does not match the target organization" };
+  }
+  if (invite.org_id === me.org_id) {
+    return { error: "You are already a member of that organization" };
+  }
+
+  const { data: targetOrg } = await admin
+    .from("orgs")
+    .select("id, name")
+    .eq("id", invite.org_id as string)
+    .single();
+  if (!targetOrg) return { error: "Target organization not found" };
+
+  if (confirm.trim() !== (targetOrg.name as string)) {
+    return { error: "Type the organization name exactly to confirm" };
+  }
+
+  const { error: updateError } = await admin
+    .from("users")
+    .update({ org_id: invite.org_id, role: invite.role })
+    .eq("id", me.id as string);
+  if (updateError) return { error: "Failed to switch organization" };
+
+  // Audit row, same shape as a fresh join. Idempotent on (token, user) so a
+  // re-click after the switch is a no-op rather than a duplicate-key error.
+  await admin
+    .from("invite_redemptions")
+    .upsert(
+      { token_id: tokenId, user_id: me.id as string },
+      { onConflict: "token_id,user_id", ignoreDuplicates: true }
+    );
+
+  redirect("/dashboard");
+}
+
+/**
  * Manager-only: change another org member's role between `member` and
  * `manager`. Self-edits go through the same path so the server's safety
  * guards (in particular the last-manager check) apply uniformly.
