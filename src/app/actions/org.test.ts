@@ -135,6 +135,14 @@ vi.mock("next/navigation", () => ({
   redirect: (to: string) => redirectMock(to),
 }));
 
+const revalidatePathMock = vi.fn((path: string) => {
+  void path;
+});
+
+vi.mock("next/cache", () => ({
+  revalidatePath: (path: string) => revalidatePathMock(path),
+}));
+
 beforeEach(() => {
   for (const t of [
     "orgs",
@@ -149,6 +157,7 @@ beforeEach(() => {
   authUserId = null;
   signOut.mockClear();
   redirectMock.mockClear();
+  revalidatePathMock.mockClear();
 });
 
 function seedSoloManagerWithData() {
@@ -232,7 +241,9 @@ describe("deleteOrganization", () => {
     fd.set("confirm", "Acme Co");
 
     const result = await deleteOrganization(undefined, fd);
-    expect(result).toEqual({ error: "Only managers can delete the organization" });
+    expect(result).toEqual({
+      error: "Only managers can delete the organization",
+    });
     expect(fake.rows("orgs")).toHaveLength(1);
     expect(fake.rows("users")).toHaveLength(2);
     expect(signOut).not.toHaveBeenCalled();
@@ -320,5 +331,153 @@ describe("leaveOrganization", () => {
     const { leaveOrganization } = await loadActions();
     const result = await leaveOrganization();
     expect(result).toEqual({ error: "Not a member of any organization" });
+  });
+});
+
+describe("updateMemberRole", () => {
+  function seedTwoOrgs() {
+    fake.seed("orgs", [
+      { id: "org_acme", name: "Acme Co" },
+      { id: "org_other", name: "Other Inc" },
+    ]);
+    fake.seed("users", [
+      { id: "usr_ivan", org_id: "org_acme", role: "manager", api_key: "k1" },
+      { id: "usr_pat", org_id: "org_acme", role: "member", api_key: "k2" },
+      { id: "usr_jess", org_id: "org_acme", role: "manager", api_key: "k3" },
+      // Cross-org user — must never be reachable from an Acme manager.
+      {
+        id: "usr_outsider",
+        org_id: "org_other",
+        role: "member",
+        api_key: "k4",
+      },
+    ]);
+  }
+
+  it("promotes a member to manager and revalidates the settings page", async () => {
+    seedTwoOrgs();
+    authUserId = "usr_ivan";
+
+    const { updateMemberRole } = await loadActions();
+    const result = await updateMemberRole("usr_pat", "manager");
+
+    expect(result).toEqual({ ok: true });
+    const pat = fake.rows("users").find((u) => u.id === "usr_pat");
+    expect(pat?.role).toBe("manager");
+    expect(revalidatePathMock).toHaveBeenCalledWith("/dashboard/settings");
+  });
+
+  it("demotes another manager when ≥2 managers exist", async () => {
+    seedTwoOrgs();
+    authUserId = "usr_ivan";
+
+    const { updateMemberRole } = await loadActions();
+    const result = await updateMemberRole("usr_jess", "member");
+
+    expect(result).toEqual({ ok: true });
+    const jess = fake.rows("users").find((u) => u.id === "usr_jess");
+    expect(jess?.role).toBe("member");
+  });
+
+  it("refuses to demote the last remaining manager (other-demote)", async () => {
+    fake.seed("orgs", [{ id: "org_acme", name: "Acme Co" }]);
+    fake.seed("users", [
+      { id: "usr_ivan", org_id: "org_acme", role: "manager", api_key: "k1" },
+      { id: "usr_pat", org_id: "org_acme", role: "member", api_key: "k2" },
+      { id: "usr_jess", org_id: "org_acme", role: "manager", api_key: "k3" },
+    ]);
+    // Ivan demotes Jess first — now Ivan is the only manager.
+    authUserId = "usr_ivan";
+
+    const { updateMemberRole } = await loadActions();
+    await updateMemberRole("usr_jess", "member");
+    const result = await updateMemberRole("usr_jess", "member");
+    // The first call removed Jess as manager, second is a no-op short-circuit.
+    expect(result).toEqual({ ok: true });
+
+    // Now an attempt to demote the only remaining manager (Ivan) must fail.
+    const lastManagerResult = await updateMemberRole("usr_ivan", "member");
+    expect(lastManagerResult).toEqual({
+      error: "Can't demote the last manager — promote someone else first.",
+    });
+    const ivan = fake.rows("users").find((u) => u.id === "usr_ivan");
+    expect(ivan?.role).toBe("manager");
+  });
+
+  it("refuses self-demote when caller is the last manager", async () => {
+    fake.seed("orgs", [{ id: "org_acme", name: "Acme Co" }]);
+    fake.seed("users", [
+      { id: "usr_ivan", org_id: "org_acme", role: "manager", api_key: "k1" },
+      { id: "usr_pat", org_id: "org_acme", role: "member", api_key: "k2" },
+    ]);
+    authUserId = "usr_ivan";
+
+    const { updateMemberRole } = await loadActions();
+    const result = await updateMemberRole("usr_ivan", "member");
+
+    expect(result).toEqual({
+      error: "Can't demote the last manager — promote someone else first.",
+    });
+    const ivan = fake.rows("users").find((u) => u.id === "usr_ivan");
+    expect(ivan?.role).toBe("manager");
+  });
+
+  it("refuses a non-manager caller", async () => {
+    seedTwoOrgs();
+    authUserId = "usr_pat"; // member
+
+    const { updateMemberRole } = await loadActions();
+    const result = await updateMemberRole("usr_pat", "manager");
+
+    expect(result).toEqual({ error: "Only managers can change member roles" });
+    const pat = fake.rows("users").find((u) => u.id === "usr_pat");
+    expect(pat?.role).toBe("member");
+  });
+
+  it("refuses to touch a user from another org", async () => {
+    seedTwoOrgs();
+    authUserId = "usr_ivan";
+
+    const { updateMemberRole } = await loadActions();
+    const result = await updateMemberRole("usr_outsider", "manager");
+
+    expect(result).toEqual({
+      error: "User is not a member of your organization",
+    });
+    const outsider = fake.rows("users").find((u) => u.id === "usr_outsider");
+    expect(outsider?.role).toBe("member");
+  });
+
+  it("rejects unknown role values", async () => {
+    seedTwoOrgs();
+    authUserId = "usr_ivan";
+
+    const { updateMemberRole } = await loadActions();
+    const result = await updateMemberRole("usr_pat", "owner");
+
+    expect(result).toEqual({ error: "Invalid role" });
+    const pat = fake.rows("users").find((u) => u.id === "usr_pat");
+    expect(pat?.role).toBe("member");
+  });
+
+  it("rejects an unauthenticated caller", async () => {
+    seedTwoOrgs();
+    authUserId = null;
+
+    const { updateMemberRole } = await loadActions();
+    const result = await updateMemberRole("usr_pat", "manager");
+
+    expect(result).toEqual({ error: "Not authenticated" });
+  });
+
+  it("short-circuits a no-op without writing or revalidating", async () => {
+    seedTwoOrgs();
+    authUserId = "usr_ivan";
+
+    const { updateMemberRole } = await loadActions();
+    const result = await updateMemberRole("usr_pat", "member");
+
+    expect(result).toEqual({ ok: true });
+    expect(revalidatePathMock).not.toHaveBeenCalled();
   });
 });
