@@ -190,7 +190,7 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
     expect(snap.lastRollupAt).toBeNull();
   });
 
-  it("reports the most recent rollup synced_at across visible devices", async () => {
+  it("reports the most recent rollup synced_at across the viewer's own devices", async () => {
     fake.seed("orgs", [{ id: "org_solo", name: "solo" }]);
     fake.seed("users", [{ ...baseUser }]);
     fake.seed("devices", [
@@ -219,6 +219,86 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
     expect(snap.deviceCount).toBe(2);
     expect(snap.lastSeenAt).toBe("2026-04-18T11:00:00Z");
     expect(snap.lastRollupAt).toBe("2026-04-18T10:30:00Z");
+  });
+
+  it("(#74) badge ignores teammates' devices for a manager — own daemon stale, teammate daemon fresh", async () => {
+    // Regression for the bug surfaced 2026-04-27: a manager's header badge
+    // showed "Synced 3m ago" because a teammate's daemon had just pushed,
+    // masking the fact that the manager's own daemon hadn't synced in 2h.
+    // The freshness signal is read as self-trust ("is *my* daemon healthy");
+    // teammate state belongs on /dashboard/devices, not in the header.
+    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("users", [
+      { ...baseUser, org_id: "org_team" },
+      {
+        id: "usr_teammate",
+        org_id: "org_team",
+        role: "member",
+        api_key: "budi_t",
+        display_name: "Teammate",
+        email: "teammate@example.com",
+      },
+    ]);
+    fake.seed("devices", [
+      {
+        id: "dev_my_mac",
+        user_id: "usr_ivan",
+        last_seen: "2026-04-18T10:00:00Z", // 2h ago
+      },
+      {
+        id: "dev_teammate_mac",
+        user_id: "usr_teammate",
+        last_seen: "2026-04-18T11:57:00Z", // 3m ago — would win an org-wide MAX
+      },
+    ]);
+    fake.seed("daily_rollups", [
+      rollup("dev_my_mac", "2026-04-18", 100, {
+        synced_at: "2026-04-18T10:00:00Z",
+      }),
+      rollup("dev_teammate_mac", "2026-04-18", 50, {
+        synced_at: "2026-04-18T11:57:00Z",
+      }),
+    ]);
+
+    const { getSyncFreshness } = await loadDal();
+    const snap = await getSyncFreshness({ ...baseUser, org_id: "org_team" });
+
+    expect(snap.deviceCount).toBe(1); // own devices only — teammate's doesn't count
+    expect(snap.lastSeenAt).toBe("2026-04-18T10:00:00Z"); // mine, not teammate's
+    expect(snap.lastRollupAt).toBe("2026-04-18T10:00:00Z");
+  });
+
+  it("(#74) reports not-linked for a manager whose org has teammate devices but no own daemon", async () => {
+    // The LinkDaemonBanner gating keys off deviceCount===0; previously a
+    // manager who hadn't run `budi cloud init` themselves wouldn't see the
+    // prompt because teammates had linked, masking their own missing setup.
+    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("users", [
+      { ...baseUser, org_id: "org_team" },
+      {
+        id: "usr_teammate",
+        org_id: "org_team",
+        role: "member",
+        api_key: "budi_t",
+        display_name: "Teammate",
+        email: "teammate@example.com",
+      },
+    ]);
+    fake.seed("devices", [
+      {
+        id: "dev_teammate_mac",
+        user_id: "usr_teammate",
+        last_seen: "2026-04-18T11:57:00Z",
+      },
+    ]);
+
+    const { getSyncFreshness } = await loadDal();
+    const snap = await getSyncFreshness({ ...baseUser, org_id: "org_team" });
+    expect(snap).toEqual({
+      deviceCount: 0,
+      lastSeenAt: null,
+      lastRollupAt: null,
+    });
   });
 });
 
