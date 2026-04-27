@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { dateRangeFromDays } from "@/lib/date-range";
 
+/**
+ * Pins the rolling-window contract introduced in #75. Each `days=N` query
+ * spans `N + 1` day buckets (today minus N, through today inclusive) — the
+ * same semantic the local Budi CLI uses for `-p Nd`. Older callers that
+ * compared cloud and CLI numbers for the same window saw an off-by-one gap;
+ * these tests pin the alignment so the regression can't return silently.
+ */
 describe("dateRangeFromDays (1d/7d/30d window contract)", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -12,27 +19,27 @@ describe("dateRangeFromDays (1d/7d/30d window contract)", () => {
   });
 
   it("defaults to 7 days when no param is provided", () => {
-    // 7d inclusive of today: from = today - 6.
+    // 7d rolling: from = today - 7 (8 day buckets, including today).
     const r = dateRangeFromDays(undefined);
-    expect(r.from).toBe("2026-04-12");
+    expect(r.from).toBe("2026-04-11");
     expect(r.to).toBe("2026-04-18");
   });
 
-  it("1d is a single-day window (today so far)", () => {
+  it("1d covers yesterday + today (matches local `budi stats -p 1d`)", () => {
     const r = dateRangeFromDays("1");
-    expect(r.from).toBe("2026-04-18");
+    expect(r.from).toBe("2026-04-17");
     expect(r.to).toBe("2026-04-18");
   });
 
-  it("7d includes today and the previous 6 days", () => {
+  it("7d covers today and the previous 7 days", () => {
     const r = dateRangeFromDays("7");
-    expect(r.from).toBe("2026-04-12");
+    expect(r.from).toBe("2026-04-11");
     expect(r.to).toBe("2026-04-18");
   });
 
-  it("30d includes today and the previous 29 days", () => {
+  it("30d covers today and the previous 30 days", () => {
     const r = dateRangeFromDays("30");
-    expect(r.from).toBe("2026-03-20");
+    expect(r.from).toBe("2026-03-19");
     expect(r.to).toBe("2026-04-18");
   });
 
@@ -41,7 +48,7 @@ describe("dateRangeFromDays (1d/7d/30d window contract)", () => {
     (bad) => {
       const r = dateRangeFromDays(bad);
       expect(r.to).toBe("2026-04-18");
-      expect(r.from).toBe("2026-04-12");
+      expect(r.from).toBe("2026-04-11");
     }
   );
 
@@ -49,7 +56,7 @@ describe("dateRangeFromDays (1d/7d/30d window contract)", () => {
     // Developers occasionally need a bespoke window; preserving this was one
     // of the compatibility notes on the 90d→30d default change.
     const r = dateRangeFromDays("14");
-    expect(r.from).toBe("2026-04-05");
+    expect(r.from).toBe("2026-04-04");
     expect(r.to).toBe("2026-04-18");
   });
 
@@ -64,7 +71,7 @@ describe("dateRangeFromDays (1d/7d/30d window contract)", () => {
     // org with no rollups yet should still render like the default 7d view
     // rather than crashing.
     const r = dateRangeFromDays("all");
-    expect(r.from).toBe("2026-04-12");
+    expect(r.from).toBe("2026-04-11");
     expect(r.to).toBe("2026-04-18");
   });
 });
