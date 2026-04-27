@@ -540,18 +540,25 @@ export async function getSessions(user: BudiUser, range: DateRange) {
  *
  * Used by the dashboard header to render a "Last synced X ago" indicator and
  * to distinguish *not linked yet* from *linked, waiting for first sync* from
- * *stalled*.
+ * *stalled*. Always scoped to the **viewer's own devices**, regardless of
+ * role — the badge answers "is *my* daemon healthy" and a manager whose own
+ * daemon has been silent for hours should see a stale badge even if a
+ * teammate's daemon synced 3 minutes ago (#74). The org-wide "who's stale?"
+ * view lives on `/dashboard/devices`, which is the right surface for a
+ * manager chasing down a teammate's broken daemon.
  *
- * - `deviceCount` is the number of daemons the viewer can see. Zero means the
- *   account exists on cloud but no local daemon has ever called `/v1/ingest`
- *   with this API key yet — the "not linked yet" state.
- * - `lastSeenAt` is the most recent `devices.last_seen` across the visible
- *   devices. It advances on every successful ingest, even when the payload
- *   contains zero rollups, so it's the authoritative "is the daemon talking
- *   to us" signal.
+ * - `deviceCount` is the number of daemons the viewer themselves has linked.
+ *   Zero means the viewer's account exists on cloud but they haven't run
+ *   `budi cloud init` yet — the "not linked yet" state. (The same field
+ *   drives the `LinkDaemonBanner` on the overview, so a manager who hasn't
+ *   linked their own daemon still gets the prompt even if teammates have.)
+ * - `lastSeenAt` is the most recent `devices.last_seen` across the viewer's
+ *   own devices. It advances on every successful ingest, even when the
+ *   payload contains zero rollups, so it's the authoritative "is *my*
+ *   daemon talking to us" signal.
  * - `lastRollupAt` is the most recent `daily_rollups.synced_at` across the
- *   visible devices. If `deviceCount > 0` but `lastRollupAt` is null, the
- *   daemon is linked but hasn't pushed any usage rows yet — that's the
+ *   viewer's own devices. If `deviceCount > 0` but `lastRollupAt` is null,
+ *   the viewer is linked but hasn't pushed any usage rows yet — that's the
  *   "initial sync in progress / no data yet" state.
  */
 export async function getSyncFreshness(user: BudiUser): Promise<{
@@ -560,7 +567,11 @@ export async function getSyncFreshness(user: BudiUser): Promise<{
   lastRollupAt: string | null;
 }> {
   const admin = createAdminClient();
-  const deviceIds = await getVisibleDeviceIds(admin, user);
+  const { data: ownDevices } = await admin
+    .from("devices")
+    .select("id")
+    .eq("user_id", user.id);
+  const deviceIds = (ownDevices ?? []).map((d) => d.id as string);
   if (deviceIds.length === 0) {
     return { deviceCount: 0, lastSeenAt: null, lastRollupAt: null };
   }
