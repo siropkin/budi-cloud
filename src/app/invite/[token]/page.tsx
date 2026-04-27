@@ -16,7 +16,7 @@ export default async function InvitePage({
   // Validate the invite token
   const { data: invite } = await admin
     .from("invite_tokens")
-    .select("id, org_id, role, expires_at, used_by")
+    .select("id, org_id, role, expires_at")
     .eq("id", token)
     .single();
 
@@ -25,22 +25,7 @@ export default async function InvitePage({
       <main className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
         <div className="text-center">
           <h1 className="text-xl font-bold text-white">Invalid Invite</h1>
-          <p className="mt-2 text-zinc-400">
-            This invite link is invalid or has already been used.
-          </p>
-        </div>
-      </main>
-    );
-  }
-
-  if (invite.used_by) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
-        <div className="text-center">
-          <h1 className="text-xl font-bold text-white">Already Used</h1>
-          <p className="mt-2 text-zinc-400">
-            This invite link has already been used.
-          </p>
+          <p className="mt-2 text-zinc-400">This invite link is invalid.</p>
         </div>
       </main>
     );
@@ -80,6 +65,13 @@ export default async function InvitePage({
   if (existingUser?.org_id) {
     // User already in an org
     if (existingUser.org_id === invite.org_id) {
+      // Re-click by an already-joined member is idempotent.
+      await admin
+        .from("invite_redemptions")
+        .upsert(
+          { token_id: token, user_id: authUser.id },
+          { onConflict: "token_id,user_id", ignoreDuplicates: true }
+        );
       redirect("/dashboard");
     }
     return (
@@ -123,11 +115,16 @@ export default async function InvitePage({
     });
   }
 
-  // Mark token as used
+  // Record the redemption. `invite_redemptions` is now the source of truth
+  // for "who joined via this token" — the token itself stays valid for other
+  // teammates until it expires. Idempotent on (token, user) so a re-click by
+  // the same user is a no-op.
   await admin
-    .from("invite_tokens")
-    .update({ used_by: authUser.id, used_at: new Date().toISOString() })
-    .eq("id", token);
+    .from("invite_redemptions")
+    .upsert(
+      { token_id: token, user_id: authUser.id },
+      { onConflict: "token_id,user_id", ignoreDuplicates: true }
+    );
 
   redirect("/dashboard");
 }
