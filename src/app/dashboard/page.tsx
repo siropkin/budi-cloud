@@ -7,6 +7,7 @@ import {
   getSyncFreshness,
 } from "@/lib/dal";
 import { dateRangeFromDays } from "@/lib/date-range";
+import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { fmtCost, fmtNum } from "@/lib/format";
 import { StatCard } from "@/components/stat-card";
@@ -29,7 +30,8 @@ export default async function OverviewPage({
 
   const earliestActivity =
     params.days === ALL_PERIOD_VALUE ? await getEarliestActivity(user) : null;
-  const range = dateRangeFromDays(params.days, earliestActivity);
+  const tz = await getViewerTimeZone();
+  const range = dateRangeFromDays(params.days, earliestActivity, tz);
   const [stats, activity, freshness] = await Promise.all([
     getOverviewStats(user, range),
     getDailyActivity(user, range),

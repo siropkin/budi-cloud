@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser, getCostByUser, getEarliestActivity } from "@/lib/dal";
 import { dateRangeFromDays } from "@/lib/date-range";
+import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { fmtCost } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
@@ -23,7 +24,8 @@ export default async function TeamPage({
 
   const earliestActivity =
     params.days === ALL_PERIOD_VALUE ? await getEarliestActivity(user) : null;
-  const range = dateRangeFromDays(params.days, earliestActivity);
+  const tz = await getViewerTimeZone();
+  const range = dateRangeFromDays(params.days, earliestActivity, tz);
   const userCosts = await getCostByUser(user, range);
 
   return (
@@ -77,10 +79,7 @@ export default async function TeamPage({
             </table>
             <ul className="divide-y divide-white/5 text-sm sm:hidden">
               {userCosts.map((u, i) => (
-                <li
-                  key={i}
-                  className="flex items-center justify-between py-2"
-                >
+                <li key={i} className="flex items-center justify-between py-2">
                   <span className="text-zinc-200">{u.name}</span>
                   <span className="tabular-nums text-zinc-300">
                     {fmtCost(u.cost_cents)}

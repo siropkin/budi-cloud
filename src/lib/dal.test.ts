@@ -11,6 +11,23 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 type Row = Record<string, unknown>;
 
+/**
+ * Tests in this file pre-date the TZ-aware `DateRange` (#78). They construct
+ * ranges in UTC for clarity, so we synthesize the SQL-side fields from the
+ * local-TZ `from`/`to` rather than threading a real `Intl` timezone through
+ * each fixture.
+ */
+function utcRange(from: string, to: string) {
+  return {
+    from,
+    to,
+    bucketFrom: from,
+    bucketTo: to,
+    startedAtFrom: `${from}T00:00:00.000Z`,
+    startedAtTo: `${to}T23:59:59.999Z`,
+  };
+}
+
 class FakeSupabase {
   tables = new Map<string, Row[]>();
 
@@ -344,7 +361,7 @@ describe("Overview ↔ Team reconciliation (#15)", () => {
       display_name: "Ivan",
       email: "ivan@example.com",
     };
-    const range = { from: "2026-04-01", to: "2026-04-30" };
+    const range = utcRange("2026-04-01", "2026-04-30");
 
     const overview = await getOverviewStats(user, range);
     const byUser = await getCostByUser(user, range);
@@ -398,7 +415,7 @@ describe("Overview ↔ Team reconciliation (#15)", () => {
       display_name: "Ivan",
       email: "ivan@example.com",
     };
-    const range = { from: "2026-04-01", to: "2026-04-30" };
+    const range = utcRange("2026-04-01", "2026-04-30");
 
     const overview = await getOverviewStats(manager, range);
     const byUser = await getCostByUser(manager, range);
@@ -489,7 +506,7 @@ describe("getCostByDevice", () => {
       display_name: "Ivan",
       email: "ivan@example.com",
     };
-    const range = { from: "2026-04-01", to: "2026-04-30" };
+    const range = utcRange("2026-04-01", "2026-04-30");
 
     const byDevice = await getCostByDevice(manager, range);
     const overview = await getOverviewStats(manager, range);
@@ -554,10 +571,10 @@ describe("getCostByDevice", () => {
       display_name: "Jane",
       email: "jane@example.com",
     };
-    const byDevice = await getCostByDevice(jane, {
-      from: "2026-04-01",
-      to: "2026-04-30",
-    });
+    const byDevice = await getCostByDevice(
+      jane,
+      utcRange("2026-04-01", "2026-04-30")
+    );
 
     expect(byDevice).toEqual([
       {

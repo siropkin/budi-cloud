@@ -1,6 +1,13 @@
 import { type DateRange } from "@/lib/dal";
-import { format, subDays } from "date-fns";
 import { ALL_PERIOD_VALUE, DEFAULT_PERIOD_DAYS } from "@/lib/periods";
+import {
+  isValidTimeZone,
+  localDateInTimeZone,
+  utcBucketDayForLocalEnd,
+  utcBucketDayForLocalStart,
+  utcInstantForLocalEnd,
+  utcInstantForLocalStart,
+} from "@/lib/timezone";
 
 /**
  * Build a `DateRange` from the `?days=` search param.
@@ -24,36 +31,72 @@ import { ALL_PERIOD_VALUE, DEFAULT_PERIOD_DAYS } from "@/lib/periods";
  * Default (no param) is `7d` to mirror the default developer window in the
  * CLI and statusline. Invalid or non-positive values fall back to the default.
  *
- * History: prior to #75 the cloud treated `days=1` as "today so far" (single
- * calendar day) and `days=N` as `N` days inclusive. That diverged from local
- * Budi and produced confusing apples-to-apples reconciliation gaps.
+ * History:
+ * - Prior to #75 the cloud treated `days=1` as "today so far" (single
+ *   calendar day) and `days=N` as `N` days inclusive. That diverged from
+ *   local Budi and produced confusing apples-to-apples reconciliation gaps.
+ * - Prior to #78 "today" was always the **server's UTC date**. Vercel runs
+ *   in UTC, so a US/Pacific user working at 17:30 PDT (= 00:30 UTC the next
+ *   day) saw `days=1` filter `bucket_day BETWEEN today-UTC-1 AND today-UTC`
+ *   — and silently dropped 5–7 hours of yesterday-PDT-evening activity that
+ *   the daemon had written into "today's" UTC bucket. The fix below derives
+ *   `from`/`to` in the viewer's IANA timezone and supplies a UTC bucket
+ *   range that captures every UTC bucket overlapping the local-TZ window.
  */
 export function dateRangeFromDays(
   days: string | undefined,
-  earliestActivityDate?: string | null
+  earliestActivityDate?: string | null,
+  timeZone?: string | null
 ): DateRange {
-  const to = new Date();
-  const toStr = format(to, "yyyy-MM-dd");
+  const tz = timeZone && isValidTimeZone(timeZone) ? timeZone : "UTC";
+  const now = new Date();
+  const localTo = localDateInTimeZone(now, tz);
 
+  const from = computeLocalFrom(days, localTo, earliestActivityDate);
+  return makeRange(from, localTo, tz);
+}
+
+/**
+ * Resolve the lower bound of the local-TZ range from `days` and the optional
+ * earliest-activity date. Kept separate so the rolling-window math reads
+ * cleanly without the timezone plumbing on top.
+ */
+function computeLocalFrom(
+  days: string | undefined,
+  localTo: string,
+  earliestActivityDate: string | null | undefined
+): string {
   if (days === ALL_PERIOD_VALUE) {
-    // Without a known earliest activity date (empty org, or the caller
-    // didn't fetch it) fall back to the default window rather than throwing.
-    if (earliestActivityDate) {
-      return { from: earliestActivityDate, to: toStr };
-    }
-    return {
-      from: format(subDays(to, DEFAULT_PERIOD_DAYS), "yyyy-MM-dd"),
-      to: toStr,
-    };
+    if (earliestActivityDate) return earliestActivityDate;
+    return subDaysIso(localTo, DEFAULT_PERIOD_DAYS);
   }
-
   const parsed = days === undefined ? NaN : Number(days);
   const n =
     Number.isFinite(parsed) && parsed >= 1
       ? Math.floor(parsed)
       : DEFAULT_PERIOD_DAYS;
+  return subDaysIso(localTo, n);
+}
+
+/**
+ * Subtract `n` whole calendar days from a `YYYY-MM-DD` string. Implemented
+ * against UTC to avoid pulling DST into a pure date-string operation —
+ * `dateRangeFromDays` has already converted to local-TZ-aware values, so
+ * arithmetic on the calendar-day strings themselves is timezone-neutral.
+ */
+function subDaysIso(date: string, n: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+function makeRange(from: string, to: string, tz: string): DateRange {
   return {
-    from: format(subDays(to, n), "yyyy-MM-dd"),
-    to: toStr,
+    from,
+    to,
+    bucketFrom: utcBucketDayForLocalStart(from, tz),
+    bucketTo: utcBucketDayForLocalEnd(to, tz),
+    startedAtFrom: utcInstantForLocalStart(from, tz),
+    startedAtTo: utcInstantForLocalEnd(to, tz),
   };
 }

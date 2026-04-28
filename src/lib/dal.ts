@@ -3,8 +3,30 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface DateRange {
-  from: string; // YYYY-MM-DD
-  to: string; // YYYY-MM-DD
+  /** Inclusive lower bound in the **viewer's local TZ** (`YYYY-MM-DD`). */
+  from: string;
+  /** Inclusive upper bound in the **viewer's local TZ** (`YYYY-MM-DD`). */
+  to: string;
+  /**
+   * UTC `bucket_day` lower bound for the daemon's UTC-bucketed
+   * `daily_rollups` table. Derived from `from 00:00:00` in the viewer's TZ
+   * so the SQL filter captures every UTC bucket overlapping the local-TZ
+   * window — including the previous UTC day for users west of UTC, where
+   * yesterday-evening-local activity lands in "today's" UTC bucket. See
+   * siropkin/budi-cloud#78.
+   */
+  bucketFrom: string;
+  /** UTC `bucket_day` upper bound; mirror of `bucketFrom`. */
+  bucketTo: string;
+  /**
+   * Inclusive lower bound for `session_summaries.started_at`, an ISO-8601
+   * UTC instant (e.g. `2026-04-26T07:00:00.000Z`). Sessions are precise
+   * timestamps so we filter on the actual instant rather than a calendar
+   * day, avoiding the same TZ-vs-UTC drift that motivates `bucketFrom`.
+   */
+  startedAtFrom: string;
+  /** Inclusive upper bound for `session_summaries.started_at`. */
+  startedAtTo: string;
 }
 
 interface BudiUser {
@@ -62,8 +84,8 @@ export async function getOverviewStats(user: BudiUser, range: DateRange) {
       "cost_cents, input_tokens, output_tokens, message_count, cache_creation_tokens, cache_read_tokens"
     )
     .in("device_id", deviceIds)
-    .gte("bucket_day", range.from)
-    .lte("bucket_day", range.to)
+    .gte("bucket_day", range.bucketFrom)
+    .lte("bucket_day", range.bucketTo)
     // Defeat the default PostgREST max-rows cap so Overview and Team sum the
     // same complete row set (#15).
     .limit(100_000);
@@ -72,8 +94,8 @@ export async function getOverviewStats(user: BudiUser, range: DateRange) {
     .from("session_summaries")
     .select("*", { count: "exact", head: true })
     .in("device_id", deviceIds)
-    .gte("started_at", range.from)
-    .lte("started_at", range.to + "T23:59:59Z");
+    .gte("started_at", range.startedAtFrom)
+    .lte("started_at", range.startedAtTo);
 
   const totals = (rollups ?? []).reduce(
     (acc, r) => ({
@@ -108,8 +130,8 @@ export async function getDailyActivity(user: BudiUser, range: DateRange) {
       "bucket_day, input_tokens, output_tokens, cost_cents, message_count"
     )
     .in("device_id", deviceIds)
-    .gte("bucket_day", range.from)
-    .lte("bucket_day", range.to)
+    .gte("bucket_day", range.bucketFrom)
+    .lte("bucket_day", range.bucketTo)
     .order("bucket_day");
 
   // Aggregate by day
@@ -195,8 +217,8 @@ export async function getCostByUser(user: BudiUser, range: DateRange) {
     .from("daily_rollups")
     .select("device_id, cost_cents")
     .in("device_id", deviceIds)
-    .gte("bucket_day", range.from)
-    .lte("bucket_day", range.to)
+    .gte("bucket_day", range.bucketFrom)
+    .lte("bucket_day", range.bucketTo)
     // Defeat the default PostgREST max-rows cap so we sum every row instead
     // of a silently-truncated subset.
     .limit(100_000);
@@ -308,8 +330,8 @@ export async function getCostByDevice(
     .from("daily_rollups")
     .select("device_id, cost_cents")
     .in("device_id", deviceIds)
-    .gte("bucket_day", range.from)
-    .lte("bucket_day", range.to)
+    .gte("bucket_day", range.bucketFrom)
+    .lte("bucket_day", range.bucketTo)
     // Match the cap used elsewhere so we never silently truncate the sum.
     .limit(100_000);
 
@@ -367,7 +389,9 @@ export async function getCostByDevice(
       id,
       label: meta.label,
       owner_name:
-        user.role === "manager" ? (ownerLookup.get(meta.user_id) ?? null) : null,
+        user.role === "manager"
+          ? (ownerLookup.get(meta.user_id) ?? null)
+          : null,
       last_seen: meta.last_seen,
       cost_cents: costByDevice.get(id) ?? 0,
     });
@@ -389,8 +413,8 @@ export async function getCostByModel(user: BudiUser, range: DateRange) {
     .from("daily_rollups")
     .select("provider, model, cost_cents")
     .in("device_id", deviceIds)
-    .gte("bucket_day", range.from)
-    .lte("bucket_day", range.to);
+    .gte("bucket_day", range.bucketFrom)
+    .lte("bucket_day", range.bucketTo);
 
   const byModel = new Map<
     string,
@@ -428,8 +452,8 @@ export async function getCostByRepo(user: BudiUser, range: DateRange) {
     .from("daily_rollups")
     .select("repo_id, cost_cents")
     .in("device_id", deviceIds)
-    .gte("bucket_day", range.from)
-    .lte("bucket_day", range.to);
+    .gte("bucket_day", range.bucketFrom)
+    .lte("bucket_day", range.bucketTo);
 
   const byRepo = new Map<string, number>();
   for (const r of rollups ?? []) {
@@ -455,8 +479,8 @@ export async function getCostByBranch(user: BudiUser, range: DateRange) {
     .from("daily_rollups")
     .select("repo_id, git_branch, cost_cents")
     .in("device_id", deviceIds)
-    .gte("bucket_day", range.from)
-    .lte("bucket_day", range.to);
+    .gte("bucket_day", range.bucketFrom)
+    .lte("bucket_day", range.bucketTo);
 
   const byBranch = new Map<
     string,
@@ -494,8 +518,8 @@ export async function getCostByTicket(user: BudiUser, range: DateRange) {
     .from("daily_rollups")
     .select("ticket, cost_cents")
     .in("device_id", deviceIds)
-    .gte("bucket_day", range.from)
-    .lte("bucket_day", range.to)
+    .gte("bucket_day", range.bucketFrom)
+    .lte("bucket_day", range.bucketTo)
     .not("ticket", "is", null);
 
   const byTicket = new Map<string, number>();
@@ -527,8 +551,8 @@ export async function getSessions(user: BudiUser, range: DateRange) {
     .from("session_summaries")
     .select("*")
     .in("device_id", deviceIds)
-    .gte("started_at", range.from)
-    .lte("started_at", range.to + "T23:59:59Z")
+    .gte("started_at", range.startedAtFrom)
+    .lte("started_at", range.startedAtTo)
     .order("started_at", { ascending: false })
     .limit(100);
 

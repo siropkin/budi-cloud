@@ -5,6 +5,7 @@ import {
   getEarliestActivity,
 } from "@/lib/dal";
 import { dateRangeFromDays } from "@/lib/date-range";
+import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { deviceLabel, fmtCost, fmtRelative } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
@@ -22,7 +23,8 @@ export default async function DevicesPage({
 
   const earliestActivity =
     params.days === ALL_PERIOD_VALUE ? await getEarliestActivity(user) : null;
-  const range = dateRangeFromDays(params.days, earliestActivity);
+  const tz = await getViewerTimeZone();
+  const range = dateRangeFromDays(params.days, earliestActivity, tz);
   const devices = await getCostByDevice(user, range);
 
   const showOwnerColumn = user.role === "manager";
@@ -45,9 +47,10 @@ export default async function DevicesPage({
             data={devices
               .filter((d) => d.cost_cents > 0)
               .map((d) => ({
-                label: showOwnerColumn && d.owner_name
-                  ? `${deviceLabel(d.id, d.label)} — ${d.owner_name}`
-                  : deviceLabel(d.id, d.label),
+                label:
+                  showOwnerColumn && d.owner_name
+                    ? `${deviceLabel(d.id, d.label)} — ${d.owner_name}`
+                    : deviceLabel(d.id, d.label),
                 cost_cents: d.cost_cents,
               }))}
             emptyLabel="No device cost data for this period"
