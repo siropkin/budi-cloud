@@ -335,7 +335,14 @@ describe("POST /v1/ingest + dashboard read path (#14)", () => {
       display_name: "Test User",
       email: "test@example.com",
     };
-    const range = { from: "2026-04-01", to: "2026-04-16" };
+    const range = {
+      from: "2026-04-01",
+      to: "2026-04-16",
+      bucketFrom: "2026-04-01",
+      bucketTo: "2026-04-16",
+      startedAtFrom: "2026-04-01T00:00:00.000Z",
+      startedAtTo: "2026-04-16T23:59:59.999Z",
+    };
 
     const overview = await getOverviewStats(user, range);
     expect(overview.totalCostCents).toBe(1234);
@@ -500,9 +507,10 @@ describe("POST /v1/ingest — device label persistence (#60)", () => {
     const { POST } = await import("./route");
 
     await POST(
-      mkReq({ ...baseEnvelope, label: "  new-name  " }) as unknown as Parameters<
-        typeof POST
-      >[0]
+      mkReq({
+        ...baseEnvelope,
+        label: "  new-name  ",
+      }) as unknown as Parameters<typeof POST>[0]
     );
 
     const [device] = fake.rows("devices");

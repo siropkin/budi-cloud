@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { getCurrentUser, getEarliestActivity, getSessions } from "@/lib/dal";
 import { dateRangeFromDays } from "@/lib/date-range";
+import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { fmtCost, fmtNum, repoName } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
@@ -36,7 +37,8 @@ export default async function SessionsPage({
 
   const earliestActivity =
     params.days === ALL_PERIOD_VALUE ? await getEarliestActivity(user) : null;
-  const range = dateRangeFromDays(params.days, earliestActivity);
+  const tz = await getViewerTimeZone();
+  const range = dateRangeFromDays(params.days, earliestActivity, tz);
   const sessions = await getSessions(user, range);
 
   return (
