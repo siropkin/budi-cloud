@@ -4,6 +4,7 @@ import {
   getOverviewStats,
   getDailyActivity,
   getEarliestActivity,
+  getOrgMembers,
   getSyncFreshness,
 } from "@/lib/dal";
 import { dateRangeFromDays } from "@/lib/date-range";
@@ -12,6 +13,7 @@ import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { fmtCost, fmtNum } from "@/lib/format";
 import { StatCard } from "@/components/stat-card";
 import { PeriodSelector } from "@/components/period-selector";
+import { UserFilter } from "@/components/user-filter";
 import { ActivityChart } from "@/components/charts/activity-chart";
 import {
   LinkDaemonBanner,
@@ -22,20 +24,25 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 export default async function OverviewPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string }>;
+  searchParams: Promise<{ days?: string; user?: string }>;
 }) {
   const params = await searchParams;
   const user = await getCurrentUser();
   if (!user?.org_id) return null;
 
+  const scopedUserId = params.user || null;
+  const scope = { scopedUserId };
   const earliestActivity =
-    params.days === ALL_PERIOD_VALUE ? await getEarliestActivity(user) : null;
+    params.days === ALL_PERIOD_VALUE
+      ? await getEarliestActivity(user, scope)
+      : null;
   const tz = await getViewerTimeZone();
   const range = dateRangeFromDays(params.days, earliestActivity, tz);
-  const [stats, activity, freshness] = await Promise.all([
-    getOverviewStats(user, range),
-    getDailyActivity(user, range),
+  const [stats, activity, freshness, members] = await Promise.all([
+    getOverviewStats(user, range, scope),
+    getDailyActivity(user, range, scope),
     getSyncFreshness(user),
+    user.role === "manager" ? getOrgMembers(user.org_id) : Promise.resolve([]),
   ]);
 
   // Decide which empty-state banner (if any) is most informative. The
@@ -48,10 +55,13 @@ export default async function OverviewPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Overview</h1>
         <Suspense>
-          <PeriodSelector />
+          <div className="flex items-center gap-3">
+            <UserFilter members={members} role={user.role} />
+            <PeriodSelector />
+          </div>
         </Suspense>
       </div>
 

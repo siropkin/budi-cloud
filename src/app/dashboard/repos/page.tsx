@@ -5,32 +5,38 @@ import {
   getCostByBranch,
   getCostByTicket,
   getEarliestActivity,
+  getOrgMembers,
 } from "@/lib/dal";
 import { dateRangeFromDays } from "@/lib/date-range";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { repoName } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
+import { UserFilter } from "@/components/user-filter";
 import { CostBarChart } from "@/components/charts/cost-bar-chart";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 export default async function ReposPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string }>;
+  searchParams: Promise<{ days?: string; user?: string }>;
 }) {
   const params = await searchParams;
   const user = await getCurrentUser();
   if (!user?.org_id) return null;
 
+  const scope = { scopedUserId: params.user || null };
   const earliestActivity =
-    params.days === ALL_PERIOD_VALUE ? await getEarliestActivity(user) : null;
+    params.days === ALL_PERIOD_VALUE
+      ? await getEarliestActivity(user, scope)
+      : null;
   const tz = await getViewerTimeZone();
   const range = dateRangeFromDays(params.days, earliestActivity, tz);
-  const [repos, branches, tickets] = await Promise.all([
-    getCostByRepo(user, range),
-    getCostByBranch(user, range),
-    getCostByTicket(user, range),
+  const [repos, branches, tickets, members] = await Promise.all([
+    getCostByRepo(user, range, scope),
+    getCostByBranch(user, range, scope),
+    getCostByTicket(user, range, scope),
+    user.role === "manager" ? getOrgMembers(user.org_id) : Promise.resolve([]),
   ]);
 
   // Multiple raw `repo_id` sentinels can collapse to the same display label
@@ -49,10 +55,13 @@ export default async function ReposPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Repos</h1>
         <Suspense>
-          <PeriodSelector />
+          <div className="flex items-center gap-3">
+            <UserFilter members={members} role={user.role} />
+            <PeriodSelector />
+          </div>
         </Suspense>
       </div>
 
