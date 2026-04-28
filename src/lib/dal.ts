@@ -39,6 +39,21 @@ interface BudiUser {
 }
 
 /**
+ * Optional scoping options for the dashboard breakdown queries.
+ *
+ * `scopedUserId` narrows the visible-device set to a single teammate's devices
+ * — the manager-only header filter introduced in #80. It is silently ignored
+ * for member viewers (their visibility is already self-only per ADR-0083 §6)
+ * and silently falls back to the org-wide set when the id is unknown or
+ * belongs to another org, mirroring the existing role branch in
+ * `getVisibleDeviceIds`. We deliberately do not surface a 4xx so an attacker
+ * can't enumerate other-org user ids by probing this parameter.
+ */
+export interface ScopeOptions {
+  scopedUserId?: string | null;
+}
+
+/**
  * Get the current budi user and verify they have an org.
  * Uses admin client because the auth→users mapping needs to bypass RLS
  * during the initial lookup.
@@ -63,11 +78,16 @@ export async function getCurrentUser(): Promise<BudiUser | null> {
 /**
  * Get overview stats visible to the current user.
  * Manager sees full org; member sees own devices only (ADR-0083 §6).
+ * `options.scopedUserId` further narrows a manager view to a single teammate.
  */
-export async function getOverviewStats(user: BudiUser, range: DateRange) {
+export async function getOverviewStats(
+  user: BudiUser,
+  range: DateRange,
+  options?: ScopeOptions
+) {
   const admin = createAdminClient();
 
-  const deviceIds = await getVisibleDeviceIds(admin, user);
+  const deviceIds = await getVisibleDeviceIds(admin, user, options);
   if (deviceIds.length === 0) {
     return {
       totalCostCents: 0,
@@ -118,10 +138,15 @@ export async function getOverviewStats(user: BudiUser, range: DateRange) {
 /**
  * Get daily cost activity for charts.
  * Manager sees full org; member sees own devices only (ADR-0083 §6).
+ * `options.scopedUserId` further narrows a manager view to a single teammate.
  */
-export async function getDailyActivity(user: BudiUser, range: DateRange) {
+export async function getDailyActivity(
+  user: BudiUser,
+  range: DateRange,
+  options?: ScopeOptions
+) {
   const admin = createAdminClient();
-  const deviceIds = await getVisibleDeviceIds(admin, user);
+  const deviceIds = await getVisibleDeviceIds(admin, user, options);
   if (deviceIds.length === 0) return [];
 
   const { data: rollups } = await admin
@@ -170,10 +195,11 @@ export async function getDailyActivity(user: BudiUser, range: DateRange) {
  * range-scoped queries so their signatures stay unchanged.
  */
 export async function getEarliestActivity(
-  user: BudiUser
+  user: BudiUser,
+  options?: ScopeOptions
 ): Promise<string | null> {
   const admin = createAdminClient();
-  const deviceIds = await getVisibleDeviceIds(admin, user);
+  const deviceIds = await getVisibleDeviceIds(admin, user, options);
   if (deviceIds.length === 0) return null;
 
   const { data } = await admin
@@ -320,10 +346,11 @@ export interface DeviceCost {
  */
 export async function getCostByDevice(
   user: BudiUser,
-  range: DateRange
+  range: DateRange,
+  options?: ScopeOptions
 ): Promise<DeviceCost[]> {
   const admin = createAdminClient();
-  const deviceIds = await getVisibleDeviceIds(admin, user);
+  const deviceIds = await getVisibleDeviceIds(admin, user, options);
   if (deviceIds.length === 0) return [];
 
   const { data: rollups } = await admin
@@ -403,10 +430,15 @@ export async function getCostByDevice(
 /**
  * Get cost breakdown by model.
  * Manager sees full org; member sees own devices only (ADR-0083 §6).
+ * `options.scopedUserId` further narrows a manager view to a single teammate.
  */
-export async function getCostByModel(user: BudiUser, range: DateRange) {
+export async function getCostByModel(
+  user: BudiUser,
+  range: DateRange,
+  options?: ScopeOptions
+) {
   const admin = createAdminClient();
-  const deviceIds = await getVisibleDeviceIds(admin, user);
+  const deviceIds = await getVisibleDeviceIds(admin, user, options);
   if (deviceIds.length === 0) return [];
 
   const { data: rollups } = await admin
@@ -442,10 +474,15 @@ export async function getCostByModel(user: BudiUser, range: DateRange) {
 /**
  * Get cost breakdown by repo.
  * Manager sees full org; member sees own devices only (ADR-0083 §6).
+ * `options.scopedUserId` further narrows a manager view to a single teammate.
  */
-export async function getCostByRepo(user: BudiUser, range: DateRange) {
+export async function getCostByRepo(
+  user: BudiUser,
+  range: DateRange,
+  options?: ScopeOptions
+) {
   const admin = createAdminClient();
-  const deviceIds = await getVisibleDeviceIds(admin, user);
+  const deviceIds = await getVisibleDeviceIds(admin, user, options);
   if (deviceIds.length === 0) return [];
 
   const { data: rollups } = await admin
@@ -469,10 +506,15 @@ export async function getCostByRepo(user: BudiUser, range: DateRange) {
 /**
  * Get cost breakdown by branch.
  * Manager sees full org; member sees own devices only (ADR-0083 §6).
+ * `options.scopedUserId` further narrows a manager view to a single teammate.
  */
-export async function getCostByBranch(user: BudiUser, range: DateRange) {
+export async function getCostByBranch(
+  user: BudiUser,
+  range: DateRange,
+  options?: ScopeOptions
+) {
   const admin = createAdminClient();
-  const deviceIds = await getVisibleDeviceIds(admin, user);
+  const deviceIds = await getVisibleDeviceIds(admin, user, options);
   if (deviceIds.length === 0) return [];
 
   const { data: rollups } = await admin
@@ -508,10 +550,15 @@ export async function getCostByBranch(user: BudiUser, range: DateRange) {
 /**
  * Get cost breakdown by ticket.
  * Manager sees full org; member sees own devices only (ADR-0083 §6).
+ * `options.scopedUserId` further narrows a manager view to a single teammate.
  */
-export async function getCostByTicket(user: BudiUser, range: DateRange) {
+export async function getCostByTicket(
+  user: BudiUser,
+  range: DateRange,
+  options?: ScopeOptions
+) {
   const admin = createAdminClient();
-  const deviceIds = await getVisibleDeviceIds(admin, user);
+  const deviceIds = await getVisibleDeviceIds(admin, user, options);
   if (deviceIds.length === 0) return [];
 
   const { data: rollups } = await admin
@@ -541,10 +588,15 @@ export async function getCostByTicket(user: BudiUser, range: DateRange) {
 /**
  * Get sessions list.
  * Manager sees full org; member sees own devices only (ADR-0083 §6).
+ * `options.scopedUserId` further narrows a manager view to a single teammate.
  */
-export async function getSessions(user: BudiUser, range: DateRange) {
+export async function getSessions(
+  user: BudiUser,
+  range: DateRange,
+  options?: ScopeOptions
+) {
   const admin = createAdminClient();
-  const deviceIds = await getVisibleDeviceIds(admin, user);
+  const deviceIds = await getVisibleDeviceIds(admin, user, options);
   if (deviceIds.length === 0) return [];
 
   const { data: sessions } = await admin
@@ -649,15 +701,22 @@ export async function getOrgMembers(orgId: string) {
  * Per ADR-0083 §6:
  *   - Manager: sees all devices in the org
  *   - Member: sees only their own devices
+ *
+ * `options.scopedUserId` (manager-only, #80) narrows the result further to a
+ * single teammate's devices. If the id is missing, unknown, or belongs to
+ * another org we silently fall back to the org-wide set rather than 4xxing,
+ * so the URL parameter cannot be used to probe other orgs' user ids. Members
+ * already collapse to themselves and ignore the option entirely.
  */
 async function getVisibleDeviceIds(
   admin: ReturnType<typeof createAdminClient>,
-  user: BudiUser
+  user: BudiUser,
+  options?: ScopeOptions
 ): Promise<string[]> {
   if (user.role === "manager") {
-    return getOrgDeviceIds(admin, user.org_id!);
+    return getOrgDeviceIds(admin, user.org_id!, options?.scopedUserId ?? null);
   }
-  // Member: own devices only
+  // Member: own devices only — `scopedUserId` is intentionally ignored.
   const { data: devices } = await admin
     .from("devices")
     .select("id")
@@ -667,7 +726,8 @@ async function getVisibleDeviceIds(
 
 async function getOrgDeviceIds(
   admin: ReturnType<typeof createAdminClient>,
-  orgId: string
+  orgId: string,
+  scopedUserId: string | null
 ): Promise<string[]> {
   const { data: users } = await admin
     .from("users")
@@ -676,13 +736,19 @@ async function getOrgDeviceIds(
 
   if (!users?.length) return [];
 
+  const orgUserIds = users.map((u) => u.id as string);
+  // Narrow to a single teammate when the manager picked one — but only if
+  // they're actually in the manager's org. Anything else collapses back to
+  // org-wide so an out-of-org id can't leak the existence of another org.
+  const userIds =
+    scopedUserId && orgUserIds.includes(scopedUserId)
+      ? [scopedUserId]
+      : orgUserIds;
+
   const { data: devices } = await admin
     .from("devices")
     .select("id")
-    .in(
-      "user_id",
-      users.map((u) => u.id)
-    );
+    .in("user_id", userIds);
 
   return (devices ?? []).map((d) => d.id);
 }

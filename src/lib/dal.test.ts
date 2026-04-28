@@ -588,6 +588,125 @@ describe("getCostByDevice", () => {
   });
 });
 
+describe("per-user scoping (#80)", () => {
+  // Three-org world so we can prove that an out-of-org id silently collapses
+  // to the org-wide view and never leaks the other org's data.
+  function seedTwoOrgs() {
+    fake.seed("orgs", [
+      { id: "org_team", name: "team" },
+      { id: "org_other", name: "other" },
+    ]);
+    fake.seed("users", [
+      {
+        id: "usr_ivan",
+        org_id: "org_team",
+        role: "manager",
+        api_key: "budi_i",
+        display_name: "Ivan",
+        email: "ivan@example.com",
+      },
+      {
+        id: "usr_jane",
+        org_id: "org_team",
+        role: "member",
+        api_key: "budi_j",
+        display_name: "Jane",
+        email: "jane@example.com",
+      },
+      {
+        id: "usr_outsider",
+        org_id: "org_other",
+        role: "manager",
+        api_key: "budi_o",
+        display_name: "Outsider",
+        email: "outsider@example.com",
+      },
+    ]);
+    fake.seed("devices", [
+      { id: "dev_ivan", user_id: "usr_ivan", label: "ivan-mbp" },
+      { id: "dev_jane", user_id: "usr_jane", label: "jane-mbp" },
+      { id: "dev_outsider", user_id: "usr_outsider", label: "outsider-mbp" },
+    ]);
+    fake.seed("daily_rollups", [
+      rollup("dev_ivan", "2026-04-10", 800_00),
+      rollup("dev_jane", "2026-04-10", 1500_00),
+      rollup("dev_outsider", "2026-04-10", 9000_00),
+    ]);
+  }
+
+  const manager = {
+    id: "usr_ivan",
+    org_id: "org_team",
+    role: "manager",
+    api_key: "budi_i",
+    display_name: "Ivan",
+    email: "ivan@example.com",
+  };
+  const range = utcRange("2026-04-01", "2026-04-30");
+
+  it("manager: scopedUserId narrows breakdowns to that teammate's data", async () => {
+    seedTwoOrgs();
+    const { getOverviewStats, getCostByDevice } = await loadDal();
+
+    const overview = await getOverviewStats(manager, range, {
+      scopedUserId: "usr_jane",
+    });
+    expect(overview.totalCostCents).toBe(1500_00);
+
+    const byDevice = await getCostByDevice(manager, range, {
+      scopedUserId: "usr_jane",
+    });
+    expect(byDevice.map((d) => d.id)).toEqual(["dev_jane"]);
+    expect(byDevice[0].cost_cents).toBe(1500_00);
+  });
+
+  it("manager: scopedUserId for an out-of-org user silently falls back to org-wide", async () => {
+    // Defense in depth — the URL parameter must not leak `org_other`'s 9000$
+    // bucket. Falling back to org-wide preserves the manager's own visibility
+    // without confirming that `usr_outsider` exists.
+    seedTwoOrgs();
+    const { getOverviewStats } = await loadDal();
+
+    const scoped = await getOverviewStats(manager, range, {
+      scopedUserId: "usr_outsider",
+    });
+    const orgWide = await getOverviewStats(manager, range);
+    expect(scoped.totalCostCents).toBe(orgWide.totalCostCents);
+    expect(scoped.totalCostCents).toBe(800_00 + 1500_00);
+  });
+
+  it("manager: missing/empty scopedUserId is the same as org-wide", async () => {
+    seedTwoOrgs();
+    const { getOverviewStats } = await loadDal();
+
+    const noScope = await getOverviewStats(manager, range);
+    const emptyScope = await getOverviewStats(manager, range, {
+      scopedUserId: null,
+    });
+    expect(emptyScope.totalCostCents).toBe(noScope.totalCostCents);
+  });
+
+  it("member: scopedUserId is ignored — they only ever see their own devices", async () => {
+    // ADR-0083 §6: members are DAL-scoped to themselves. Even if a member
+    // crafts `?user=usr_ivan` they must not see Ivan's data.
+    seedTwoOrgs();
+    const { getOverviewStats } = await loadDal();
+
+    const jane = {
+      id: "usr_jane",
+      org_id: "org_team",
+      role: "member",
+      api_key: "budi_j",
+      display_name: "Jane",
+      email: "jane@example.com",
+    };
+    const scoped = await getOverviewStats(jane, range, {
+      scopedUserId: "usr_ivan",
+    });
+    expect(scoped.totalCostCents).toBe(1500_00);
+  });
+});
+
 function rollup(
   deviceId: string,
   bucketDay: string,
