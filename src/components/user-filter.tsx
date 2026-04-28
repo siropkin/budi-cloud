@@ -54,7 +54,7 @@ export function UserFilter({
       <select
         value={current}
         onChange={(e) => selectUser(e.target.value)}
-        className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/[0.04] focus:outline-none focus:ring-1 focus:ring-white/20"
+        className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/[0.04] focus:outline-none focus:ring-1 focus:ring-white/20"
       >
         <option value={ALL_TEAM_VALUE}>{ALL_TEAM_LABEL}</option>
         {members.map((m) => (
