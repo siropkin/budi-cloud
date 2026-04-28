@@ -22,17 +22,3 @@ export const ALL_PERIOD_VALUE = "all";
 
 /** Default landing window when no `?days=` is provided. */
 export const DEFAULT_PERIOD_DAYS = 7;
-
-/**
- * Human-readable caption for the active period — shown beside the selector so
- * a fresh user can tell at a glance which window the dashboard is summarizing.
- * Falls back to the default window when `days` is missing or unparseable so
- * the caption always matches what the data access layer actually queried.
- */
-export function formatPeriodCaption(days: string | undefined): string {
-  if (days === ALL_PERIOD_VALUE) return "Showing all time";
-  const n = Number(days);
-  const window = Number.isFinite(n) && n > 0 ? n : DEFAULT_PERIOD_DAYS;
-  if (window === 1) return "Showing last 1 day";
-  return `Showing last ${window} days`;
-}
