@@ -185,6 +185,7 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
       deviceCount: 0,
       lastSeenAt: null,
       lastRollupAt: null,
+      lastSessionAt: null,
     });
   });
 
@@ -205,6 +206,7 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
     expect(snap.deviceCount).toBe(1);
     expect(snap.lastSeenAt).toBe("2026-04-18T11:00:00Z");
     expect(snap.lastRollupAt).toBeNull();
+    expect(snap.lastSessionAt).toBeNull();
   });
 
   it("reports the most recent rollup synced_at across the viewer's own devices", async () => {
@@ -236,6 +238,90 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
     expect(snap.deviceCount).toBe(2);
     expect(snap.lastSeenAt).toBe("2026-04-18T11:00:00Z");
     expect(snap.lastRollupAt).toBe("2026-04-18T10:30:00Z");
+  });
+
+  it("(#84) probes the most recent session_summaries.started_at across the viewer's own devices", async () => {
+    // Reproduces the bug: rollups keep landing (synced_at = today) while
+    // sessions stop ingesting (started_at frozen 3 days ago). Without the
+    // session probe the header showed "Synced 2m ago" while the Sessions
+    // page silently returned zero rows.
+    fake.seed("orgs", [{ id: "org_solo", name: "solo" }]);
+    fake.seed("users", [{ ...baseUser }]);
+    fake.seed("devices", [
+      {
+        id: "dev_laptop",
+        user_id: "usr_ivan",
+        last_seen: "2026-04-29T15:00:00Z",
+      },
+    ]);
+    fake.seed("daily_rollups", [
+      rollup("dev_laptop", "2026-04-29", 100, {
+        synced_at: "2026-04-29T14:55:00Z",
+      }),
+    ]);
+    fake.seed("session_summaries", [
+      {
+        device_id: "dev_laptop",
+        session_id: "sess_old",
+        started_at: "2026-04-26T17:07:00Z",
+      },
+      {
+        device_id: "dev_laptop",
+        session_id: "sess_older",
+        started_at: "2026-04-17T21:11:00Z",
+      },
+    ]);
+
+    const { getSyncFreshness } = await loadDal();
+    const snap = await getSyncFreshness(baseUser);
+    expect(snap.lastRollupAt).toBe("2026-04-29T14:55:00Z");
+    expect(snap.lastSessionAt).toBe("2026-04-26T17:07:00Z");
+  });
+
+  it("(#84) lastSessionAt is scoped to the viewer's own devices, not the org", async () => {
+    // Same self-trust contract as #74 for rollups: a manager whose own
+    // daemon stopped sending sessions should see the divergence even when a
+    // teammate's daemon is still pushing fresh sessions.
+    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("users", [
+      { ...baseUser, org_id: "org_team" },
+      {
+        id: "usr_teammate",
+        org_id: "org_team",
+        role: "member",
+        api_key: "budi_t",
+        display_name: "Teammate",
+        email: "teammate@example.com",
+      },
+    ]);
+    fake.seed("devices", [
+      {
+        id: "dev_my_mac",
+        user_id: "usr_ivan",
+        last_seen: "2026-04-29T15:00:00Z",
+      },
+      {
+        id: "dev_teammate_mac",
+        user_id: "usr_teammate",
+        last_seen: "2026-04-29T15:00:00Z",
+      },
+    ]);
+    fake.seed("session_summaries", [
+      {
+        device_id: "dev_my_mac",
+        session_id: "sess_mine_old",
+        started_at: "2026-04-26T17:00:00Z",
+      },
+      {
+        device_id: "dev_teammate_mac",
+        session_id: "sess_teammate_fresh",
+        started_at: "2026-04-29T14:55:00Z",
+      },
+    ]);
+
+    const { getSyncFreshness } = await loadDal();
+    const snap = await getSyncFreshness({ ...baseUser, org_id: "org_team" });
+    expect(snap.lastSessionAt).toBe("2026-04-26T17:00:00Z");
   });
 
   it("(#74) badge ignores teammates' devices for a manager — own daemon stale, teammate daemon fresh", async () => {
@@ -315,6 +401,7 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
       deviceCount: 0,
       lastSeenAt: null,
       lastRollupAt: null,
+      lastSessionAt: null,
     });
   });
 });

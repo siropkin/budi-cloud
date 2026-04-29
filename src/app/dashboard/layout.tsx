@@ -36,6 +36,7 @@ export default async function DashboardLayout({
             deviceCount={freshness.deviceCount}
             lastSeenAt={freshness.lastSeenAt}
             lastRollupAt={freshness.lastRollupAt}
+            lastSessionAt={freshness.lastSessionAt}
           />
           <UserMenu displayName={user.display_name} email={user.email} />
         </header>
