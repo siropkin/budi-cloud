@@ -349,8 +349,8 @@ describe("POST /v1/ingest + dashboard read path (#14)", () => {
     expect(overview.totalSessions).toBe(2);
 
     const listed = await getSessions(user, range);
-    expect(listed).toHaveLength(2);
-    const ids = listed.map((s) => s.session_id).sort();
+    expect(listed.rows).toHaveLength(2);
+    const ids = listed.rows.map((s) => s.session_id).sort();
     expect(ids).toEqual(["sess-with-started", "sess-without-started"]);
   });
 

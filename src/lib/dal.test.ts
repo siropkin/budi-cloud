@@ -43,8 +43,7 @@ class FakeSupabase {
 
 class FakeQuery {
   private filters: Array<(r: Row) => boolean> = [];
-  private _orderKey: string | null = null;
-  private _orderAsc = true;
+  private _orderKeys: Array<{ col: string; asc: boolean }> = [];
   private _limit: number | null = null;
   private _head = false;
   private _countMode: "exact" | null = null;
@@ -79,9 +78,21 @@ class FakeQuery {
     return this;
   }
 
+  /**
+   * Minimal PostgREST `or()` parser — supports the exact composite-cursor
+   * shape `getSessions` emits: a top-level disjunction whose terms are either
+   * `column.op.value` leaves or a single nested `and(...)` group of leaves.
+   * Anything else throws so the test never silently accepts an unsupported
+   * filter shape.
+   */
+  or(expr: string) {
+    const predicate = parseOrExpr(expr);
+    this.filters.push(predicate);
+    return this;
+  }
+
   order(col: string, opts?: { ascending?: boolean }) {
-    this._orderKey = col;
-    this._orderAsc = opts?.ascending ?? true;
+    this._orderKeys.push({ col, asc: opts?.ascending ?? true });
     return this;
   }
 
@@ -92,14 +103,16 @@ class FakeQuery {
 
   private materialize(): Row[] {
     let rows = this.rows.filter((r) => this.filters.every((f) => f(r)));
-    if (this._orderKey) {
-      const key = this._orderKey;
-      const asc = this._orderAsc;
+    if (this._orderKeys.length > 0) {
+      const keys = this._orderKeys;
       rows = [...rows].sort((a, b) => {
-        const av = String(a[key] ?? "");
-        const bv = String(b[key] ?? "");
-        if (av === bv) return 0;
-        return (av < bv ? -1 : 1) * (asc ? 1 : -1);
+        for (const { col, asc } of keys) {
+          const av = String(a[col] ?? "");
+          const bv = String(b[col] ?? "");
+          if (av === bv) continue;
+          return (av < bv ? -1 : 1) * (asc ? 1 : -1);
+        }
+        return 0;
       });
     }
     if (this._limit != null) rows = rows.slice(0, this._limit);
@@ -819,3 +832,273 @@ function rollup(
     ...overrides,
   };
 }
+
+// --- PostgREST or() parser used by FakeQuery.or() ------------------------
+
+function parseOrExpr(expr: string): (r: Row) => boolean {
+  const terms = splitTopLevel(expr, ",").map((t) => t.trim());
+  const fns = terms.map(parseTerm);
+  return (r) => fns.some((f) => f(r));
+}
+
+function parseTerm(term: string): (r: Row) => boolean {
+  if (term.startsWith("and(") && term.endsWith(")")) {
+    const inner = term.slice(4, -1);
+    const leaves = splitTopLevel(inner, ",").map(parseLeaf);
+    return (r) => leaves.every((f) => f(r));
+  }
+  return parseLeaf(term);
+}
+
+function parseLeaf(term: string): (r: Row) => boolean {
+  const m = /^([^.]+)\.([^.]+)\.(.*)$/.exec(term);
+  if (!m) throw new Error(`bad or() leaf: ${term}`);
+  const [, col, op, valRaw] = m;
+  const val =
+    valRaw.startsWith('"') && valRaw.endsWith('"')
+      ? valRaw.slice(1, -1)
+      : valRaw;
+  return (r) => {
+    const cell = String(r[col] ?? "");
+    if (op === "eq") return cell === val;
+    if (op === "lt") return cell < val;
+    if (op === "lte") return cell <= val;
+    if (op === "gt") return cell > val;
+    if (op === "gte") return cell >= val;
+    throw new Error(`unsupported or() op: ${op}`);
+  };
+}
+
+function splitTopLevel(s: string, sep: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    else if (depth === 0 && ch === sep) {
+      parts.push(s.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(s.slice(start));
+  return parts;
+}
+
+describe("getSessions cursor pagination (#85)", () => {
+  // Unbounded range so the per-page cursor is the only thing trimming output.
+  const wideRange = utcRange("2026-01-01", "2026-12-31");
+
+  const manager = {
+    id: "usr_ivan",
+    org_id: "org_team",
+    role: "manager",
+    api_key: "budi_i",
+    display_name: "Ivan",
+    email: "ivan@example.com",
+  };
+
+  function seedSessions(n: number, deviceId = "dev_ivan") {
+    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("users", [{ ...manager }]);
+    fake.seed("devices", [{ id: deviceId, user_id: manager.id }]);
+    // Newest first when we paginate. Index 0 == newest.
+    const rows = Array.from({ length: n }, (_, i) => ({
+      device_id: deviceId,
+      session_id: `sess_${String(n - i).padStart(4, "0")}`,
+      provider: "claude_code",
+      started_at: new Date(
+        Date.UTC(2026, 3, 1, 0, 0, 0) + i * 60_000
+      ).toISOString(),
+      ended_at: null,
+      duration_ms: null,
+      repo_id: "repo_x",
+      git_branch: "refs/heads/main",
+      ticket: null,
+      message_count: 1,
+      total_input_tokens: 0,
+      total_output_tokens: 0,
+      total_cost_cents: 0,
+    }));
+    fake.seed("session_summaries", rows);
+    return rows;
+  }
+
+  it("returns the first page with a cursor when more rows exist", async () => {
+    seedSessions(5);
+    const { getSessions } = await loadDal();
+    const page = await getSessions(manager, wideRange, undefined, {
+      pageSize: 2,
+    });
+
+    expect(page.rows).toHaveLength(2);
+    expect(page.nextCursor).not.toBeNull();
+    // Newest first: index 0 = newest started_at = "2026-04-01T00:04:00Z".
+    expect(page.rows[0].started_at).toBe("2026-04-01T00:04:00.000Z");
+    expect(page.rows[1].started_at).toBe("2026-04-01T00:03:00.000Z");
+    expect(page.nextCursor?.startedAt).toBe("2026-04-01T00:03:00.000Z");
+  });
+
+  it("walks the entire history across pages without skipping or duplicating rows", async () => {
+    // 7 rows, page size 3 → pages of 3, 3, 1. The "no skip / no duplicate"
+    // contract is the whole reason we sort + cursor on (started_at, session_id)
+    // instead of LIMIT/OFFSET (#85).
+    seedSessions(7);
+    const { getSessions } = await loadDal();
+
+    const collected: string[] = [];
+    let cursor = null as Awaited<ReturnType<typeof getSessions>>["nextCursor"];
+    let pageCount = 0;
+    do {
+      const res = await getSessions(manager, wideRange, undefined, {
+        pageSize: 3,
+        cursor,
+      });
+      collected.push(...res.rows.map((r) => r.session_id));
+      cursor = res.nextCursor;
+      pageCount += 1;
+      if (pageCount > 10) throw new Error("pagination did not terminate");
+    } while (cursor);
+
+    expect(collected).toHaveLength(7);
+    expect(new Set(collected).size).toBe(7); // no duplicates
+    // Newest → oldest. Seeded so session_id "sess_0001" has the latest
+    // started_at and "sess_0007" the earliest.
+    expect(collected[0]).toBe("sess_0001");
+    expect(collected[6]).toBe("sess_0007");
+  });
+
+  it("returns nextCursor=null on the last partial page", async () => {
+    seedSessions(2);
+    const { getSessions } = await loadDal();
+    const page = await getSessions(manager, wideRange, undefined, {
+      pageSize: 5,
+    });
+    expect(page.rows).toHaveLength(2);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it("breaks ties on session_id when two rows share the same started_at", async () => {
+    // Composite cursor must keep tied rows in a deterministic order so the
+    // walk neither skips one nor returns the same row twice.
+    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("users", [{ ...manager }]);
+    fake.seed("devices", [{ id: "dev_ivan", user_id: manager.id }]);
+    const ts = "2026-04-15T10:00:00.000Z";
+    fake.seed("session_summaries", [
+      {
+        device_id: "dev_ivan",
+        session_id: "sess_a",
+        provider: "claude_code",
+        started_at: ts,
+        ended_at: null,
+        duration_ms: null,
+        repo_id: "repo_x",
+        git_branch: "refs/heads/main",
+        ticket: null,
+        message_count: 1,
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        total_cost_cents: 0,
+      },
+      {
+        device_id: "dev_ivan",
+        session_id: "sess_b",
+        provider: "claude_code",
+        started_at: ts,
+        ended_at: null,
+        duration_ms: null,
+        repo_id: "repo_x",
+        git_branch: "refs/heads/main",
+        ticket: null,
+        message_count: 1,
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        total_cost_cents: 0,
+      },
+    ]);
+
+    const { getSessions } = await loadDal();
+    const first = await getSessions(manager, wideRange, undefined, {
+      pageSize: 1,
+    });
+    expect(first.rows.map((r) => r.session_id)).toEqual(["sess_b"]);
+    expect(first.nextCursor).toEqual({
+      startedAt: ts,
+      sessionId: "sess_b",
+    });
+
+    const second = await getSessions(manager, wideRange, undefined, {
+      pageSize: 1,
+      cursor: first.nextCursor,
+    });
+    expect(second.rows.map((r) => r.session_id)).toEqual(["sess_a"]);
+    expect(second.nextCursor).toBeNull();
+  });
+
+  it("respects the visible-device scope when paginating", async () => {
+    // Member viewer must never see another teammate's sessions, regardless of
+    // cursor — same self-only scope as everywhere else (ADR-0083 §6).
+    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("users", [
+      { ...manager },
+      {
+        id: "usr_jane",
+        org_id: "org_team",
+        role: "member",
+        api_key: "budi_j",
+        display_name: "Jane",
+        email: "jane@example.com",
+      },
+    ]);
+    fake.seed("devices", [
+      { id: "dev_ivan", user_id: "usr_ivan" },
+      { id: "dev_jane", user_id: "usr_jane" },
+    ]);
+    fake.seed("session_summaries", [
+      {
+        device_id: "dev_ivan",
+        session_id: "sess_ivan",
+        provider: "claude_code",
+        started_at: "2026-04-15T10:00:00.000Z",
+        ended_at: null,
+        duration_ms: null,
+        repo_id: "repo_x",
+        git_branch: "refs/heads/main",
+        ticket: null,
+        message_count: 1,
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        total_cost_cents: 0,
+      },
+      {
+        device_id: "dev_jane",
+        session_id: "sess_jane",
+        provider: "claude_code",
+        started_at: "2026-04-15T11:00:00.000Z",
+        ended_at: null,
+        duration_ms: null,
+        repo_id: "repo_x",
+        git_branch: "refs/heads/main",
+        ticket: null,
+        message_count: 1,
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        total_cost_cents: 0,
+      },
+    ]);
+
+    const { getSessions } = await loadDal();
+    const jane = {
+      id: "usr_jane",
+      org_id: "org_team",
+      role: "member",
+      api_key: "budi_j",
+      display_name: "Jane",
+      email: "jane@example.com",
+    };
+    const page = await getSessions(jane, wideRange);
+    expect(page.rows.map((r) => r.session_id)).toEqual(["sess_jane"]);
+  });
+});

@@ -1,10 +1,16 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import {
   getCurrentUser,
   getEarliestActivity,
   getOrgMembers,
   getSessions,
+  SESSIONS_PAGE_SIZE,
 } from "@/lib/dal";
+import {
+  decodeSessionsCursor,
+  encodeSessionsCursor,
+} from "@/lib/sessions-cursor";
 import { dateRangeFromDays } from "@/lib/date-range";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
@@ -32,10 +38,26 @@ function formatTimestamp(ts: string | null): string {
   });
 }
 
+function parsePage(raw: string | undefined): number {
+  if (!raw) return 1;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+}
+
+function buildHref(params: URLSearchParams): string {
+  const qs = params.toString();
+  return qs ? `?${qs}` : "?";
+}
+
 export default async function SessionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string; user?: string }>;
+  searchParams: Promise<{
+    days?: string;
+    user?: string;
+    cursor?: string;
+    p?: string;
+  }>;
 }) {
   const params = await searchParams;
   const user = await getCurrentUser();
@@ -48,10 +70,36 @@ export default async function SessionsPage({
       : null;
   const tz = await getViewerTimeZone();
   const range = dateRangeFromDays(params.days, earliestActivity, tz);
-  const [sessions, members] = await Promise.all([
-    getSessions(user, range, scope),
+  const cursor = decodeSessionsCursor(params.cursor);
+  const page = parsePage(params.p);
+
+  const [{ rows: sessions, nextCursor }, members] = await Promise.all([
+    getSessions(user, range, scope, { cursor }),
     user.role === "manager" ? getOrgMembers(user.org_id) : Promise.resolve([]),
   ]);
+
+  const startIndex = (page - 1) * SESSIONS_PAGE_SIZE + 1;
+  const endIndex = startIndex + sessions.length - 1;
+  const hasOlder = nextCursor !== null;
+  const hasNewer = page > 1;
+
+  // Preserve the period and user-filter params across page boundaries (#85
+  // acceptance: "Period selector + user filter both preserved across page
+  // boundaries"). Build link params off the *current* search params so any
+  // future filter we add is automatically carried.
+  const baseParams = new URLSearchParams();
+  if (params.days) baseParams.set("days", params.days);
+  if (params.user) baseParams.set("user", params.user);
+
+  const newerParams = new URLSearchParams(baseParams);
+  // "Newer" returns to the first page — drops cursor and `p`. Browser back
+  // remains the way to walk one page at a time, per the cursor scheme in #85.
+
+  const olderParams = new URLSearchParams(baseParams);
+  if (nextCursor) {
+    olderParams.set("cursor", encodeSessionsCursor(nextCursor));
+    olderParams.set("p", String(page + 1));
+  }
 
   return (
     <div className="space-y-6">
@@ -68,8 +116,9 @@ export default async function SessionsPage({
       <Card>
         <CardHeader>
           <CardTitle>
-            Recent Sessions ({sessions.length}
-            {sessions.length === 100 ? "+" : ""})
+            {sessions.length === 0
+              ? "Recent Sessions"
+              : `Recent Sessions (showing ${startIndex.toLocaleString()}–${endIndex.toLocaleString()}${hasOlder ? "+" : ""})`}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -128,6 +177,36 @@ export default async function SessionsPage({
                 </tbody>
               </table>
             </div>
+          )}
+
+          {(hasOlder || hasNewer) && (
+            <nav
+              aria-label="Sessions pagination"
+              className="mt-4 flex items-center justify-between gap-3 border-t border-white/5 pt-3 text-sm"
+            >
+              <div>
+                {hasNewer ? (
+                  <Link
+                    href={buildHref(newerParams)}
+                    className="rounded-md px-3 py-1.5 font-medium text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
+                  >
+                    ← Newest
+                  </Link>
+                ) : (
+                  <span aria-hidden="true" />
+                )}
+              </div>
+              <div>
+                {hasOlder && (
+                  <Link
+                    href={buildHref(olderParams)}
+                    className="rounded-md px-3 py-1.5 font-medium text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
+                  >
+                    Older →
+                  </Link>
+                )}
+              </div>
+            </nav>
           )}
         </CardContent>
       </Card>
