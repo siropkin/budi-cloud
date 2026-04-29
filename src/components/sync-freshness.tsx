@@ -15,14 +15,25 @@ import { ChevronDown } from "lucide-react";
  */
 const STALLED_AFTER_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Maximum gap between the latest rollup and the latest session before we
+ * call the session ingest stream "stalled" relative to rollups (#84).
+ * Rollups and sessions ride in the same envelope, so on a healthy daemon
+ * their watermarks track within minutes; a multi-hour drift means the
+ * envelope is landing partial and the Sessions page would silently empty.
+ */
+const SESSIONS_LAG_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+
 export function SyncFreshness({
   deviceCount,
   lastSeenAt,
   lastRollupAt,
+  lastSessionAt,
 }: {
   deviceCount: number;
   lastSeenAt: string | null;
   lastRollupAt: string | null;
+  lastSessionAt: string | null;
 }) {
   // Not-linked is rendered as a call-to-action so it's obvious what to do
   // next instead of looking like a silent empty dashboard.
@@ -46,7 +57,11 @@ export function SyncFreshness({
   }
 
   return (
-    <LinkedSyncFreshness lastSeenAt={lastSeenAt} lastRollupAt={lastRollupAt} />
+    <LinkedSyncFreshness
+      lastSeenAt={lastSeenAt}
+      lastRollupAt={lastRollupAt}
+      lastSessionAt={lastSessionAt}
+    />
   );
 }
 
@@ -59,25 +74,50 @@ export function SyncFreshness({
 function LinkedSyncFreshness({
   lastSeenAt,
   lastRollupAt,
+  lastSessionAt,
 }: {
   lastSeenAt: string | null;
   lastRollupAt: string | null;
+  lastSessionAt: string | null;
 }) {
   const now = useNow(60_000);
   const effective = lastRollupAt ?? lastSeenAt;
   const isStalled =
     effective !== null && now - Date.parse(effective) > STALLED_AFTER_MS;
-  const state: "linked_no_data" | "stalled" | "ok" = !lastRollupAt
-    ? "linked_no_data"
-    : isStalled
-      ? "stalled"
-      : "ok";
+  // Sessions-stalled is only meaningful once the viewer has both a rollup
+  // and a previously-seen session: a brand-new account legitimately has
+  // rollups but no sessions until the daemon closes its first one. Total
+  // daemon-stalled wins, since the popover already covers that case.
+  const isSessionsStalled =
+    !isStalled &&
+    lastRollupAt !== null &&
+    lastSessionAt !== null &&
+    Date.parse(lastRollupAt) - Date.parse(lastSessionAt) >
+      SESSIONS_LAG_THRESHOLD_MS;
+  const state: "linked_no_data" | "stalled" | "sessions_stalled" | "ok" =
+    !lastRollupAt
+      ? "linked_no_data"
+      : isStalled
+        ? "stalled"
+        : isSessionsStalled
+          ? "sessions_stalled"
+          : "ok";
 
   // Stalled mirrors the `not_linked` CTA pattern: make it actionable so the
   // user can self-serve. The popover names the two CLI commands and the
   // config file that are almost always the answer (#53).
   if (state === "stalled") {
     return <StalledBadge effective={effective} now={now} />;
+  }
+
+  if (state === "sessions_stalled") {
+    return (
+      <SessionsStalledBadge
+        lastRollupAt={lastRollupAt!}
+        lastSessionAt={lastSessionAt!}
+        now={now}
+      />
+    );
   }
 
   return (
@@ -212,6 +252,106 @@ function StalledBadge({
             rel="noreferrer"
           >
             ADR-0083 — cloud sync contract
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SessionsStalledBadge({
+  lastRollupAt,
+  lastSessionAt,
+  now,
+}: {
+  lastRollupAt: string;
+  lastSessionAt: string;
+  now: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const sessionRelative = formatRelative(Date.parse(lastSessionAt), now);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        data-testid="sync-freshness"
+        data-sync-state="sessions_stalled"
+        title={`Last session: ${new Date(lastSessionAt).toLocaleString()} — last rollup: ${new Date(lastRollupAt).toLocaleString()}`}
+        className="inline-flex items-center gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-xs font-medium text-amber-300 transition-colors hover:border-amber-400/60 hover:bg-amber-400/20"
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
+        <span className="hidden sm:inline">Sessions stalled — last </span>
+        <span className="sm:hidden">Sessions </span>
+        <span>{sessionRelative}</span>
+        <ChevronDown
+          className={clsx(
+            "h-3 w-3 transition-transform",
+            open && "rotate-180"
+          )}
+        />
+      </button>
+      {open && (
+        <div
+          role="dialog"
+          aria-label="Session ingest is stalled"
+          className="absolute right-0 top-full z-20 mt-1 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-white/10 bg-zinc-950 p-3 text-xs text-zinc-300 shadow-xl"
+          data-testid="sync-freshness-popover"
+        >
+          <p className="mb-1 text-zinc-100">
+            Daily totals are still landing, but new sessions stopped{" "}
+            {sessionRelative}.
+          </p>
+          <p className="mb-2 text-zinc-400">
+            The Sessions page will look empty even though Overview is up to
+            date. From your local machine:
+          </p>
+          <ol className="mb-3 list-decimal space-y-1 pl-4">
+            <li>
+              <code className="rounded bg-black/40 px-1 text-zinc-200">
+                budi cloud status
+              </code>{" "}
+              — confirm the daemon is healthy
+            </li>
+            <li>
+              <code className="rounded bg-black/40 px-1 text-zinc-200">
+                budi --version
+              </code>{" "}
+              — make sure you&rsquo;re on a recent build
+            </li>
+            <li>
+              If both look fine, file an issue — sessions diverging from
+              rollups usually means a daemon-side regression.
+            </li>
+          </ol>
+          <a
+            className="text-zinc-400 underline decoration-dotted underline-offset-2 hover:text-zinc-200"
+            href="https://github.com/siropkin/budi-cloud/issues/84"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Tracking issue #84
           </a>
         </div>
       )}
