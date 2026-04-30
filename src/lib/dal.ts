@@ -157,7 +157,8 @@ export async function getDailyActivity(
     .in("device_id", deviceIds)
     .gte("bucket_day", range.bucketFrom)
     .lte("bucket_day", range.bucketTo)
-    .order("bucket_day");
+    .order("bucket_day")
+    .limit(100_000);
 
   // Aggregate by day
   const byDay = new Map<
@@ -446,7 +447,8 @@ export async function getCostByModel(
     .select("provider, model, cost_cents")
     .in("device_id", deviceIds)
     .gte("bucket_day", range.bucketFrom)
-    .lte("bucket_day", range.bucketTo);
+    .lte("bucket_day", range.bucketTo)
+    .limit(100_000);
 
   const byModel = new Map<
     string,
@@ -490,7 +492,8 @@ export async function getCostByRepo(
     .select("repo_id, cost_cents")
     .in("device_id", deviceIds)
     .gte("bucket_day", range.bucketFrom)
-    .lte("bucket_day", range.bucketTo);
+    .lte("bucket_day", range.bucketTo)
+    .limit(100_000);
 
   const byRepo = new Map<string, number>();
   for (const r of rollups ?? []) {
@@ -522,7 +525,8 @@ export async function getCostByBranch(
     .select("repo_id, git_branch, cost_cents")
     .in("device_id", deviceIds)
     .gte("bucket_day", range.bucketFrom)
-    .lte("bucket_day", range.bucketTo);
+    .lte("bucket_day", range.bucketTo)
+    .limit(100_000);
 
   const byBranch = new Map<
     string,
@@ -567,7 +571,8 @@ export async function getCostByTicket(
     .in("device_id", deviceIds)
     .gte("bucket_day", range.bucketFrom)
     .lte("bucket_day", range.bucketTo)
-    .not("ticket", "is", null);
+    .not("ticket", "is", null)
+    .limit(100_000);
 
   const byTicket = new Map<string, number>();
   for (const r of rollups ?? []) {

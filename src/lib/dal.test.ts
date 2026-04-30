@@ -41,6 +41,14 @@ class FakeSupabase {
   }
 }
 
+/**
+ * Mirrors PostgREST's default `db-max-rows` cap of 1000. Production code that
+ * needs the complete row set must call `.limit(100_000)` explicitly — the same
+ * defense the live API requires (#15, #90). Tests that don't seed > 1000 rows
+ * are unaffected.
+ */
+const POSTGREST_DEFAULT_MAX_ROWS = 1000;
+
 class FakeQuery {
   private filters: Array<(r: Row) => boolean> = [];
   private _orderKeys: Array<{ col: string; asc: boolean }> = [];
@@ -75,6 +83,14 @@ class FakeQuery {
 
   lte(col: string, value: string) {
     this.filters.push((r) => String(r[col] ?? "") <= value);
+    return this;
+  }
+
+  not(col: string, op: string, value: unknown) {
+    if (op !== "is" || value !== null) {
+      throw new Error(`unsupported not(): ${col}.${op}.${String(value)}`);
+    }
+    this.filters.push((r) => r[col] !== null && r[col] !== undefined);
     return this;
   }
 
@@ -115,7 +131,8 @@ class FakeQuery {
         return 0;
       });
     }
-    if (this._limit != null) rows = rows.slice(0, this._limit);
+    const cap = this._limit ?? POSTGREST_DEFAULT_MAX_ROWS;
+    if (rows.length > cap) rows = rows.slice(0, cap);
     return rows;
   }
 
@@ -544,6 +561,111 @@ describe("Overview ↔ Team reconciliation (#15)", () => {
     expect(janeByUser).toEqual([
       { id: "usr_jane", name: "Jane", cost_cents: 1500_00 },
     ]);
+  });
+});
+
+describe("PostgREST 1000-row cap on chart and breakdown queries (#90)", () => {
+  // Same shape as the #15 fixture: > 1000 rollup rows in the window. The
+  // sibling chart / breakdown queries (`getDailyActivity`, `getCostByModel`,
+  // `getCostByRepo`, `getCostByBranch`, `getCostByTicket`) silently truncated
+  // to the first 1000 rows ordered by `bucket_day` ascending, so the daily
+  // chart's x-axis cliff-edged ~7 days short of "today" and breakdown totals
+  // were understated. Each query must now match the row-set sum from
+  // `getOverviewStats`.
+  function seedSoloOrgWith1200Rollups() {
+    fake.seed("orgs", [{ id: "org_solo", name: "solo" }]);
+    fake.seed("users", [
+      {
+        id: "usr_ivan",
+        org_id: "org_solo",
+        role: "manager",
+        api_key: "budi_x",
+        display_name: "Ivan",
+        email: "ivan@example.com",
+      },
+    ]);
+    fake.seed("devices", [
+      { id: "dev_laptop", user_id: "usr_ivan" },
+      { id: "dev_desktop", user_id: "usr_ivan" },
+    ]);
+    fake.seed(
+      "daily_rollups",
+      Array.from({ length: 1200 }, (_, i) => {
+        // Spread across 30 days so the daily series exposes any prefix
+        // truncation at the most-recent end.
+        const day = `2026-04-${String((i % 30) + 1).padStart(2, "0")}`;
+        return rollup(
+          i % 2 === 0 ? "dev_laptop" : "dev_desktop",
+          day,
+          100,
+          {
+            model: `model-${i % 50}`,
+            repo_id: `repo-${i % 25}`,
+            git_branch: `branch-${i}`,
+            ticket: `TICKET-${i % 40}`,
+          }
+        );
+      })
+    );
+  }
+
+  const user = {
+    id: "usr_ivan",
+    org_id: "org_solo",
+    role: "manager" as const,
+    api_key: "budi_x",
+    display_name: "Ivan",
+    email: "ivan@example.com",
+  };
+  const range = utcRange("2026-04-01", "2026-04-30");
+
+  it("getDailyActivity returns every day in the window (no most-recent cliff)", async () => {
+    seedSoloOrgWith1200Rollups();
+
+    const { getDailyActivity } = await loadDal();
+    const series = await getDailyActivity(user, range);
+
+    expect(series).toHaveLength(30);
+    expect(series[0].bucket_day).toBe("2026-04-01");
+    expect(series[series.length - 1].bucket_day).toBe("2026-04-30");
+    const totalCost = series.reduce((s, d) => s + d.cost_cents, 0);
+    expect(totalCost).toBe(1200 * 100);
+  });
+
+  it("getCostByModel sums the full row set", async () => {
+    seedSoloOrgWith1200Rollups();
+
+    const { getCostByModel } = await loadDal();
+    const byModel = await getCostByModel(user, range);
+
+    expect(byModel.reduce((s, m) => s + m.cost_cents, 0)).toBe(1200 * 100);
+  });
+
+  it("getCostByRepo sums the full row set", async () => {
+    seedSoloOrgWith1200Rollups();
+
+    const { getCostByRepo } = await loadDal();
+    const byRepo = await getCostByRepo(user, range);
+
+    expect(byRepo.reduce((s, r) => s + r.cost_cents, 0)).toBe(1200 * 100);
+  });
+
+  it("getCostByBranch sums the full row set", async () => {
+    seedSoloOrgWith1200Rollups();
+
+    const { getCostByBranch } = await loadDal();
+    const byBranch = await getCostByBranch(user, range);
+
+    expect(byBranch.reduce((s, b) => s + b.cost_cents, 0)).toBe(1200 * 100);
+  });
+
+  it("getCostByTicket sums the full row set", async () => {
+    seedSoloOrgWith1200Rollups();
+
+    const { getCostByTicket } = await loadDal();
+    const byTicket = await getCostByTicket(user, range);
+
+    expect(byTicket.reduce((s, t) => s + t.cost_cents, 0)).toBe(1200 * 100);
   });
 });
 
