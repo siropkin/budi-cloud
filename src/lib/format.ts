@@ -20,6 +20,36 @@ export function fmtNum(n: number): string {
 }
 
 /**
+ * Format a session duration. Falls back to `ended_at - started_at` when
+ * `duration_ms` is null because the daemon doesn't populate that column for
+ * `claude_code` / `codex` sessions — without the fallback, every row in the
+ * dashboard renders "-" despite both timestamps being reliable post-#14 (#88).
+ */
+export function formatDuration(
+  durationMs: number | null | undefined,
+  startedAt?: string | null,
+  endedAt?: string | null
+): string {
+  let ms: number | null = null;
+  if (typeof durationMs === "number" && durationMs > 0) {
+    ms = durationMs;
+  } else if (startedAt && endedAt) {
+    const start = Date.parse(startedAt);
+    const end = Date.parse(endedAt);
+    if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
+      ms = end - start;
+    }
+  }
+  if (ms === null) return "-";
+  if (ms < 60_000) return "<1m";
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remaining = minutes % 60;
+  return `${hours}h ${remaining}m`;
+}
+
+/**
  * Extract a short repo name from a hashed repo_id.
  *
  * The daemon emits two historical sentinels when a session's directory has

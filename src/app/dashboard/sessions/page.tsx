@@ -14,19 +14,10 @@ import {
 import { dateRangeFromDays } from "@/lib/date-range";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
-import { fmtCost, fmtNum, repoName } from "@/lib/format";
+import { fmtCost, fmtNum, formatDuration, repoName } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
 import { UserFilter } from "@/components/user-filter";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-
-function formatDuration(ms: number | null): string {
-  if (!ms) return "-";
-  const minutes = Math.floor(ms / 60_000);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  const remaining = minutes % 60;
-  return `${hours}h ${remaining}m`;
-}
 
 function formatTimestamp(ts: string | null): string {
   if (!ts) return "-";
@@ -152,7 +143,11 @@ export default async function SessionsPage({
                         {formatTimestamp(s.started_at)}
                       </td>
                       <td className="py-2 text-zinc-400">
-                        {formatDuration(s.duration_ms)}
+                        {formatDuration(
+                          s.duration_ms,
+                          s.started_at,
+                          s.ended_at
+                        )}
                       </td>
                       <td className="py-2 text-zinc-400">
                         {repoName(s.repo_id)}
