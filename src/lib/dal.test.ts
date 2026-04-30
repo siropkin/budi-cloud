@@ -36,10 +36,189 @@ class FakeSupabase {
     return new FakeQuery(this.tables.get(name)!);
   }
 
+  /**
+   * Mirrors the SQL aggregate functions added in `004_dashboard_aggregates.sql`
+   * (#92). Each handler reproduces the WHERE / GROUP BY shape of its Postgres
+   * counterpart over the in-memory tables so the test contract is what the
+   * server contract is — no row cap, full aggregation. A handler that drifts
+   * from its SQL definition will silently mask the bug class #92 was created
+   * to prevent, so both should be edited together.
+   */
+  rpc(name: string, args: Record<string, unknown>) {
+    const handler = RPC_HANDLERS[name];
+    if (!handler) {
+      return Promise.resolve({
+        data: null,
+        error: { message: `unsupported rpc: ${name}` },
+      });
+    }
+    return Promise.resolve({ data: handler(this.tables, args), error: null });
+  }
+
   seed(name: string, rows: Row[]) {
     this.tables.set(name, [...rows]);
   }
 }
+
+type RpcHandler = (
+  tables: Map<string, Row[]>,
+  args: Record<string, unknown>
+) => Row[];
+
+function rollupsForRange(
+  tables: Map<string, Row[]>,
+  args: Record<string, unknown>
+): Row[] {
+  const deviceIds = new Set(args.p_device_ids as string[]);
+  const from = args.p_bucket_from as string;
+  const to = args.p_bucket_to as string;
+  return (tables.get("daily_rollups") ?? []).filter(
+    (r) =>
+      deviceIds.has(r.device_id as string) &&
+      String(r.bucket_day ?? "") >= from &&
+      String(r.bucket_day ?? "") <= to
+  );
+}
+
+const RPC_HANDLERS: Record<string, RpcHandler> = {
+  dashboard_overview_stats(tables, args) {
+    const rows = rollupsForRange(tables, args);
+    const totals = rows.reduce(
+      (acc, r) => ({
+        total_cost_cents: acc.total_cost_cents + Number(r.cost_cents),
+        total_input_tokens: acc.total_input_tokens + Number(r.input_tokens),
+        total_output_tokens: acc.total_output_tokens + Number(r.output_tokens),
+        total_messages: acc.total_messages + Number(r.message_count),
+      }),
+      {
+        total_cost_cents: 0,
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        total_messages: 0,
+      }
+    );
+
+    const deviceIds = new Set(args.p_device_ids as string[]);
+    const startedFrom = args.p_started_from as string;
+    const startedTo = args.p_started_to as string;
+    const total_sessions = (tables.get("session_summaries") ?? []).filter(
+      (s) =>
+        deviceIds.has(s.device_id as string) &&
+        String(s.started_at ?? "") >= startedFrom &&
+        String(s.started_at ?? "") <= startedTo
+    ).length;
+
+    return [{ ...totals, total_sessions }];
+  },
+  dashboard_daily_activity(tables, args) {
+    const rows = rollupsForRange(tables, args);
+    const byDay = new Map<
+      string,
+      {
+        bucket_day: string;
+        input_tokens: number;
+        output_tokens: number;
+        cost_cents: number;
+        message_count: number;
+      }
+    >();
+    for (const r of rows) {
+      const day = r.bucket_day as string;
+      const existing = byDay.get(day) ?? {
+        bucket_day: day,
+        input_tokens: 0,
+        output_tokens: 0,
+        cost_cents: 0,
+        message_count: 0,
+      };
+      existing.input_tokens += Number(r.input_tokens);
+      existing.output_tokens += Number(r.output_tokens);
+      existing.cost_cents += Number(r.cost_cents);
+      existing.message_count += Number(r.message_count);
+      byDay.set(day, existing);
+    }
+    return Array.from(byDay.values()).sort((a, b) =>
+      a.bucket_day.localeCompare(b.bucket_day)
+    );
+  },
+  dashboard_cost_by_device(tables, args) {
+    const rows = rollupsForRange(tables, args);
+    const byDevice = new Map<string, number>();
+    for (const r of rows) {
+      const id = r.device_id as string;
+      byDevice.set(id, (byDevice.get(id) ?? 0) + Number(r.cost_cents));
+    }
+    return Array.from(byDevice.entries()).map(([device_id, cost_cents]) => ({
+      device_id,
+      cost_cents,
+    }));
+  },
+  dashboard_cost_by_model(tables, args) {
+    const rows = rollupsForRange(tables, args);
+    const byModel = new Map<
+      string,
+      { provider: string; model: string; cost_cents: number }
+    >();
+    for (const r of rows) {
+      const provider = r.provider as string;
+      const model = r.model as string;
+      const key = `${provider}:${model}`;
+      const existing = byModel.get(key) ?? {
+        provider,
+        model,
+        cost_cents: 0,
+      };
+      existing.cost_cents += Number(r.cost_cents);
+      byModel.set(key, existing);
+    }
+    return Array.from(byModel.values());
+  },
+  dashboard_cost_by_repo(tables, args) {
+    const rows = rollupsForRange(tables, args);
+    const byRepo = new Map<string, number>();
+    for (const r of rows) {
+      const id = r.repo_id as string;
+      byRepo.set(id, (byRepo.get(id) ?? 0) + Number(r.cost_cents));
+    }
+    return Array.from(byRepo.entries()).map(([repo_id, cost_cents]) => ({
+      repo_id,
+      cost_cents,
+    }));
+  },
+  dashboard_cost_by_branch(tables, args) {
+    const rows = rollupsForRange(tables, args);
+    const byBranch = new Map<
+      string,
+      { repo_id: string; git_branch: string; cost_cents: number }
+    >();
+    for (const r of rows) {
+      const repo_id = r.repo_id as string;
+      const git_branch = r.git_branch as string;
+      const key = `${repo_id}:${git_branch}`;
+      const existing = byBranch.get(key) ?? {
+        repo_id,
+        git_branch,
+        cost_cents: 0,
+      };
+      existing.cost_cents += Number(r.cost_cents);
+      byBranch.set(key, existing);
+    }
+    return Array.from(byBranch.values());
+  },
+  dashboard_cost_by_ticket(tables, args) {
+    const rows = rollupsForRange(tables, args);
+    const byTicket = new Map<string, number>();
+    for (const r of rows) {
+      const ticket = r.ticket as string | null | undefined;
+      if (ticket == null) continue;
+      byTicket.set(ticket, (byTicket.get(ticket) ?? 0) + Number(r.cost_cents));
+    }
+    return Array.from(byTicket.entries()).map(([ticket, cost_cents]) => ({
+      ticket,
+      cost_cents,
+    }));
+  },
+};
 
 /**
  * Mirrors PostgREST's default `db-max-rows` cap of 1000. Production code that
@@ -594,17 +773,12 @@ describe("PostgREST 1000-row cap on chart and breakdown queries (#90)", () => {
         // Spread across 30 days so the daily series exposes any prefix
         // truncation at the most-recent end.
         const day = `2026-04-${String((i % 30) + 1).padStart(2, "0")}`;
-        return rollup(
-          i % 2 === 0 ? "dev_laptop" : "dev_desktop",
-          day,
-          100,
-          {
-            model: `model-${i % 50}`,
-            repo_id: `repo-${i % 25}`,
-            git_branch: `branch-${i}`,
-            ticket: `TICKET-${i % 40}`,
-          }
-        );
+        return rollup(i % 2 === 0 ? "dev_laptop" : "dev_desktop", day, 100, {
+          model: `model-${i % 50}`,
+          repo_id: `repo-${i % 25}`,
+          git_branch: `branch-${i}`,
+          ticket: `TICKET-${i % 40}`,
+        });
       })
     );
   }
@@ -666,6 +840,196 @@ describe("PostgREST 1000-row cap on chart and breakdown queries (#90)", () => {
     const byTicket = await getCostByTicket(user, range);
 
     expect(byTicket.reduce((s, t) => s + t.cost_cents, 0)).toBe(1200 * 100);
+  });
+});
+
+describe("server-side aggregation (#92)", () => {
+  // PR #90 raised the row cap from 1,000 to 100,000, but a real org with
+  // `device × day × role × provider × model × repo_id × git_branch`
+  // cardinality crosses 100,000 the same way it crossed 1,000. Bumping the
+  // ceiling never closes the bug class — every breakdown must aggregate
+  // server-side so no row count is exposed to the app at all. The fixture
+  // here is sized just above the prior 100,000 ceiling so a regression that
+  // reintroduces a JS-side reduce-with-`.limit(N)` would fail this test.
+  const ROLLUP_COUNT = 100_500;
+
+  // Deterministic distribution so every assertion is exact rather than
+  // approximate: each user gets a fixed share of the row count, each row
+  // contributes one unit of cost, and the daily spread is bounded so we can
+  // assert sums per-window without re-counting the fixture.
+  function seedAtScale() {
+    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("users", [
+      {
+        id: "usr_ivan",
+        org_id: "org_team",
+        role: "manager",
+        api_key: "budi_i",
+        display_name: "Ivan",
+        email: "ivan@example.com",
+      },
+      {
+        id: "usr_jane",
+        org_id: "org_team",
+        role: "member",
+        api_key: "budi_j",
+        display_name: "Jane",
+        email: "jane@example.com",
+      },
+    ]);
+    fake.seed("devices", [
+      { id: "dev_ivan", user_id: "usr_ivan" },
+      { id: "dev_jane", user_id: "usr_jane" },
+    ]);
+
+    // Spread across 60 days (March 1 → April 29) so 7d / 30d / All cleanly
+    // partition the row set and we can reason about subset relationships.
+    fake.seed(
+      "daily_rollups",
+      Array.from({ length: ROLLUP_COUNT }, (_, i) => {
+        const dayIndex = i % 60;
+        const start = new Date(Date.UTC(2026, 2, 1));
+        start.setUTCDate(start.getUTCDate() + dayIndex);
+        const day = start.toISOString().slice(0, 10);
+        return rollup(i % 2 === 0 ? "dev_ivan" : "dev_jane", day, 100, {
+          // Wide cardinality on the rollup PK so a buggy reintroduction of a
+          // 100k cap would truncate rather than coincidentally pass.
+          model: `model-${i % 50}`,
+          repo_id: `repo-${i % 25}`,
+          git_branch: `branch-${i % 1000}`,
+          ticket: `TICKET-${i % 40}`,
+        });
+      })
+    );
+  }
+
+  const manager = {
+    id: "usr_ivan",
+    org_id: "org_team",
+    role: "manager" as const,
+    api_key: "budi_i",
+    display_name: "Ivan",
+    email: "ivan@example.com",
+  };
+
+  it("breakdown sums equal Overview total beyond the prior 100k cap", async () => {
+    // Acceptance criterion (a): per-user breakdown sums equal overview total
+    // for the same (user, range).
+    seedAtScale();
+    const range = utcRange("2026-03-01", "2026-04-30");
+
+    const {
+      getOverviewStats,
+      getCostByUser,
+      getCostByDevice,
+      getCostByModel,
+      getCostByRepo,
+      getCostByBranch,
+      getCostByTicket,
+      getDailyActivity,
+    } = await loadDal();
+
+    const overview = await getOverviewStats(manager, range);
+    const expected = ROLLUP_COUNT * 100;
+    expect(overview.totalCostCents).toBe(expected);
+
+    const byUser = await getCostByUser(manager, range);
+    expect(byUser.reduce((s, u) => s + u.cost_cents, 0)).toBe(expected);
+
+    const byDevice = await getCostByDevice(manager, range);
+    expect(byDevice.reduce((s, d) => s + d.cost_cents, 0)).toBe(expected);
+
+    const byModel = await getCostByModel(manager, range);
+    expect(byModel.reduce((s, m) => s + m.cost_cents, 0)).toBe(expected);
+
+    const byRepo = await getCostByRepo(manager, range);
+    expect(byRepo.reduce((s, r) => s + r.cost_cents, 0)).toBe(expected);
+
+    const byBranch = await getCostByBranch(manager, range);
+    expect(byBranch.reduce((s, b) => s + b.cost_cents, 0)).toBe(expected);
+
+    const byTicket = await getCostByTicket(manager, range);
+    expect(byTicket.reduce((s, t) => s + t.cost_cents, 0)).toBe(expected);
+
+    const series = await getDailyActivity(manager, range);
+    expect(series.reduce((s, d) => s + d.cost_cents, 0)).toBe(expected);
+  });
+
+  it("per-user breakdowns are monotonic across 7d ⊆ 30d ⊆ All windows", async () => {
+    // Acceptance criterion (b). Under the prior pull-and-reduce pattern a
+    // wider window could return a *smaller* sum because which rollups
+    // survived the row cap was window-dependent.
+    seedAtScale();
+
+    const { getCostByUser } = await loadDal();
+    const week = await getCostByUser(
+      manager,
+      utcRange("2026-04-23", "2026-04-29")
+    );
+    const month = await getCostByUser(
+      manager,
+      utcRange("2026-03-31", "2026-04-29")
+    );
+    const all = await getCostByUser(
+      manager,
+      utcRange("2026-03-01", "2026-04-30")
+    );
+
+    function ivanCost(rows: Array<{ id: string; cost_cents: number }>) {
+      return rows.find((r) => r.id === "usr_ivan")?.cost_cents ?? 0;
+    }
+    const ivanWeek = ivanCost(week);
+    const ivanMonth = ivanCost(month);
+    const ivanAll = ivanCost(all);
+
+    expect(ivanWeek).toBeGreaterThan(0);
+    expect(ivanMonth).toBeGreaterThanOrEqual(ivanWeek);
+    expect(ivanAll).toBeGreaterThanOrEqual(ivanMonth);
+  });
+
+  it("getDailyActivity covers the full window — no leftmost-day truncation", async () => {
+    // Acceptance criterion: leftmost day equals the seeded earliest day.
+    // The pre-#92 `.order("bucket_day").limit(100_000)` would have silently
+    // dropped the most-recent days at scale, but past 100k rollup rows
+    // matching the predicate the cliff appears regardless of order direction.
+    seedAtScale();
+
+    const { getDailyActivity } = await loadDal();
+    const series = await getDailyActivity(
+      manager,
+      utcRange("2026-03-01", "2026-04-30")
+    );
+
+    expect(series[0].bucket_day).toBe("2026-03-01");
+    expect(series[series.length - 1].bucket_day).toBe("2026-04-29");
+    expect(series).toHaveLength(60);
+  });
+
+  it("a single device's All-window cost equals the sum across its daily activity", async () => {
+    // Acceptance criterion (c): the smoking gun in the bug report — a single
+    // device's total is window/scope-dependent under truncation. Once
+    // aggregation is server-side, the per-device total reconciles with the
+    // per-day series for the same device, scoped or unscoped.
+    seedAtScale();
+
+    const range = utcRange("2026-03-01", "2026-04-30");
+    const { getCostByDevice, getDailyActivity } = await loadDal();
+
+    const byDevice = await getCostByDevice(manager, range);
+    const ivanDeviceCost =
+      byDevice.find((d) => d.id === "dev_ivan")?.cost_cents ?? 0;
+
+    // Same device through the user-scoped path: rollups survive a different
+    // device-id filter and still sum to the same number once aggregation is
+    // server-side. Pre-#92 these two paths diverged because the row cap
+    // truncated each query independently.
+    const scopedSeries = await getDailyActivity(manager, range, {
+      scopedUserId: "usr_ivan",
+    });
+    const scopedTotal = scopedSeries.reduce((s, d) => s + d.cost_cents, 0);
+
+    expect(ivanDeviceCost).toBeGreaterThan(0);
+    expect(ivanDeviceCost).toBe(scopedTotal);
   });
 });
 
