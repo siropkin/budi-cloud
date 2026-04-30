@@ -37,3 +37,47 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Stub Supabase auth helpers
+        # Real Supabase projects ship with the `auth` schema and `auth.uid()`
+        # provided by GoTrue. The migrations reference both, so stub them here
+        # so we can dry-run the SQL on a vanilla Postgres and catch syntax /
+        # dependency errors before they reach prod (#94).
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE SCHEMA IF NOT EXISTS auth;
+          CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
+            LANGUAGE sql STABLE AS $$ SELECT NULL::uuid $$;
+          SQL
+
+      - name: Apply migrations in order
+        run: |
+          set -e
+          for f in $(ls supabase/migrations/*.sql | sort); do
+            echo "applying $f"
+            psql -v ON_ERROR_STOP=1 -f "$f"
+          done
