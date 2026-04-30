@@ -586,29 +586,103 @@ export async function getCostByTicket(
 }
 
 /**
- * Get sessions list.
+ * Cursor for `getSessions` pagination — encodes the row at the boundary of the
+ * current page. The composite `(started_at, session_id)` shape gives a stable
+ * walk even when two sessions share a `started_at` (rare but real once cursor
+ * sync re-emits a batch with the same instant): the SQL filter
+ * `(started_at, session_id) < cursor` keeps the strict ordering and never
+ * skips or duplicates a tied row.
+ *
+ * The dashboard URL serializes this as `?cursor=<base64url(JSON)>` so a
+ * session_id containing punctuation never collides with a delimiter (#85).
+ */
+export interface SessionsCursor {
+  startedAt: string;
+  sessionId: string;
+}
+
+/** Default page size for the Sessions table — matches the UI's pager. */
+export const SESSIONS_PAGE_SIZE = 50;
+
+/**
+ * Get a single page of sessions ordered by `(started_at desc, session_id desc)`.
  * Manager sees full org; member sees own devices only (ADR-0083 §6).
  * `options.scopedUserId` further narrows a manager view to a single teammate.
+ *
+ * Pagination is cursor-based on `(started_at, session_id)`. Sessions are
+ * immutable once written so the cursor is stable across reloads — no offset
+ * skew under concurrent writes, no expensive count query required to know if
+ * another page exists. We fetch `pageSize + 1` rows so `hasMore` falls out of
+ * the result-set size; the extra row is dropped before returning.
+ *
+ * History: prior to #85 this returned the most recent 100 rows with no
+ * pagination, silently truncating the visible Sessions history to whatever
+ * fit in those 100 rows (~9 days for a high-volume org). The
+ * `Recent Sessions (100+)` title was the only hint that anything older
+ * existed. Cursor pagination replaces both.
  */
 export async function getSessions(
   user: BudiUser,
   range: DateRange,
-  options?: ScopeOptions
-) {
+  options?: ScopeOptions,
+  pagination?: { pageSize?: number; cursor?: SessionsCursor | null }
+): Promise<{ rows: SessionRow[]; nextCursor: SessionsCursor | null }> {
   const admin = createAdminClient();
   const deviceIds = await getVisibleDeviceIds(admin, user, options);
-  if (deviceIds.length === 0) return [];
+  if (deviceIds.length === 0) return { rows: [], nextCursor: null };
 
-  const { data: sessions } = await admin
+  const pageSize = pagination?.pageSize ?? SESSIONS_PAGE_SIZE;
+  const cursor = pagination?.cursor ?? null;
+
+  let query = admin
     .from("session_summaries")
     .select("*")
     .in("device_id", deviceIds)
     .gte("started_at", range.startedAtFrom)
     .lte("started_at", range.startedAtTo)
     .order("started_at", { ascending: false })
-    .limit(100);
+    // Tie-breaker: without a secondary sort key, two rows with the same
+    // `started_at` could appear on either side of a cursor boundary across
+    // requests, causing rows to skip or duplicate as the user paginates.
+    .order("session_id", { ascending: false })
+    .limit(pageSize + 1);
 
-  return sessions ?? [];
+  if (cursor) {
+    // Composite tuple compare: (started_at, session_id) < cursor.
+    // PostgREST has no native row-constructor compare, so we expand to the
+    // logically-equivalent disjunction.
+    query = query.or(
+      `started_at.lt.${cursor.startedAt},and(started_at.eq.${cursor.startedAt},session_id.lt.${cursor.sessionId})`
+    );
+  }
+
+  const { data } = await query;
+  const fetched = (data ?? []) as SessionRow[];
+  const hasMore = fetched.length > pageSize;
+  const rows = hasMore ? fetched.slice(0, pageSize) : fetched;
+  const tail = rows[rows.length - 1];
+  const nextCursor =
+    hasMore && tail
+      ? { startedAt: tail.started_at, sessionId: tail.session_id }
+      : null;
+
+  return { rows, nextCursor };
+}
+
+interface SessionRow {
+  device_id: string;
+  session_id: string;
+  provider: string;
+  started_at: string;
+  ended_at: string | null;
+  duration_ms: number | null;
+  repo_id: string | null;
+  git_branch: string | null;
+  ticket: string | null;
+  message_count: number;
+  total_input_tokens: number | string;
+  total_output_tokens: number | string;
+  total_cost_cents: number | string;
 }
 
 /**
