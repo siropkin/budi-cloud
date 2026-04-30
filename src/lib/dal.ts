@@ -79,6 +79,10 @@ export async function getCurrentUser(): Promise<BudiUser | null> {
  * Get overview stats visible to the current user.
  * Manager sees full org; member sees own devices only (ADR-0083 §6).
  * `options.scopedUserId` further narrows a manager view to a single teammate.
+ *
+ * Aggregation runs server-side via `dashboard_overview_stats` (#92) so the
+ * sums are independent of any PostgREST row cap — `getOverviewStats` and
+ * every breakdown query agree on the same row set regardless of org size.
  */
 export async function getOverviewStats(
   user: BudiUser,
@@ -98,47 +102,41 @@ export async function getOverviewStats(
     };
   }
 
-  const { data: rollups } = await admin
-    .from("daily_rollups")
-    .select(
-      "cost_cents, input_tokens, output_tokens, message_count, cache_creation_tokens, cache_read_tokens"
-    )
-    .in("device_id", deviceIds)
-    .gte("bucket_day", range.bucketFrom)
-    .lte("bucket_day", range.bucketTo)
-    // Defeat the default PostgREST max-rows cap so Overview and Team sum the
-    // same complete row set (#15).
-    .limit(100_000);
+  const { data, error } = await admin.rpc("dashboard_overview_stats", {
+    p_device_ids: deviceIds,
+    p_bucket_from: range.bucketFrom,
+    p_bucket_to: range.bucketTo,
+    p_started_from: range.startedAtFrom,
+    p_started_to: range.startedAtTo,
+  });
+  if (error) throw error;
 
-  const { count: sessionCount } = await admin
-    .from("session_summaries")
-    .select("*", { count: "exact", head: true })
-    .in("device_id", deviceIds)
-    .gte("started_at", range.startedAtFrom)
-    .lte("started_at", range.startedAtTo);
+  const row = (data?.[0] ?? null) as OverviewRow | null;
+  return {
+    totalCostCents: Number(row?.total_cost_cents ?? 0),
+    totalInputTokens: Number(row?.total_input_tokens ?? 0),
+    totalOutputTokens: Number(row?.total_output_tokens ?? 0),
+    totalMessages: Number(row?.total_messages ?? 0),
+    totalSessions: Number(row?.total_sessions ?? 0),
+  };
+}
 
-  const totals = (rollups ?? []).reduce(
-    (acc, r) => ({
-      totalCostCents: acc.totalCostCents + Number(r.cost_cents),
-      totalInputTokens: acc.totalInputTokens + Number(r.input_tokens),
-      totalOutputTokens: acc.totalOutputTokens + Number(r.output_tokens),
-      totalMessages: acc.totalMessages + r.message_count,
-    }),
-    {
-      totalCostCents: 0,
-      totalInputTokens: 0,
-      totalOutputTokens: 0,
-      totalMessages: 0,
-    }
-  );
-
-  return { ...totals, totalSessions: sessionCount ?? 0 };
+interface OverviewRow {
+  total_cost_cents: number | string;
+  total_input_tokens: number | string;
+  total_output_tokens: number | string;
+  total_messages: number | string;
+  total_sessions: number | string;
 }
 
 /**
  * Get daily cost activity for charts.
  * Manager sees full org; member sees own devices only (ADR-0083 §6).
  * `options.scopedUserId` further narrows a manager view to a single teammate.
+ *
+ * Aggregation runs server-side via `dashboard_daily_activity` (#92). Prior to
+ * #92 this client-side reduce silently dropped the *oldest* days at the left
+ * edge of the chart once the predicate matched > 100,000 rollup rows.
  */
 export async function getDailyActivity(
   user: BudiUser,
@@ -149,44 +147,30 @@ export async function getDailyActivity(
   const deviceIds = await getVisibleDeviceIds(admin, user, options);
   if (deviceIds.length === 0) return [];
 
-  const { data: rollups } = await admin
-    .from("daily_rollups")
-    .select(
-      "bucket_day, input_tokens, output_tokens, cost_cents, message_count"
-    )
-    .in("device_id", deviceIds)
-    .gte("bucket_day", range.bucketFrom)
-    .lte("bucket_day", range.bucketTo)
-    .order("bucket_day")
-    .limit(100_000);
+  const { data, error } = await admin.rpc("dashboard_daily_activity", {
+    p_device_ids: deviceIds,
+    p_bucket_from: range.bucketFrom,
+    p_bucket_to: range.bucketTo,
+  });
+  if (error) throw error;
 
-  // Aggregate by day
-  const byDay = new Map<
-    string,
-    {
-      input_tokens: number;
-      output_tokens: number;
-      cost_cents: number;
-      message_count: number;
-    }
-  >();
-  for (const r of rollups ?? []) {
-    const existing = byDay.get(r.bucket_day) ?? {
-      input_tokens: 0,
-      output_tokens: 0,
-      cost_cents: 0,
-      message_count: 0,
-    };
-    existing.input_tokens += Number(r.input_tokens);
-    existing.output_tokens += Number(r.output_tokens);
-    existing.cost_cents += Number(r.cost_cents);
-    existing.message_count += r.message_count;
-    byDay.set(r.bucket_day, existing);
-  }
+  return ((data ?? []) as DailyActivityRow[])
+    .map((r) => ({
+      bucket_day: r.bucket_day,
+      input_tokens: Number(r.input_tokens),
+      output_tokens: Number(r.output_tokens),
+      cost_cents: Number(r.cost_cents),
+      message_count: Number(r.message_count),
+    }))
+    .sort((a, b) => a.bucket_day.localeCompare(b.bucket_day));
+}
 
-  return Array.from(byDay.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([day, data]) => ({ bucket_day: day, ...data }));
+interface DailyActivityRow {
+  bucket_day: string;
+  input_tokens: number | string;
+  output_tokens: number | string;
+  cost_cents: number | string;
+  message_count: number | string;
 }
 
 /**
@@ -240,15 +224,16 @@ export async function getCostByUser(user: BudiUser, range: DateRange) {
   const deviceIds = await getVisibleDeviceIds(admin, user);
   if (deviceIds.length === 0) return [];
 
-  const { data: rollups } = await admin
-    .from("daily_rollups")
-    .select("device_id, cost_cents")
-    .in("device_id", deviceIds)
-    .gte("bucket_day", range.bucketFrom)
-    .lte("bucket_day", range.bucketTo)
-    // Defeat the default PostgREST max-rows cap so we sum every row instead
-    // of a silently-truncated subset.
-    .limit(100_000);
+  // Aggregate rollups server-side (#92). The owner mapping lives in the small,
+  // bounded `devices` + `users` tables, so the secondary join still happens in
+  // JS without risk of row-cap truncation.
+  const { data: rows, error } = await admin.rpc("dashboard_cost_by_device", {
+    p_device_ids: deviceIds,
+    p_bucket_from: range.bucketFrom,
+    p_bucket_to: range.bucketTo,
+  });
+  if (error) throw error;
+  const deviceCostRows = (rows ?? []) as DeviceCostRow[];
 
   const { data: devices } = await admin
     .from("devices")
@@ -287,8 +272,8 @@ export async function getCostByUser(user: BudiUser, range: DateRange) {
 
   type Bucket = { id: string; name: string; cost_cents: number };
   const byUser = new Map<string, Bucket>();
-  for (const r of rollups ?? []) {
-    const ownerId = deviceToUser.get(r.device_id as string);
+  for (const r of deviceCostRows) {
+    const ownerId = deviceToUser.get(r.device_id);
     const bucketId =
       ownerId && visibleOwnerIds.has(ownerId) ? ownerId : UNASSIGNED_USER_ID;
     const cost = Number(r.cost_cents);
@@ -315,6 +300,11 @@ export async function getCostByUser(user: BudiUser, range: DateRange) {
       if (b.id === UNASSIGNED_USER_ID) return -1;
       return b.cost_cents - a.cost_cents;
     });
+}
+
+interface DeviceCostRow {
+  device_id: string;
+  cost_cents: number | string;
 }
 
 interface UserLookup {
@@ -354,14 +344,17 @@ export async function getCostByDevice(
   const deviceIds = await getVisibleDeviceIds(admin, user, options);
   if (deviceIds.length === 0) return [];
 
-  const { data: rollups } = await admin
-    .from("daily_rollups")
-    .select("device_id, cost_cents")
-    .in("device_id", deviceIds)
-    .gte("bucket_day", range.bucketFrom)
-    .lte("bucket_day", range.bucketTo)
-    // Match the cap used elsewhere so we never silently truncate the sum.
-    .limit(100_000);
+  // Aggregate rollups server-side (#92). The cap-truncation that #15 / #90
+  // chased lives entirely on the rollup-row pull, so removing that pull is
+  // the fix; the secondary metadata reads below are bounded by org device
+  // count and never exceed the 1k PostgREST default.
+  const { data: rows, error } = await admin.rpc("dashboard_cost_by_device", {
+    p_device_ids: deviceIds,
+    p_bucket_from: range.bucketFrom,
+    p_bucket_to: range.bucketTo,
+  });
+  if (error) throw error;
+  const rollups = (rows ?? []) as DeviceCostRow[];
 
   const { data: devices } = await admin
     .from("devices")
@@ -401,10 +394,11 @@ export async function getCostByDevice(
     }
   }
 
+  // The RPC already aggregates by device_id, so each row is a (device, sum)
+  // pair — no further reduction needed.
   const costByDevice = new Map<string, number>();
-  for (const r of rollups ?? []) {
-    const id = r.device_id as string;
-    costByDevice.set(id, (costByDevice.get(id) ?? 0) + Number(r.cost_cents));
+  for (const r of rollups) {
+    costByDevice.set(r.device_id, Number(r.cost_cents));
   }
 
   // Surface every visible device — including zero-cost ones — so a brand-new
@@ -442,35 +436,27 @@ export async function getCostByModel(
   const deviceIds = await getVisibleDeviceIds(admin, user, options);
   if (deviceIds.length === 0) return [];
 
-  const { data: rollups } = await admin
-    .from("daily_rollups")
-    .select("provider, model, cost_cents")
-    .in("device_id", deviceIds)
-    .gte("bucket_day", range.bucketFrom)
-    .lte("bucket_day", range.bucketTo)
-    .limit(100_000);
+  const { data, error } = await admin.rpc("dashboard_cost_by_model", {
+    p_device_ids: deviceIds,
+    p_bucket_from: range.bucketFrom,
+    p_bucket_to: range.bucketTo,
+  });
+  if (error) throw error;
 
-  const byModel = new Map<
-    string,
-    { provider: string; model: string; cost_cents: number }
-  >();
-  for (const r of rollups ?? []) {
-    const key = `${r.provider}:${r.model}`;
-    const existing = byModel.get(key);
-    if (existing) {
-      existing.cost_cents += Number(r.cost_cents);
-    } else {
-      byModel.set(key, {
-        provider: r.provider,
-        model: r.model,
-        cost_cents: Number(r.cost_cents),
-      });
-    }
-  }
-
-  return Array.from(byModel.values())
+  return ((data ?? []) as ModelCostRow[])
+    .map((r) => ({
+      provider: r.provider,
+      model: r.model,
+      cost_cents: Number(r.cost_cents),
+    }))
     .filter((m) => m.cost_cents > 0)
     .sort((a, b) => b.cost_cents - a.cost_cents);
+}
+
+interface ModelCostRow {
+  provider: string;
+  model: string;
+  cost_cents: number | string;
 }
 
 /**
@@ -487,23 +473,25 @@ export async function getCostByRepo(
   const deviceIds = await getVisibleDeviceIds(admin, user, options);
   if (deviceIds.length === 0) return [];
 
-  const { data: rollups } = await admin
-    .from("daily_rollups")
-    .select("repo_id, cost_cents")
-    .in("device_id", deviceIds)
-    .gte("bucket_day", range.bucketFrom)
-    .lte("bucket_day", range.bucketTo)
-    .limit(100_000);
+  const { data, error } = await admin.rpc("dashboard_cost_by_repo", {
+    p_device_ids: deviceIds,
+    p_bucket_from: range.bucketFrom,
+    p_bucket_to: range.bucketTo,
+  });
+  if (error) throw error;
 
-  const byRepo = new Map<string, number>();
-  for (const r of rollups ?? []) {
-    byRepo.set(r.repo_id, (byRepo.get(r.repo_id) ?? 0) + Number(r.cost_cents));
-  }
-
-  return Array.from(byRepo.entries())
-    .map(([repo_id, cost_cents]) => ({ repo_id, cost_cents }))
+  return ((data ?? []) as RepoCostRow[])
+    .map((r) => ({
+      repo_id: r.repo_id,
+      cost_cents: Number(r.cost_cents),
+    }))
     .filter((r) => r.cost_cents > 0)
     .sort((a, b) => b.cost_cents - a.cost_cents);
+}
+
+interface RepoCostRow {
+  repo_id: string;
+  cost_cents: number | string;
 }
 
 /**
@@ -520,35 +508,27 @@ export async function getCostByBranch(
   const deviceIds = await getVisibleDeviceIds(admin, user, options);
   if (deviceIds.length === 0) return [];
 
-  const { data: rollups } = await admin
-    .from("daily_rollups")
-    .select("repo_id, git_branch, cost_cents")
-    .in("device_id", deviceIds)
-    .gte("bucket_day", range.bucketFrom)
-    .lte("bucket_day", range.bucketTo)
-    .limit(100_000);
+  const { data, error } = await admin.rpc("dashboard_cost_by_branch", {
+    p_device_ids: deviceIds,
+    p_bucket_from: range.bucketFrom,
+    p_bucket_to: range.bucketTo,
+  });
+  if (error) throw error;
 
-  const byBranch = new Map<
-    string,
-    { repo_id: string; git_branch: string; cost_cents: number }
-  >();
-  for (const r of rollups ?? []) {
-    const key = `${r.repo_id}:${r.git_branch}`;
-    const existing = byBranch.get(key);
-    if (existing) {
-      existing.cost_cents += Number(r.cost_cents);
-    } else {
-      byBranch.set(key, {
-        repo_id: r.repo_id,
-        git_branch: r.git_branch,
-        cost_cents: Number(r.cost_cents),
-      });
-    }
-  }
-
-  return Array.from(byBranch.values())
+  return ((data ?? []) as BranchCostRow[])
+    .map((r) => ({
+      repo_id: r.repo_id,
+      git_branch: r.git_branch,
+      cost_cents: Number(r.cost_cents),
+    }))
     .filter((b) => b.cost_cents > 0)
     .sort((a, b) => b.cost_cents - a.cost_cents);
+}
+
+interface BranchCostRow {
+  repo_id: string;
+  git_branch: string;
+  cost_cents: number | string;
 }
 
 /**
@@ -565,29 +545,25 @@ export async function getCostByTicket(
   const deviceIds = await getVisibleDeviceIds(admin, user, options);
   if (deviceIds.length === 0) return [];
 
-  const { data: rollups } = await admin
-    .from("daily_rollups")
-    .select("ticket, cost_cents")
-    .in("device_id", deviceIds)
-    .gte("bucket_day", range.bucketFrom)
-    .lte("bucket_day", range.bucketTo)
-    .not("ticket", "is", null)
-    .limit(100_000);
+  const { data, error } = await admin.rpc("dashboard_cost_by_ticket", {
+    p_device_ids: deviceIds,
+    p_bucket_from: range.bucketFrom,
+    p_bucket_to: range.bucketTo,
+  });
+  if (error) throw error;
 
-  const byTicket = new Map<string, number>();
-  for (const r of rollups ?? []) {
-    if (r.ticket) {
-      byTicket.set(
-        r.ticket,
-        (byTicket.get(r.ticket) ?? 0) + Number(r.cost_cents)
-      );
-    }
-  }
-
-  return Array.from(byTicket.entries())
-    .map(([ticket, cost_cents]) => ({ ticket, cost_cents }))
+  return ((data ?? []) as TicketCostRow[])
+    .map((r) => ({
+      ticket: r.ticket,
+      cost_cents: Number(r.cost_cents),
+    }))
     .filter((t) => t.cost_cents > 0)
     .sort((a, b) => b.cost_cents - a.cost_cents);
+}
+
+interface TicketCostRow {
+  ticket: string;
+  cost_cents: number | string;
 }
 
 /**

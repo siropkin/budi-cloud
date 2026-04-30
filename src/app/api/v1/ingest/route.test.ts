@@ -30,6 +30,56 @@ class FakeSupabase {
     return new FakeQuery(this.tables.get(name)!);
   }
 
+  /**
+   * Mirrors `dashboard_overview_stats` from `004_dashboard_aggregates.sql`
+   * (#92). The full RPC suite lives next to the dal tests; this test only
+   * exercises the overview path on the read side, so we keep the shim minimal
+   * — extend if a future ingest test calls another breakdown.
+   */
+  rpc(name: string, args: Record<string, unknown>) {
+    if (name !== "dashboard_overview_stats") {
+      return Promise.resolve({
+        data: null,
+        error: { message: `unsupported rpc: ${name}` },
+      });
+    }
+    const deviceIds = new Set(args.p_device_ids as string[]);
+    const from = args.p_bucket_from as string;
+    const to = args.p_bucket_to as string;
+    const startedFrom = args.p_started_from as string;
+    const startedTo = args.p_started_to as string;
+    const rollups = (this.tables.get("daily_rollups") ?? []).filter(
+      (r) =>
+        deviceIds.has(r.device_id as string) &&
+        String(r.bucket_day ?? "") >= from &&
+        String(r.bucket_day ?? "") <= to
+    );
+    const totals = rollups.reduce(
+      (acc, r) => ({
+        total_cost_cents: acc.total_cost_cents + Number(r.cost_cents),
+        total_input_tokens: acc.total_input_tokens + Number(r.input_tokens),
+        total_output_tokens: acc.total_output_tokens + Number(r.output_tokens),
+        total_messages: acc.total_messages + Number(r.message_count),
+      }),
+      {
+        total_cost_cents: 0,
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        total_messages: 0,
+      }
+    );
+    const total_sessions = (this.tables.get("session_summaries") ?? []).filter(
+      (s) =>
+        deviceIds.has(s.device_id as string) &&
+        String(s.started_at ?? "") >= startedFrom &&
+        String(s.started_at ?? "") <= startedTo
+    ).length;
+    return Promise.resolve({
+      data: [{ ...totals, total_sessions }],
+      error: null,
+    });
+  }
+
   seed(name: string, rows: Row[]) {
     this.tables.set(name, [...rows]);
   }
