@@ -62,7 +62,12 @@ npm run build
 
 ## Deployment
 
-The app is deployed to Vercel and connects to a Supabase project. Database migrations live in `supabase/migrations/`.
+The app is deployed to Vercel and connects to a Supabase project. Database migrations live in `supabase/migrations/` and ship automatically:
+
+- **Pull requests** — `.github/workflows/ci.yml` dry-runs every migration against a fresh Postgres so syntax / dependency errors fail at review time.
+- **Merges to `main`** — `.github/workflows/db-push.yml` runs `supabase db push --include-all` against the linked Supabase project whenever a commit on `main` touches `supabase/migrations/**`.
+
+Required GitHub Actions secrets: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF`. Do not apply migrations through the Supabase SQL editor — schema applied out-of-band drifts from the migration history and breaks future deploys.
 
 ## Ecosystem
 
