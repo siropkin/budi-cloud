@@ -650,7 +650,14 @@ export async function getSessions(
   return { rows, nextCursor };
 }
 
-interface SessionRow {
+/**
+ * One of the four CLI-side `VitalScore` colours, or `null` when the daemon
+ * didn't emit a score for this session (older daemons, or a session with too
+ * few assistant messages — see `006_session_vitals.sql` and #99).
+ */
+export type VitalState = "green" | "yellow" | "red" | null;
+
+export interface SessionRow {
   device_id: string;
   session_id: string;
   provider: string;
@@ -664,6 +671,44 @@ interface SessionRow {
   total_input_tokens: number | string;
   total_output_tokens: number | string;
   total_cost_cents: number | string;
+  // Vitals (#99). Nullable for older daemons / low-signal sessions.
+  vital_context_drag_state?: VitalState;
+  vital_context_drag_metric?: number | string | null;
+  vital_cache_efficiency_state?: VitalState;
+  vital_cache_efficiency_metric?: number | string | null;
+  vital_thrashing_state?: VitalState;
+  vital_thrashing_metric?: number | string | null;
+  vital_cost_acceleration_state?: VitalState;
+  vital_cost_acceleration_metric?: number | string | null;
+  vital_overall_state?: VitalState;
+}
+
+/**
+ * Fetch a single session by `(device_id, session_id)` for the session-detail
+ * page (#99). Returns `null` when the session does not exist *or* when it
+ * exists but is not visible to the viewer (manager: anywhere in the org;
+ * member: only on a device they own — same scoping as `getSessions`). The
+ * "not visible" → `null` branch deliberately collapses with "not found" so
+ * the URL parameter cannot be used to probe whether a foreign-org session
+ * exists.
+ */
+export async function getSessionDetail(
+  user: BudiUser,
+  deviceId: string,
+  sessionId: string
+): Promise<SessionRow | null> {
+  const admin = createAdminClient();
+  const visibleDeviceIds = await getVisibleDeviceIds(admin, user);
+  if (!visibleDeviceIds.includes(deviceId)) return null;
+
+  const { data } = await admin
+    .from("session_summaries")
+    .select("*")
+    .eq("device_id", deviceId)
+    .eq("session_id", sessionId)
+    .maybeSingle();
+
+  return (data as SessionRow | null) ?? null;
 }
 
 /**
