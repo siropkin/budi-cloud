@@ -133,51 +133,65 @@ export default async function SessionsPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {sessions.map((s) => (
-                    <tr
-                      key={`${s.device_id}-${s.session_id}`}
-                      className="border-b border-white/5"
-                    >
-                      <td className="py-2 text-zinc-300">
-                        <Link
-                          href={`/dashboard/sessions/${encodeURIComponent(
-                            s.session_id
-                          )}?device=${encodeURIComponent(s.device_id)}`}
-                          className="hover:text-white hover:underline"
-                        >
-                          {s.provider}
-                        </Link>
-                      </td>
-                      <td className="py-2 text-zinc-400">
-                        {formatTimestamp(s.started_at)}
-                      </td>
-                      <td className="py-2 text-zinc-400">
-                        {formatDuration(
-                          s.duration_ms,
-                          s.started_at,
-                          s.ended_at
-                        )}
-                      </td>
-                      <td className="py-2 text-zinc-400">
-                        {repoName(s.repo_id)}
-                      </td>
-                      <td className="py-2 text-zinc-400">
-                        {s.git_branch?.replace(/^refs\/heads\//, "") || "-"}
-                      </td>
-                      <td className="py-2 text-right tabular-nums text-zinc-300">
-                        {fmtNum(s.message_count)}
-                      </td>
-                      <td className="py-2 text-right tabular-nums text-zinc-300">
-                        {fmtNum(
-                          Number(s.total_input_tokens) +
-                            Number(s.total_output_tokens)
-                        )}
-                      </td>
-                      <td className="py-2 text-right tabular-nums text-zinc-200">
-                        {fmtCost(Number(s.total_cost_cents))}
-                      </td>
-                    </tr>
-                  ))}
+                  {sessions.map((s) => {
+                    const href = `/dashboard/sessions/${encodeURIComponent(
+                      s.session_id
+                    )}?device=${encodeURIComponent(s.device_id)}`;
+                    return (
+                      <tr
+                        key={`${s.device_id}-${s.session_id}`}
+                        className="border-b border-white/5 transition-colors hover:bg-white/5"
+                      >
+                        <td className="text-zinc-300">
+                          <Link href={href} className="block py-2">
+                            {s.provider}
+                          </Link>
+                        </td>
+                        <td className="text-zinc-400">
+                          <Link href={href} className="block py-2">
+                            {formatTimestamp(s.started_at)}
+                          </Link>
+                        </td>
+                        <td className="text-zinc-400">
+                          <Link href={href} className="block py-2">
+                            {formatDuration(
+                              s.duration_ms,
+                              s.started_at,
+                              s.ended_at
+                            )}
+                          </Link>
+                        </td>
+                        <td className="text-zinc-400">
+                          <Link href={href} className="block py-2">
+                            {repoName(s.repo_id)}
+                          </Link>
+                        </td>
+                        <td className="text-zinc-400">
+                          <Link href={href} className="block py-2">
+                            {s.git_branch?.replace(/^refs\/heads\//, "") || "-"}
+                          </Link>
+                        </td>
+                        <td className="text-right tabular-nums text-zinc-300">
+                          <Link href={href} className="block py-2">
+                            {fmtNum(s.message_count)}
+                          </Link>
+                        </td>
+                        <td className="text-right tabular-nums text-zinc-300">
+                          <Link href={href} className="block py-2">
+                            {fmtNum(
+                              Number(s.total_input_tokens) +
+                                Number(s.total_output_tokens)
+                            )}
+                          </Link>
+                        </td>
+                        <td className="text-right tabular-nums text-zinc-200">
+                          <Link href={href} className="block py-2">
+                            {fmtCost(Number(s.total_cost_cents))}
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
