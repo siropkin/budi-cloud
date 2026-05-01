@@ -19,13 +19,20 @@ export default async function SessionDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ device?: string }>;
+  searchParams: Promise<{
+    device?: string;
+    days?: string;
+    user?: string;
+    cursor?: string;
+    p?: string;
+  }>;
 }) {
   const user = await getCurrentUser();
   if (!user?.org_id) return null;
 
   const { id: sessionId } = await params;
-  const { device: deviceId } = await searchParams;
+  const sp = await searchParams;
+  const { device: deviceId } = sp;
   if (!deviceId) {
     // The composite PK requires both halves; without `device` the page can't
     // disambiguate two daemons that happen to share a session_id. Send the
@@ -39,11 +46,13 @@ export default async function SessionDetailPage({
   const totalTokens =
     Number(session.total_input_tokens) + Number(session.total_output_tokens);
 
+  const backHref = buildSessionsBackHref(sp);
+
   return (
     <div className="space-y-6">
       <div>
         <Link
-          href="/dashboard/sessions"
+          href={backHref}
           className="text-sm text-zinc-400 hover:text-zinc-200"
         >
           ← Sessions
@@ -139,6 +148,25 @@ function Field({ label, value }: { label: string; value: string | number }) {
       <dd className="mt-0.5 text-zinc-200">{value}</dd>
     </div>
   );
+}
+
+// Round-trip the list-page filter/page params (#85) onto the back link so a
+// viewer arriving from `/dashboard/sessions?days=…&user=…&cursor=…&p=…`
+// returns to the same filtered, paged view. Direct-link visits with no
+// referrer params produce a bare `/dashboard/sessions` href.
+function buildSessionsBackHref(sp: {
+  days?: string;
+  user?: string;
+  cursor?: string;
+  p?: string;
+}): string {
+  const qs = new URLSearchParams();
+  if (sp.days) qs.set("days", sp.days);
+  if (sp.user) qs.set("user", sp.user);
+  if (sp.cursor) qs.set("cursor", sp.cursor);
+  if (sp.p) qs.set("p", sp.p);
+  const s = qs.toString();
+  return s ? `/dashboard/sessions?${s}` : "/dashboard/sessions";
 }
 
 function toState(raw: string | null | undefined): VitalState {
