@@ -138,7 +138,16 @@ export default async function SessionsPage({
                       key={`${s.device_id}-${s.session_id}`}
                       className="border-b border-white/5"
                     >
-                      <td className="py-2 text-zinc-300">{s.provider}</td>
+                      <td className="py-2 text-zinc-300">
+                        <Link
+                          href={`/dashboard/sessions/${encodeURIComponent(
+                            s.session_id
+                          )}?device=${encodeURIComponent(s.device_id)}`}
+                          className="hover:text-white hover:underline"
+                        >
+                          {s.provider}
+                        </Link>
+                      </td>
                       <td className="py-2 text-zinc-400">
                         {formatTimestamp(s.started_at)}
                       </td>

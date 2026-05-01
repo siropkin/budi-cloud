@@ -1372,6 +1372,126 @@ function splitTopLevel(s: string, sep: string): string[] {
   return parts;
 }
 
+describe("getSessionDetail (#99)", () => {
+  const manager = {
+    id: "usr_ivan",
+    org_id: "org_team",
+    role: "manager" as const,
+    api_key: "budi_i",
+    display_name: "Ivan",
+    email: "ivan@example.com",
+  };
+
+  function seedSession(extras: Partial<Row> = {}) {
+    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("users", [
+      { ...manager },
+      {
+        id: "usr_jane",
+        org_id: "org_team",
+        role: "member",
+        api_key: "budi_j",
+        display_name: "Jane",
+        email: "jane@example.com",
+      },
+      {
+        id: "usr_outsider",
+        org_id: "org_other",
+        role: "manager",
+        api_key: "budi_o",
+        display_name: "Outsider",
+        email: "outsider@example.com",
+      },
+    ]);
+    fake.seed("orgs", [
+      { id: "org_team", name: "team" },
+      { id: "org_other", name: "other" },
+    ]);
+    fake.seed("devices", [
+      { id: "dev_ivan", user_id: "usr_ivan" },
+      { id: "dev_jane", user_id: "usr_jane" },
+      { id: "dev_outsider", user_id: "usr_outsider" },
+    ]);
+    fake.seed("session_summaries", [
+      {
+        device_id: "dev_ivan",
+        session_id: "sess_v",
+        provider: "claude_code",
+        started_at: "2026-04-15T10:00:00.000Z",
+        ended_at: "2026-04-15T11:00:00.000Z",
+        duration_ms: 3_600_000,
+        repo_id: "repo_x",
+        git_branch: "refs/heads/main",
+        ticket: null,
+        message_count: 12,
+        total_input_tokens: 2000,
+        total_output_tokens: 800,
+        total_cost_cents: 250,
+        vital_context_drag_state: "yellow",
+        vital_context_drag_metric: 18.2,
+        vital_cache_efficiency_state: "green",
+        vital_cache_efficiency_metric: 87,
+        vital_thrashing_state: "red",
+        vital_thrashing_metric: 0.95,
+        vital_cost_acceleration_state: "yellow",
+        vital_cost_acceleration_metric: 42,
+        vital_overall_state: "red",
+        ...extras,
+      },
+      {
+        device_id: "dev_outsider",
+        session_id: "sess_outsider",
+        provider: "claude_code",
+        started_at: "2026-04-15T10:00:00.000Z",
+      },
+    ]);
+  }
+
+  it("returns the session with vital fields when visible to the viewer", async () => {
+    seedSession();
+    const { getSessionDetail } = await loadDal();
+
+    const detail = await getSessionDetail(manager, "dev_ivan", "sess_v");
+    expect(detail).not.toBeNull();
+    expect(detail?.vital_overall_state).toBe("red");
+    expect(detail?.vital_context_drag_state).toBe("yellow");
+    expect(Number(detail?.vital_context_drag_metric)).toBe(18.2);
+    expect(detail?.vital_cache_efficiency_state).toBe("green");
+    expect(detail?.vital_thrashing_state).toBe("red");
+    expect(detail?.vital_cost_acceleration_state).toBe("yellow");
+  });
+
+  it("returns null for a foreign-org session — collapses with not-found", async () => {
+    // Per ADR-0083 §6: visibility branch must not leak existence of a session
+    // belonging to another org. A 404-equivalent (null) keeps that contract.
+    seedSession();
+    const { getSessionDetail } = await loadDal();
+
+    const detail = await getSessionDetail(
+      manager,
+      "dev_outsider",
+      "sess_outsider"
+    );
+    expect(detail).toBeNull();
+  });
+
+  it("returns null for a member viewer asking about a teammate's session", async () => {
+    seedSession();
+    const { getSessionDetail } = await loadDal();
+
+    const jane = {
+      id: "usr_jane",
+      org_id: "org_team",
+      role: "member" as const,
+      api_key: "budi_j",
+      display_name: "Jane",
+      email: "jane@example.com",
+    };
+    const detail = await getSessionDetail(jane, "dev_ivan", "sess_v");
+    expect(detail).toBeNull();
+  });
+});
+
 describe("getSessions cursor pagination (#85)", () => {
   // Unbounded range so the per-page cursor is the only thing trimming output.
   const wideRange = utcRange("2026-01-01", "2026-12-31");

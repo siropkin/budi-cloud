@@ -22,6 +22,31 @@ export interface IngestDailyRollup {
   cost_cents: number;
 }
 
+/**
+ * Allowed values for the per-vital traffic-light score (#99). Mirrors the
+ * `Score::{Green,Yellow,Red}` enum on `VitalScore` in budi-core. The cloud
+ * mirrors the column-level CHECK in `006_session_vitals.sql`, but we also
+ * filter at the ingest layer so a malformed envelope never reaches the
+ * database in the first place.
+ */
+export type VitalState = "green" | "yellow" | "red";
+
+const VITAL_STATE_VALUES: ReadonlySet<string> = new Set([
+  "green",
+  "yellow",
+  "red",
+]);
+
+function normalizeVitalState(raw: unknown): VitalState | null {
+  if (typeof raw !== "string") return null;
+  return VITAL_STATE_VALUES.has(raw) ? (raw as VitalState) : null;
+}
+
+function normalizeVitalMetric(raw: unknown): number | null {
+  if (typeof raw !== "number") return null;
+  return Number.isFinite(raw) ? raw : null;
+}
+
 export interface IngestSessionSummary {
   session_id: string;
   provider: string;
@@ -35,6 +60,17 @@ export interface IngestSessionSummary {
   total_input_tokens: number;
   total_output_tokens: number;
   total_cost_cents: number;
+  // Vitals (#99). Optional — older daemons (< 8.3.15) omit these, and budi-core
+  // legitimately skips emission for sessions with too few assistant messages.
+  vital_context_drag_state?: string | null;
+  vital_context_drag_metric?: number | null;
+  vital_cache_efficiency_state?: string | null;
+  vital_cache_efficiency_metric?: number | null;
+  vital_thrashing_state?: string | null;
+  vital_thrashing_metric?: number | null;
+  vital_cost_acceleration_state?: string | null;
+  vital_cost_acceleration_metric?: number | null;
+  vital_overall_state?: string | null;
 }
 
 export function buildRollupRows(
@@ -93,6 +129,27 @@ export function buildSessionRows(
     total_input_tokens: s.total_input_tokens,
     total_output_tokens: s.total_output_tokens,
     total_cost_cents: s.total_cost_cents,
+    // Vitals (#99). Each field is normalized independently so a daemon that
+    // emits e.g. only the overall state (or only some vitals) still lands the
+    // partial signal — the dashboard already renders missing slots as a
+    // dash.
+    vital_context_drag_state: normalizeVitalState(s.vital_context_drag_state),
+    vital_context_drag_metric: normalizeVitalMetric(s.vital_context_drag_metric),
+    vital_cache_efficiency_state: normalizeVitalState(
+      s.vital_cache_efficiency_state
+    ),
+    vital_cache_efficiency_metric: normalizeVitalMetric(
+      s.vital_cache_efficiency_metric
+    ),
+    vital_thrashing_state: normalizeVitalState(s.vital_thrashing_state),
+    vital_thrashing_metric: normalizeVitalMetric(s.vital_thrashing_metric),
+    vital_cost_acceleration_state: normalizeVitalState(
+      s.vital_cost_acceleration_state
+    ),
+    vital_cost_acceleration_metric: normalizeVitalMetric(
+      s.vital_cost_acceleration_metric
+    ),
+    vital_overall_state: normalizeVitalState(s.vital_overall_state),
     synced_at: syncedAt,
   }));
 }
