@@ -102,6 +102,7 @@ export function ActivityChart({ data }: { data: ActivityData[] }) {
           }}
         />
         <Tooltip
+          cursor={{ fill: "rgba(255,255,255,0.05)" }}
           contentStyle={{
             background: "#18181b",
             border: "1px solid rgba(255,255,255,0.1)",

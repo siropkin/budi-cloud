@@ -100,6 +100,7 @@ export function CostBarChart({
           tick={{ fill: "#71717a", fontSize: 12 }}
         />
         <Tooltip
+          cursor={{ fill: "rgba(255,255,255,0.05)" }}
           contentStyle={{
             background: "#18181b",
             border: "1px solid rgba(255,255,255,0.1)",
