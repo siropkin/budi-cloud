@@ -27,10 +27,7 @@ export function TeamCountChart({ data }: { data: TeamCountDatum[] }) {
 
   return (
     <ResponsiveContainer width="100%" height={300}>
-      <BarChart
-        data={data}
-        margin={{ left: 16, right: 8, top: 8, bottom: 8 }}
-      >
+      <BarChart data={data} margin={{ left: 16, right: 8, top: 8, bottom: 8 }}>
         <CartesianGrid
           strokeDasharray="3 3"
           stroke="rgba(255,255,255,0.06)"
