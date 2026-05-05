@@ -9,8 +9,10 @@ import {
 import { dateRangeFromDays } from "@/lib/date-range";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
-import { fmtCost } from "@/lib/format";
+import { parseUnit } from "@/lib/units";
+import { fmtCost, fmtNum } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
+import { UnitsSelector } from "@/components/units-selector";
 import { CostBarChart } from "@/components/charts/cost-bar-chart";
 import { TeamCountChart } from "@/components/charts/team-count-chart";
 import { CostPerPersonChart } from "@/components/charts/cost-per-person-chart";
@@ -19,7 +21,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 export default async function TeamPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string }>;
+  searchParams: Promise<{ days?: string; units?: string }>;
 }) {
   const params = await searchParams;
   const user = await getCurrentUser();
@@ -29,6 +31,7 @@ export default async function TeamPage({
   // member it can only ever show themselves — send them back to Overview (#64).
   if (user.role !== "manager") redirect("/dashboard");
 
+  const unit = parseUnit(params.units);
   const earliestActivity =
     params.days === ALL_PERIOD_VALUE ? await getEarliestActivity(user) : null;
   const tz = await getViewerTimeZone();
@@ -38,26 +41,37 @@ export default async function TeamPage({
     getTeamActivityByDay(user, range),
   ]);
 
+  const isTokens = unit === "tokens";
+  const valueWord = isTokens ? "Tokens" : "Cost";
+  const perPersonTitle = isTokens ? "Tokens per Person" : "Cost per Person";
+  const fmtValue = (cost_cents: number, tokens: number) =>
+    isTokens ? fmtNum(tokens) : fmtCost(cost_cents);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Team</h1>
         <Suspense>
-          <PeriodSelector />
+          <div className="flex flex-wrap items-center gap-3">
+            <UnitsSelector />
+            <PeriodSelector />
+          </div>
         </Suspense>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Cost by Team Member</CardTitle>
+          <CardTitle>{`${valueWord} by Team Member`}</CardTitle>
         </CardHeader>
         <CardContent>
           <CostBarChart
             data={userCosts.map((u) => ({
               label: u.name,
               cost_cents: u.cost_cents,
+              tokens: u.input_tokens + u.output_tokens,
             }))}
             emptyLabel="No team cost data for this period"
+            unit={unit}
           />
         </CardContent>
       </Card>
@@ -73,10 +87,10 @@ export default async function TeamPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Cost per Person</CardTitle>
+          <CardTitle>{perPersonTitle}</CardTitle>
         </CardHeader>
         <CardContent>
-          <CostPerPersonChart data={teamActivity} />
+          <CostPerPersonChart data={teamActivity} unit={unit} />
         </CardContent>
       </Card>
 
@@ -91,7 +105,7 @@ export default async function TeamPage({
               <thead>
                 <tr className="border-b border-white/10 text-left text-zinc-400">
                   <th className="pb-2 font-medium">Name</th>
-                  <th className="pb-2 text-right font-medium">Cost</th>
+                  <th className="pb-2 text-right font-medium">{valueWord}</th>
                 </tr>
               </thead>
               <tbody>
@@ -99,7 +113,7 @@ export default async function TeamPage({
                   <tr key={i} className="border-b border-white/5">
                     <td className="py-2 text-zinc-200">{u.name}</td>
                     <td className="py-2 text-right tabular-nums text-zinc-300">
-                      {fmtCost(u.cost_cents)}
+                      {fmtValue(u.cost_cents, u.input_tokens + u.output_tokens)}
                     </td>
                   </tr>
                 ))}
@@ -110,7 +124,7 @@ export default async function TeamPage({
                 <li key={i} className="flex items-center justify-between py-2">
                   <span className="text-zinc-200">{u.name}</span>
                   <span className="tabular-nums text-zinc-300">
-                    {fmtCost(u.cost_cents)}
+                    {fmtValue(u.cost_cents, u.input_tokens + u.output_tokens)}
                   </span>
                 </li>
               ))}

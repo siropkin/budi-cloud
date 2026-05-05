@@ -9,12 +9,14 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { fmtCost } from "@/lib/format";
+import { fmtCost, fmtNum } from "@/lib/format";
+import type { Unit } from "@/lib/units";
 import { useMediaQuery } from "@/lib/use-media-query";
 
 interface CostBarDatum {
   label: string;
   cost_cents: number;
+  tokens: number;
 }
 
 const MAX_ITEMS = 10;
@@ -27,7 +29,7 @@ function barChartHeight(rows: number): number {
 
 function truncateLabel(value: string, maxLen = 28): string {
   if (value.length <= maxLen) return value;
-  return value.slice(0, maxLen - 1) + "\u2026";
+  return value.slice(0, maxLen - 1) + "…";
 }
 
 /**
@@ -49,8 +51,8 @@ function commonPrefix(values: string[]): string {
 
 /**
  * Drop the longest common prefix from every label when truncation would
- * otherwise collapse rows onto each other \u2014 e.g. four rows of
- * `claude_code / claude-\u2026` lose the differentiating model id at mobile
+ * otherwise collapse rows onto each other — e.g. four rows of
+ * `claude_code / claude-…` lose the differentiating model id at mobile
  * widths. Only kicks in when the truncated forms actually collide and the
  * stripped forms are non-empty (#121).
  */
@@ -67,9 +69,11 @@ function stripSharedPrefix(labels: string[], maxLen: number): string[] {
 export function CostBarChart({
   data,
   emptyLabel,
+  unit = "dollars",
 }: {
   data: CostBarDatum[];
   emptyLabel: string;
+  unit?: Unit;
 }) {
   // At 390px the 180px label column plus 56px right padding claims ~60% of
   // the chart, leaving bars with no room. Shrink both below `sm` and leave
@@ -83,8 +87,17 @@ export function CostBarChart({
   // clipped (#120). 14 chars fits comfortably.
   const labelMaxLen = isCompact ? 14 : 28;
 
+  // The bar dataKey is the same name across both modes so recharts doesn't
+  // re-key the bar element on toggle; the projected `value` is what flips.
+  const fmt = unit === "tokens" ? fmtNum : fmtCost;
+  const valueLabel = unit === "tokens" ? "Tokens" : "Cost";
+
   const sorted = [...data]
-    .sort((a, b) => b.cost_cents - a.cost_cents)
+    .map((d) => ({
+      ...d,
+      value: unit === "tokens" ? d.tokens : d.cost_cents,
+    }))
+    .sort((a, b) => b.value - a.value)
     .slice(0, MAX_ITEMS);
 
   if (sorted.length === 0) {
@@ -145,9 +158,9 @@ export function CostBarChart({
           }}
         />
         <XAxis
-          dataKey="cost_cents"
+          dataKey="value"
           type="number"
-          tickFormatter={(v) => fmtCost(v)}
+          tickFormatter={(v) => fmt(Number(v))}
           axisLine={false}
           tickLine={false}
           tick={{ fill: "#71717a", fontSize: 12 }}
@@ -160,31 +173,31 @@ export function CostBarChart({
             borderRadius: "8px",
             fontSize: "13px",
           }}
-          formatter={(value) => [fmtCost(Number(value)), "Cost"]}
+          formatter={(value) => [fmt(Number(value)), valueLabel]}
         />
         <Bar
-          dataKey="cost_cents"
+          dataKey="value"
           fill="#3b82f6"
           barSize={BAR_SIZE}
           radius={[5, 5, 5, 5]}
-          // Sub-dollar rows otherwise render at <1px next to a double-digit
-          // leader. Floor the rendered width so every >0 row is still a
-          // recognizable sliver; the cost label to the right is the
-          // authoritative magnitude signal (#41).
+          // Sub-dollar (or sub-K-token) rows otherwise render at <1px next
+          // to a double-digit leader. Floor the rendered width so every >0
+          // row is still a recognizable sliver; the right-side label is
+          // the authoritative magnitude signal (#41).
           minPointSize={4}
           // recharts v3 gates LabelList on animation completion; if the Bar
           // ever fails to emit `onAnimationEnd` (e.g. under strict mode or
           // when re-rendered mid-animation) `<LabelList>` stays empty and the
-          // `$X.XX` suffix is silently missing. Skip the animation so labels
+          // suffix label is silently missing. Skip the animation so labels
           // render on first paint.
           isAnimationActive={false}
         >
           <LabelList
-            dataKey="cost_cents"
+            dataKey="value"
             position="right"
             fill="#71717a"
             fontSize={12}
-            formatter={(v) => fmtCost(Number(v))}
+            formatter={(v) => fmt(Number(v))}
           />
         </Bar>
       </BarChart>

@@ -270,16 +270,26 @@ export async function getCostByUser(user: BudiUser, range: DateRange) {
     userMeta.set(u.id, u.display_name || u.email || u.id.slice(0, 8));
   }
 
-  type Bucket = { id: string; name: string; cost_cents: number };
+  type Bucket = {
+    id: string;
+    name: string;
+    cost_cents: number;
+    input_tokens: number;
+    output_tokens: number;
+  };
   const byUser = new Map<string, Bucket>();
   for (const r of deviceCostRows) {
     const ownerId = deviceToUser.get(r.device_id);
     const bucketId =
       ownerId && visibleOwnerIds.has(ownerId) ? ownerId : UNASSIGNED_USER_ID;
     const cost = Number(r.cost_cents);
+    const inTok = Number(r.input_tokens ?? 0);
+    const outTok = Number(r.output_tokens ?? 0);
     const existing = byUser.get(bucketId);
     if (existing) {
       existing.cost_cents += cost;
+      existing.input_tokens += inTok;
+      existing.output_tokens += outTok;
     } else {
       byUser.set(bucketId, {
         id: bucketId,
@@ -288,12 +298,14 @@ export async function getCostByUser(user: BudiUser, range: DateRange) {
             ? "Unassigned"
             : (userMeta.get(bucketId) ?? bucketId.slice(0, 8)),
         cost_cents: cost,
+        input_tokens: inTok,
+        output_tokens: outTok,
       });
     }
   }
 
   return Array.from(byUser.values())
-    .filter((u) => u.cost_cents > 0)
+    .filter((u) => u.cost_cents > 0 || u.input_tokens + u.output_tokens > 0)
     .sort((a, b) => {
       // Keep "Unassigned" at the end regardless of its magnitude.
       if (a.id === UNASSIGNED_USER_ID) return 1;
@@ -305,12 +317,16 @@ export async function getCostByUser(user: BudiUser, range: DateRange) {
 interface DeviceCostRow {
   device_id: string;
   cost_cents: number | string;
+  input_tokens?: number | string;
+  output_tokens?: number | string;
 }
 
 export interface TeamActivityDay {
   bucket_day: string;
   active_members: number;
   cost_cents: number;
+  input_tokens: number;
+  output_tokens: number;
 }
 
 /**
@@ -343,6 +359,8 @@ export async function getTeamActivityByDay(
       bucket_day: r.bucket_day,
       active_members: Number(r.active_members),
       cost_cents: Number(r.cost_cents),
+      input_tokens: Number(r.input_tokens ?? 0),
+      output_tokens: Number(r.output_tokens ?? 0),
     }))
     .sort((a, b) => a.bucket_day.localeCompare(b.bucket_day));
 }
@@ -351,6 +369,8 @@ interface TeamActivityRow {
   bucket_day: string;
   active_members: number | string;
   cost_cents: number | string;
+  input_tokens?: number | string;
+  output_tokens?: number | string;
 }
 
 interface UserLookup {
@@ -366,6 +386,8 @@ export interface DeviceCost {
   owner_name: string | null;
   last_seen: string | null;
   cost_cents: number;
+  input_tokens: number;
+  output_tokens: number;
 }
 
 /**
@@ -441,10 +463,17 @@ export async function getCostByDevice(
   }
 
   // The RPC already aggregates by device_id, so each row is a (device, sum)
-  // pair — no further reduction needed.
-  const costByDevice = new Map<string, number>();
+  // tuple — no further reduction needed.
+  const totalsByDevice = new Map<
+    string,
+    { cost_cents: number; input_tokens: number; output_tokens: number }
+  >();
   for (const r of rollups) {
-    costByDevice.set(r.device_id, Number(r.cost_cents));
+    totalsByDevice.set(r.device_id, {
+      cost_cents: Number(r.cost_cents),
+      input_tokens: Number(r.input_tokens ?? 0),
+      output_tokens: Number(r.output_tokens ?? 0),
+    });
   }
 
   // Surface every visible device — including zero-cost ones — so a brand-new
@@ -453,6 +482,7 @@ export async function getCostByDevice(
   // gap covered by FirstSyncInProgressBanner on Overview.
   const result: DeviceCost[] = [];
   for (const [id, meta] of deviceMeta) {
+    const totals = totalsByDevice.get(id);
     result.push({
       id,
       label: meta.label,
@@ -461,7 +491,9 @@ export async function getCostByDevice(
           ? (ownerLookup.get(meta.user_id) ?? null)
           : null,
       last_seen: meta.last_seen,
-      cost_cents: costByDevice.get(id) ?? 0,
+      cost_cents: totals?.cost_cents ?? 0,
+      input_tokens: totals?.input_tokens ?? 0,
+      output_tokens: totals?.output_tokens ?? 0,
     });
   }
 
@@ -494,8 +526,10 @@ export async function getCostByModel(
       provider: r.provider,
       model: r.model,
       cost_cents: Number(r.cost_cents),
+      input_tokens: Number(r.input_tokens ?? 0),
+      output_tokens: Number(r.output_tokens ?? 0),
     }))
-    .filter((m) => m.cost_cents > 0)
+    .filter((m) => m.cost_cents > 0 || m.input_tokens + m.output_tokens > 0)
     .sort((a, b) => b.cost_cents - a.cost_cents);
 }
 
@@ -503,6 +537,8 @@ interface ModelCostRow {
   provider: string;
   model: string;
   cost_cents: number | string;
+  input_tokens?: number | string;
+  output_tokens?: number | string;
 }
 
 /**
@@ -530,14 +566,18 @@ export async function getCostByRepo(
     .map((r) => ({
       repo_id: r.repo_id,
       cost_cents: Number(r.cost_cents),
+      input_tokens: Number(r.input_tokens ?? 0),
+      output_tokens: Number(r.output_tokens ?? 0),
     }))
-    .filter((r) => r.cost_cents > 0)
+    .filter((r) => r.cost_cents > 0 || r.input_tokens + r.output_tokens > 0)
     .sort((a, b) => b.cost_cents - a.cost_cents);
 }
 
 interface RepoCostRow {
   repo_id: string;
   cost_cents: number | string;
+  input_tokens?: number | string;
+  output_tokens?: number | string;
 }
 
 /**
@@ -566,8 +606,10 @@ export async function getCostByBranch(
       repo_id: r.repo_id,
       git_branch: r.git_branch,
       cost_cents: Number(r.cost_cents),
+      input_tokens: Number(r.input_tokens ?? 0),
+      output_tokens: Number(r.output_tokens ?? 0),
     }))
-    .filter((b) => b.cost_cents > 0)
+    .filter((b) => b.cost_cents > 0 || b.input_tokens + b.output_tokens > 0)
     .sort((a, b) => b.cost_cents - a.cost_cents);
 }
 
@@ -575,6 +617,8 @@ interface BranchCostRow {
   repo_id: string;
   git_branch: string;
   cost_cents: number | string;
+  input_tokens?: number | string;
+  output_tokens?: number | string;
 }
 
 /**
@@ -602,14 +646,18 @@ export async function getCostByTicket(
     .map((r) => ({
       ticket: r.ticket,
       cost_cents: Number(r.cost_cents),
+      input_tokens: Number(r.input_tokens ?? 0),
+      output_tokens: Number(r.output_tokens ?? 0),
     }))
-    .filter((t) => t.cost_cents > 0)
+    .filter((t) => t.cost_cents > 0 || t.input_tokens + t.output_tokens > 0)
     .sort((a, b) => b.cost_cents - a.cost_cents);
 }
 
 interface TicketCostRow {
   ticket: string;
   cost_cents: number | string;
+  input_tokens?: number | string;
+  output_tokens?: number | string;
 }
 
 /**

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { ReactElement } from "react";
 import { Bar, BarChart, LabelList } from "recharts";
-import { fmtCost } from "@/lib/format";
+import { fmtCost, fmtNum } from "@/lib/format";
 
 // CostBarChart now calls `useMediaQuery` to shrink the y-axis column on
 // narrow viewports. The hook is stubbed by a controllable function so each
@@ -45,12 +45,12 @@ describe("CostBarChart", () => {
     // Without minPointSize the non-leading bars shrink to <1px; without
     // isAnimationActive={false} LabelList silently stays empty on first paint.
     const mixedScale = [
-      { label: "claude_code / claude-opus-4-7", cost_cents: 3000 },
-      { label: "claude-opus-4-6", cost_cents: 81 },
-      { label: "codex / (untagged)", cost_cents: 47 },
-      { label: "tiny-1", cost_cents: 12 },
-      { label: "tiny-2", cost_cents: 9 },
-      { label: "tiny-3", cost_cents: 7 },
+      { label: "claude_code / claude-opus-4-7", cost_cents: 3000, tokens: 0 },
+      { label: "claude-opus-4-6", cost_cents: 81, tokens: 0 },
+      { label: "codex / (untagged)", cost_cents: 47, tokens: 0 },
+      { label: "tiny-1", cost_cents: 12, tokens: 0 },
+      { label: "tiny-2", cost_cents: 9, tokens: 0 },
+      { label: "tiny-3", cost_cents: 7, tokens: 0 },
     ];
     const tree = CostBarChart({
       data: mixedScale,
@@ -71,31 +71,65 @@ describe("CostBarChart", () => {
     const labelList = nodes.find((n) => n.type === LabelList);
     expect(
       labelList,
-      "LabelList should be inside Bar so each row gets a $X.XX suffix"
+      "LabelList should be inside Bar so each row gets a value suffix"
     ).toBeDefined();
     const labelListProps = labelList!.props as {
       dataKey: string;
       position: string;
       formatter: (v: unknown) => string | number;
     };
-    expect(labelListProps.dataKey).toBe("cost_cents");
+    // Both axes are now keyed off the unit-projected `value` field so the
+    // toggle doesn't have to re-key the bar element on switch (#128).
+    expect(labelListProps.dataKey).toBe("value");
     expect(labelListProps.position).toBe("right");
 
-    // Formatter must round-trip a cents amount into the fmtCost form so the
-    // regression where `$X.XX` goes missing can't sneak back in.
+    // Default unit is dollars, so the formatter must round-trip cents into
+    // the fmtCost form and the missing-suffix regression from #41 stays put.
     const formatter = labelListProps.formatter;
     expect(formatter).toBeTypeOf("function");
     expect(formatter(3000)).toBe(fmtCost(3000));
     expect(formatter(81)).toBe(fmtCost(81));
   });
 
+  it("renders token totals when unit='tokens' (#128)", () => {
+    const data = [
+      { label: "alpha", cost_cents: 1000, tokens: 5_000_000 },
+      { label: "beta", cost_cents: 200, tokens: 3_500_000 },
+    ];
+    const tree = CostBarChart({ data, emptyLabel: "unused", unit: "tokens" });
+    const nodes = Array.from(walk(tree));
+
+    const labelList = nodes.find((n) => n.type === LabelList);
+    expect(labelList).toBeDefined();
+    const formatter = (
+      labelList!.props as { formatter: (v: unknown) => string | number }
+    ).formatter;
+    // Token mode formats with fmtNum (no $).
+    expect(formatter(5_000_000)).toBe(fmtNum(5_000_000));
+    expect(formatter(3_500_000)).toBe(fmtNum(3_500_000));
+
+    // Sort order follows the projected token value, not cost — alpha leads
+    // because 5M > 3.5M, even though both have positive cost.
+    const barChart = nodes.find((n) => n.type === BarChart);
+    const rows = (barChart!.props as { data: { value: number }[] }).data;
+    expect(rows.map((r) => r.value)).toEqual([5_000_000, 3_500_000]);
+  });
+
   it("strips the shared label prefix on compact widths so rows are visibly distinct (#121)", () => {
     isCompact = true;
     try {
       const collidingPrefix = [
-        { label: "claude_code / claude-sonnet-4-5", cost_cents: 5000 },
-        { label: "claude_code / claude-haiku-4-5", cost_cents: 3000 },
-        { label: "claude_code / claude-opus-4-7", cost_cents: 1000 },
+        {
+          label: "claude_code / claude-sonnet-4-5",
+          cost_cents: 5000,
+          tokens: 0,
+        },
+        {
+          label: "claude_code / claude-haiku-4-5",
+          cost_cents: 3000,
+          tokens: 0,
+        },
+        { label: "claude_code / claude-opus-4-7", cost_cents: 1000, tokens: 0 },
       ];
       const tree = CostBarChart({
         data: collidingPrefix,
@@ -122,8 +156,8 @@ describe("CostBarChart", () => {
     isCompact = true;
     try {
       const distinctEnough = [
-        { label: "alpha", cost_cents: 100 },
-        { label: "beta", cost_cents: 50 },
+        { label: "alpha", cost_cents: 100, tokens: 0 },
+        { label: "beta", cost_cents: 50, tokens: 0 },
       ];
       const tree = CostBarChart({
         data: distinctEnough,
