@@ -30,6 +30,40 @@ function truncateLabel(value: string, maxLen = 28): string {
   return value.slice(0, maxLen - 1) + "\u2026";
 }
 
+/**
+ * Longest common prefix shared by all strings. Returns "" for fewer than two
+ * inputs so we never strip from a single-row chart.
+ */
+function commonPrefix(values: string[]): string {
+  if (values.length < 2) return "";
+  let prefix = values[0];
+  for (let i = 1; i < values.length && prefix.length > 0; i++) {
+    const v = values[i];
+    let j = 0;
+    const max = Math.min(prefix.length, v.length);
+    while (j < max && prefix.charCodeAt(j) === v.charCodeAt(j)) j++;
+    prefix = prefix.slice(0, j);
+  }
+  return prefix;
+}
+
+/**
+ * Drop the longest common prefix from every label when truncation would
+ * otherwise collapse rows onto each other \u2014 e.g. four rows of
+ * `claude_code / claude-\u2026` lose the differentiating model id at mobile
+ * widths. Only kicks in when the truncated forms actually collide and the
+ * stripped forms are non-empty (#121).
+ */
+function stripSharedPrefix(labels: string[], maxLen: number): string[] {
+  const truncated = labels.map((l) => truncateLabel(l, maxLen));
+  if (new Set(truncated).size === truncated.length) return labels;
+  const prefix = commonPrefix(labels);
+  if (prefix.length === 0) return labels;
+  const stripped = labels.map((l) => l.slice(prefix.length));
+  if (stripped.some((l) => l.length === 0)) return labels;
+  return stripped;
+}
+
 export function CostBarChart({
   data,
   emptyLabel,
@@ -61,38 +95,54 @@ export function CostBarChart({
     );
   }
 
+  // Strip the common prefix so e.g. `claude_code / claude-sonnet-4-5` and
+  // `claude_code / claude-haiku-4-5` don't both truncate to
+  // `claude_code / cla…` at mobile widths (#121). Keep the original on each
+  // row for the SVG <title> so the full label is still discoverable.
+  const displayLabels = stripSharedPrefix(
+    sorted.map((d) => d.label),
+    labelMaxLen
+  );
+  const rows = sorted.map((d, i) => ({
+    ...d,
+    displayLabel: displayLabels[i],
+  }));
+
   const height = barChartHeight(sorted.length);
 
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart
-        data={sorted}
+        data={rows}
         layout="vertical"
         barCategoryGap={BAR_GAP}
         margin={{ left: leftMargin, right: rightMargin, top: 6, bottom: 6 }}
       >
         <YAxis
-          dataKey="label"
+          dataKey="displayLabel"
           type="category"
           tickLine={false}
           axisLine={false}
           width={yAxisWidth}
           interval={0}
-          tick={({ x, y, payload }) => (
-            <g transform={`translate(${x},${y})`}>
-              <text
-                x={0}
-                y={0}
-                dy={4}
-                textAnchor="end"
-                fill="#71717a"
-                fontSize={12}
-              >
-                <title>{payload.value}</title>
-                {truncateLabel(payload.value, labelMaxLen)}
-              </text>
-            </g>
-          )}
+          tick={({ x, y, payload, index }) => {
+            const original = rows[index]?.label ?? payload.value;
+            return (
+              <g transform={`translate(${x},${y})`}>
+                <text
+                  x={0}
+                  y={0}
+                  dy={4}
+                  textAnchor="end"
+                  fill="#71717a"
+                  fontSize={12}
+                >
+                  <title>{original}</title>
+                  {truncateLabel(payload.value, labelMaxLen)}
+                </text>
+              </g>
+            );
+          }}
         />
         <XAxis
           dataKey="cost_cents"
