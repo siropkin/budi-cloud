@@ -83,7 +83,12 @@ function rollupsForRange(
 const RPC_HANDLERS: Record<string, RpcHandler> = {
   dashboard_overview_stats(tables, args) {
     const rows = rollupsForRange(tables, args);
-    const totals = rows.reduce(
+    const totals = rows.reduce<{
+      total_cost_cents: number;
+      total_input_tokens: number;
+      total_output_tokens: number;
+      total_messages: number;
+    }>(
       (acc, r) => ({
         total_cost_cents: acc.total_cost_cents + Number(r.cost_cents),
         total_input_tokens: acc.total_input_tokens + Number(r.input_tokens),

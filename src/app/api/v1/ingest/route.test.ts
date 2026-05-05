@@ -54,7 +54,12 @@ class FakeSupabase {
         String(r.bucket_day ?? "") >= from &&
         String(r.bucket_day ?? "") <= to
     );
-    const totals = rollups.reduce(
+    const totals = rollups.reduce<{
+      total_cost_cents: number;
+      total_input_tokens: number;
+      total_output_tokens: number;
+      total_messages: number;
+    }>(
       (acc, r) => ({
         total_cost_cents: acc.total_cost_cents + Number(r.cost_cents),
         total_input_tokens: acc.total_input_tokens + Number(r.input_tokens),
@@ -419,7 +424,31 @@ describe("POST /v1/ingest + dashboard read path (#14)", () => {
 
     const { POST } = await import("./route");
 
-    const baseEnvelope = {
+    type SessionSummary = {
+      session_id: string;
+      provider: string;
+      started_at: string | null;
+      ended_at: string;
+      duration_ms: number;
+      repo_id: string | null;
+      git_branch: string | null;
+      ticket: string | null;
+      message_count: number;
+      total_input_tokens: number;
+      total_output_tokens: number;
+      total_cost_cents: number;
+    };
+    type Envelope = {
+      schema_version: number;
+      device_id: string;
+      org_id: string;
+      synced_at: string;
+      payload: {
+        daily_rollups: never[];
+        session_summaries: SessionSummary[];
+      };
+    };
+    const baseEnvelope: Envelope = {
       schema_version: 1,
       device_id: "dev_test",
       org_id: "org_test",
