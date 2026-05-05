@@ -122,13 +122,15 @@ export default async function SessionsPage({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/10 text-left text-zinc-400">
-                    <th className="pb-2 font-medium">Provider</th>
-                    <th className="pb-2 font-medium">Started</th>
-                    <th className="pb-2 font-medium">Duration</th>
-                    <th className="pb-2 font-medium">Repo</th>
-                    <th className="pb-2 font-medium">Branch</th>
-                    <th className="pb-2 text-right font-medium">Messages</th>
-                    <th className="pb-2 text-right font-medium">Tokens</th>
+                    <th className="pr-3 pb-2 font-medium">Provider</th>
+                    <th className="pr-3 pb-2 font-medium">Started</th>
+                    <th className="pr-3 pb-2 font-medium">Duration</th>
+                    <th className="pr-3 pb-2 font-medium">Repo</th>
+                    <th className="pr-3 pb-2 font-medium">Branch</th>
+                    <th className="pr-3 pb-2 text-right font-medium">
+                      Messages
+                    </th>
+                    <th className="pr-3 pb-2 text-right font-medium">Tokens</th>
                     <th className="pb-2 text-right font-medium">Cost</th>
                   </tr>
                 </thead>
@@ -143,17 +145,17 @@ export default async function SessionsPage({
                         className="border-b border-white/5 transition-colors hover:bg-white/5"
                       >
                         <td className="text-zinc-300">
-                          <Link href={href} className="block py-2">
+                          <Link href={href} className="block py-2 pr-3">
                             {s.provider}
                           </Link>
                         </td>
                         <td className="text-zinc-400">
-                          <Link href={href} className="block py-2">
+                          <Link href={href} className="block py-2 pr-3">
                             {formatTimestamp(s.started_at)}
                           </Link>
                         </td>
                         <td className="text-zinc-400">
-                          <Link href={href} className="block py-2">
+                          <Link href={href} className="block py-2 pr-3">
                             {formatDuration(
                               s.duration_ms,
                               s.started_at,
@@ -162,22 +164,22 @@ export default async function SessionsPage({
                           </Link>
                         </td>
                         <td className="text-zinc-400">
-                          <Link href={href} className="block py-2">
+                          <Link href={href} className="block py-2 pr-3">
                             {repoName(s.repo_id)}
                           </Link>
                         </td>
                         <td className="text-zinc-400">
-                          <Link href={href} className="block py-2">
+                          <Link href={href} className="block py-2 pr-3">
                             {s.git_branch?.replace(/^refs\/heads\//, "") || "-"}
                           </Link>
                         </td>
                         <td className="text-right tabular-nums text-zinc-300">
-                          <Link href={href} className="block py-2">
+                          <Link href={href} className="block py-2 pr-3">
                             {fmtNum(s.message_count)}
                           </Link>
                         </td>
                         <td className="text-right tabular-nums text-zinc-300">
-                          <Link href={href} className="block py-2">
+                          <Link href={href} className="block py-2 pr-3">
                             {fmtNum(
                               Number(s.total_input_tokens) +
                                 Number(s.total_output_tokens)
