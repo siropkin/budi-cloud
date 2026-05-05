@@ -140,6 +140,30 @@ describe("dashboard/sessions/[id] /page", () => {
     }
   });
 
+  it("orders summary fields so Repo and Branch sit on the same row (#137)", async () => {
+    // The 2-col grid renders fields in document order, left-to-right then
+    // top-to-bottom. The contract: Repo immediately precedes Branch (so they
+    // share a row), and the row pairs are Provider/Started, Repo/Branch,
+    // Duration/Messages, Tokens/Cost.
+    const node = await render();
+    const text = extractText(node);
+    const order = [
+      "Provider",
+      "Started",
+      "Repo",
+      "Branch",
+      "Duration",
+      "Messages",
+      "Tokens",
+      "Cost",
+    ];
+    const positions = order.map((label) => text.indexOf(label));
+    expect(positions.every((p) => p !== -1)).toBe(true);
+    for (let i = 1; i < positions.length; i++) {
+      expect(positions[i]).toBeGreaterThan(positions[i - 1]!);
+    }
+  });
+
   it("empty: 404s when the `device` query param is missing — composite PK can't be resolved", async () => {
     await expect(render("sess_v", {})).rejects.toThrow("__NOT_FOUND__");
     expect(notFoundMock).toHaveBeenCalled();
