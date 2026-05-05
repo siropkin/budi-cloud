@@ -28,43 +28,51 @@ export function ApiKeySection({ apiKey }: { apiKey: string }) {
         <p className="mb-2 text-sm text-zinc-400">
           Run this on your local machine to point Budi at your cloud account.
         </p>
-        <div className="flex items-center gap-2">
-          <code className="block flex-1 whitespace-pre-wrap rounded-lg bg-black/50 px-4 py-3 font-mono text-sm text-emerald-400">
+        {/*
+          Below sm: stack the action buttons under the code block so the
+          masked command + two 100px buttons can't push past the card's
+          right edge and force a page-level horizontal scrollbar (#122).
+          From sm: keep the original single-row layout.
+        */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <code className="block flex-1 whitespace-pre-wrap break-all rounded-lg bg-black/50 px-4 py-3 font-mono text-sm text-emerald-400">
             {displayCommand}
           </code>
           {/*
             min-width on both toggles keeps the code column from jumping
             when labels swap (Reveal→Hide, Copy→Copied).
           */}
-          <button
-            onClick={() => setRevealed((v) => !v)}
-            aria-label={revealed ? "Hide API key" : "Reveal API key"}
-            className="inline-flex min-w-[6.25rem] items-center justify-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/15"
-          >
-            {revealed ? (
-              <>
-                <EyeOff className="h-4 w-4" /> Hide
-              </>
-            ) : (
-              <>
-                <Eye className="h-4 w-4" /> Reveal
-              </>
-            )}
-          </button>
-          <button
-            onClick={handleCopy}
-            className="inline-flex min-w-[6.25rem] items-center justify-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/15"
-          >
-            {copied ? (
-              <>
-                <Check className="h-4 w-4" /> Copied
-              </>
-            ) : (
-              <>
-                <Copy className="h-4 w-4" /> Copy
-              </>
-            )}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setRevealed((v) => !v)}
+              aria-label={revealed ? "Hide API key" : "Reveal API key"}
+              className="inline-flex min-w-[6.25rem] flex-1 items-center justify-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/15 sm:flex-none"
+            >
+              {revealed ? (
+                <>
+                  <EyeOff className="h-4 w-4" /> Hide
+                </>
+              ) : (
+                <>
+                  <Eye className="h-4 w-4" /> Reveal
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleCopy}
+              className="inline-flex min-w-[6.25rem] flex-1 items-center justify-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/15 sm:flex-none"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-4 w-4" /> Copied
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4" /> Copy
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </CardContent>
     </Card>
