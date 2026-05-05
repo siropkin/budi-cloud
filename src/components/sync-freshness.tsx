@@ -199,10 +199,7 @@ function StalledBadge({
         <span className="hidden sm:inline">Stalled — last synced </span>
         <span>{relative}</span>
         <ChevronDown
-          className={clsx(
-            "h-3 w-3 transition-transform",
-            open && "rotate-180"
-          )}
+          className={clsx("h-3 w-3 transition-transform", open && "rotate-180")}
         />
       </button>
       {open && (
@@ -306,10 +303,7 @@ function SessionsStalledBadge({
         <span className="sm:hidden">Sessions </span>
         <span>{sessionRelative}</span>
         <ChevronDown
-          className={clsx(
-            "h-3 w-3 transition-transform",
-            open && "rotate-180"
-          )}
+          className={clsx("h-3 w-3 transition-transform", open && "rotate-180")}
         />
       </button>
       {open && (
@@ -341,8 +335,8 @@ function SessionsStalledBadge({
               — make sure you&rsquo;re on a recent build
             </li>
             <li>
-              If both look fine, file an issue — sessions diverging from
-              rollups usually means a daemon-side regression.
+              If both look fine, file an issue — sessions diverging from rollups
+              usually means a daemon-side regression.
             </li>
           </ol>
           <a

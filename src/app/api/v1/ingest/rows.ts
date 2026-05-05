@@ -134,7 +134,9 @@ export function buildSessionRows(
     // partial signal — the dashboard already renders missing slots as a
     // dash.
     vital_context_drag_state: normalizeVitalState(s.vital_context_drag_state),
-    vital_context_drag_metric: normalizeVitalMetric(s.vital_context_drag_metric),
+    vital_context_drag_metric: normalizeVitalMetric(
+      s.vital_context_drag_metric
+    ),
     vital_cache_efficiency_state: normalizeVitalState(
       s.vital_cache_efficiency_state
     ),

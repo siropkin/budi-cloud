@@ -519,7 +519,12 @@ describe("switchOrganization", () => {
     fake.seed("users", [
       { id: "usr_ivan", org_id: "org_other", role: "manager", api_key: "k1" },
       { id: "usr_alice", org_id: "org_other", role: "member", api_key: "k2" },
-      { id: "usr_acme_mgr", org_id: "org_acme", role: "manager", api_key: "k3" },
+      {
+        id: "usr_acme_mgr",
+        org_id: "org_acme",
+        role: "manager",
+        api_key: "k3",
+      },
     ]);
     fake.seed("devices", [{ id: "dev_alice", user_id: "usr_alice" }]);
     fake.seed("daily_rollups", [

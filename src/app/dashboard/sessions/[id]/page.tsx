@@ -118,14 +118,9 @@ export default async function SessionDetailPage({
               <Field label="Repo" value={repoName(session.repo_id)} />
               <Field
                 label="Branch"
-                value={
-                  session.git_branch?.replace(/^refs\/heads\//, "") || "-"
-                }
+                value={session.git_branch?.replace(/^refs\/heads\//, "") || "-"}
               />
-              <Field
-                label="Messages"
-                value={fmtNum(session.message_count)}
-              />
+              <Field label="Messages" value={fmtNum(session.message_count)} />
               <Field label="Tokens" value={fmtNum(totalTokens)} />
               <Field
                 label="Cost"
@@ -142,9 +137,7 @@ export default async function SessionDetailPage({
 function Field({ label, value }: { label: string; value: string | number }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wide text-zinc-500">
-        {label}
-      </dt>
+      <dt className="text-xs uppercase tracking-wide text-zinc-500">{label}</dt>
       <dd className="mt-0.5 text-zinc-200">{value}</dd>
     </div>
   );

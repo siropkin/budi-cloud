@@ -80,7 +80,11 @@ export default async function InvitePage({
     // switching out would orphan their current org, so they get a refusal
     // instead of a switch button.
     const [{ data: currentOrg }, { data: targetOrg }] = await Promise.all([
-      admin.from("orgs").select("id, name").eq("id", existingUser.org_id).single(),
+      admin
+        .from("orgs")
+        .select("id, name")
+        .eq("id", existingUser.org_id)
+        .single(),
       admin.from("orgs").select("id, name").eq("id", invite.org_id).single(),
     ]);
 

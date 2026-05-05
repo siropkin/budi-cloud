@@ -50,9 +50,7 @@ export function CrossOrgSwitch({
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#0a0a0a] p-4">
       <div className="w-full max-w-md rounded-xl border border-white/10 bg-zinc-950 p-6 shadow-xl">
-        <h1 className="text-xl font-bold text-white">
-          Switch organizations?
-        </h1>
+        <h1 className="text-xl font-bold text-white">Switch organizations?</h1>
         <div className="mt-4 space-y-3 text-sm text-zinc-300">
           <p>
             You&rsquo;re currently a member of{" "}
@@ -63,11 +61,10 @@ export function CrossOrgSwitch({
             <strong className="text-zinc-100">{targetOrgName}</strong>.
           </p>
           <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-amber-200">
-            If you switch, all of your devices, sessions, and cost history
-            will move with you to{" "}
-            <strong>{targetOrgName}</strong>.{" "}
-            <strong>{currentOrgName}</strong>&rsquo;s manager will no longer
-            see your usage.
+            If you switch, all of your devices, sessions, and cost history will
+            move with you to <strong>{targetOrgName}</strong>.{" "}
+            <strong>{currentOrgName}</strong>&rsquo;s manager will no longer see
+            your usage.
           </p>
         </div>
 
@@ -82,8 +79,8 @@ export function CrossOrgSwitch({
           <input type="hidden" name="targetOrgId" value={targetOrgId} />
           <label className="block text-xs text-zinc-400">
             Type{" "}
-            <span className="font-mono text-zinc-200">{targetOrgName}</span>{" "}
-            to confirm:
+            <span className="font-mono text-zinc-200">{targetOrgName}</span> to
+            confirm:
           </label>
           <input
             type="text"
