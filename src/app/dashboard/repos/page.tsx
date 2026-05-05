@@ -46,10 +46,7 @@ export default async function ReposPage({
   // (e.g. `"Unassigned"` and `"(untagged)"` both render as `"(no repo)"`),
   // which would otherwise show up as duplicate bars. Merge by label so the
   // chart has one row per bucket the user actually sees.
-  const repoBuckets = new Map<
-    string,
-    { cost_cents: number; tokens: number }
-  >();
+  const repoBuckets = new Map<string, { cost_cents: number; tokens: number }>();
   for (const r of repos) {
     const label = repoName(r.repo_id);
     const tokens = r.input_tokens + r.output_tokens;

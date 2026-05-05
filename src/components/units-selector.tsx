@@ -3,12 +3,7 @@
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { clsx } from "clsx";
-import {
-  DEFAULT_UNIT,
-  UNITS,
-  UNITS_STORAGE_KEY,
-  parseUnit,
-} from "@/lib/units";
+import { DEFAULT_UNIT, UNITS, UNITS_STORAGE_KEY, parseUnit } from "@/lib/units";
 
 /**
  * Display-unit toggle for the dashboard (#128). Mirrors the URL-driven shape

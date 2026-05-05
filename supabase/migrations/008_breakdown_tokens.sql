@@ -3,6 +3,18 @@
 -- second round trip. Cost was the only metric the breakdown RPCs emitted —
 -- adding tokens here keeps the per-row aggregation in Postgres so the
 -- 100k-row cap that #92 fixed cannot resurface as a JS-side sum.
+--
+-- Postgres won't let `CREATE OR REPLACE FUNCTION` change a function's
+-- RETURNS TABLE shape (it's the same row-type rule that blocks dropping a
+-- column from a view). Drop each function first; the next CREATE
+-- re-establishes it with the wider tuple.
+
+DROP FUNCTION IF EXISTS public.dashboard_cost_by_device(TEXT[], DATE, DATE);
+DROP FUNCTION IF EXISTS public.dashboard_cost_by_model(TEXT[], DATE, DATE);
+DROP FUNCTION IF EXISTS public.dashboard_cost_by_repo(TEXT[], DATE, DATE);
+DROP FUNCTION IF EXISTS public.dashboard_cost_by_branch(TEXT[], DATE, DATE);
+DROP FUNCTION IF EXISTS public.dashboard_cost_by_ticket(TEXT[], DATE, DATE);
+DROP FUNCTION IF EXISTS public.dashboard_team_activity_by_day(TEXT[], DATE, DATE);
 
 -- ============================================================
 -- Per-device breakdown (Devices, Team-by-user via JS join).
