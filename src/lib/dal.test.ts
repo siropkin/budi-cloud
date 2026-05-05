@@ -743,7 +743,13 @@ describe("Overview ↔ Team reconciliation (#15)", () => {
     );
     expect(janeOverview.totalCostCents).toBe(1500_00);
     expect(janeByUser).toEqual([
-      { id: "usr_jane", name: "Jane", cost_cents: 1500_00 },
+      {
+        id: "usr_jane",
+        name: "Jane",
+        cost_cents: 1500_00,
+        input_tokens: 0,
+        output_tokens: 0,
+      },
     ]);
   });
 });
@@ -1174,6 +1180,8 @@ describe("getCostByDevice", () => {
         owner_name: null,
         last_seen: null,
         cost_cents: 1500_00,
+        input_tokens: 0,
+        output_tokens: 0,
       },
     ]);
   });

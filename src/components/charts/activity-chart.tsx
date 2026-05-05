@@ -10,7 +10,8 @@ import {
   YAxis,
 } from "recharts";
 import { differenceInDays, format, startOfMonth, startOfWeek } from "date-fns";
-import { fmtDate, fmtFullDate, fmtNum } from "@/lib/format";
+import { fmtCost, fmtDate, fmtFullDate, fmtNum } from "@/lib/format";
+import type { Unit } from "@/lib/units";
 
 interface ActivityData {
   bucket_day: string;
@@ -57,7 +58,13 @@ function rebucket(data: ActivityData[]): ActivityData[] {
   );
 }
 
-export function ActivityChart({ data }: { data: ActivityData[] }) {
+export function ActivityChart({
+  data,
+  unit = "tokens",
+}: {
+  data: ActivityData[];
+  unit?: Unit;
+}) {
   if (data.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center text-sm text-zinc-500">
@@ -67,6 +74,9 @@ export function ActivityChart({ data }: { data: ActivityData[] }) {
   }
 
   const bucketed = rebucket(data);
+  const isTokens = unit === "tokens";
+  const fmt = isTokens ? fmtNum : fmtCost;
+  const yAxisLabel = isTokens ? "Tokens" : "Cost";
 
   return (
     <ResponsiveContainer width="100%" height={300}>
@@ -87,13 +97,13 @@ export function ActivityChart({ data }: { data: ActivityData[] }) {
           axisLine={false}
         />
         <YAxis
-          tickFormatter={fmtNum}
+          tickFormatter={(v) => fmt(Number(v))}
           tick={{ fill: "#71717a", fontSize: 12 }}
           tickLine={false}
           axisLine={false}
           width={72}
           label={{
-            value: "Tokens",
+            value: yAxisLabel,
             angle: -90,
             position: "insideLeft",
             offset: 0,
@@ -110,25 +120,44 @@ export function ActivityChart({ data }: { data: ActivityData[] }) {
             fontSize: "13px",
           }}
           labelFormatter={(label) => fmtFullDate(String(label))}
-          formatter={(value, name) => [
-            fmtNum(Number(value)),
-            String(name) === "input_tokens" ? "Input" : "Output",
-          ]}
+          formatter={(value, name) => {
+            const key = String(name);
+            const seriesLabel = isTokens
+              ? key === "input_tokens"
+                ? "Input"
+                : "Output"
+              : "Cost";
+            return [fmt(Number(value)), seriesLabel];
+          }}
         />
-        <Bar
-          dataKey="input_tokens"
-          stackId="tokens"
-          fill="#3b82f6"
-          maxBarSize={28}
-          radius={[0, 0, 0, 0]}
-        />
-        <Bar
-          dataKey="output_tokens"
-          stackId="tokens"
-          fill="#8b5cf6"
-          maxBarSize={28}
-          radius={[4, 4, 0, 0]}
-        />
+        {isTokens ? (
+          <>
+            <Bar
+              dataKey="input_tokens"
+              stackId="value"
+              fill="#3b82f6"
+              maxBarSize={28}
+              radius={[0, 0, 0, 0]}
+              isAnimationActive={false}
+            />
+            <Bar
+              dataKey="output_tokens"
+              stackId="value"
+              fill="#8b5cf6"
+              maxBarSize={28}
+              radius={[4, 4, 0, 0]}
+              isAnimationActive={false}
+            />
+          </>
+        ) : (
+          <Bar
+            dataKey="cost_cents"
+            fill="#3b82f6"
+            maxBarSize={28}
+            radius={[4, 4, 0, 0]}
+            isAnimationActive={false}
+          />
+        )}
       </BarChart>
     </ResponsiveContainer>
   );

@@ -86,17 +86,27 @@ async function render(searchParams: Record<string, string> = {}) {
 }
 
 describe("dashboard /page (Overview)", () => {
-  it("smoke: renders headline, stat cards, and the daily-activity card with populated DAL data", async () => {
+  it("smoke: renders headline, the dollars-default stat cards, and the daily-activity card with populated DAL data", async () => {
     const node = await render();
     expect(node).toBeTruthy();
     const text = extractText(node);
     expect(text).toContain("Overview");
-    expect(text).toContain("Daily Activity (Tokens)");
-    // The four stat-card titles are part of the page's primary contract.
+    // Default unit is dollars (#128), so the activity card carries the Cost
+    // suffix and the spend card is `Total Cost` — `Total Tokens` only
+    // appears when the toggle is flipped to tokens.
+    expect(text).toContain("Daily Activity (Cost)");
     expect(text).toContain("Total Cost");
-    expect(text).toContain("Total Tokens");
     expect(text).toContain("Messages");
     expect(text).toContain("Sessions");
+    expect(text).not.toContain("Total Tokens");
+  });
+
+  it("units toggle: ?units=tokens swaps Total Cost for Total Tokens and re-titles the activity card (#128)", async () => {
+    const node = await render({ units: "tokens" });
+    const text = extractText(node);
+    expect(text).toContain("Daily Activity (Tokens)");
+    expect(text).toContain("Total Tokens");
+    expect(text).not.toContain("Total Cost");
   });
 
   it("empty: renders headline + zero-value stat cards (not a crash) when the org has no devices yet", async () => {

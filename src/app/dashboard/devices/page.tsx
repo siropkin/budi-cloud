@@ -8,8 +8,10 @@ import {
 import { dateRangeFromDays } from "@/lib/date-range";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
-import { deviceLabel, fmtCost, fmtRelative } from "@/lib/format";
+import { parseUnit } from "@/lib/units";
+import { deviceLabel, fmtCost, fmtNum, fmtRelative } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
+import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
 import { CostBarChart } from "@/components/charts/cost-bar-chart";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -17,12 +19,13 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 export default async function DevicesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string; user?: string }>;
+  searchParams: Promise<{ days?: string; user?: string; units?: string }>;
 }) {
   const params = await searchParams;
   const user = await getCurrentUser();
   if (!user?.org_id) return null;
 
+  const unit = parseUnit(params.units);
   const scope = { scopedUserId: params.user || null };
   const earliestActivity =
     params.days === ALL_PERIOD_VALUE
@@ -36,6 +39,24 @@ export default async function DevicesPage({
   ]);
 
   const showOwnerColumn = user.role === "manager";
+  const isTokens = unit === "tokens";
+  const valueWord = isTokens ? "Tokens" : "Cost";
+  const fmtValue = (cost_cents: number, tokens: number) =>
+    isTokens ? fmtNum(tokens) : fmtCost(cost_cents);
+
+  // The chart's "have any data" filter mirrors the previous `cost_cents > 0`
+  // rule, except we also keep rows with zero cost but non-zero tokens so the
+  // tokens lens is never silently empty.
+  const chartRows = devices
+    .map((d) => ({
+      label:
+        showOwnerColumn && d.owner_name
+          ? `${deviceLabel(d.id, d.label)} — ${d.owner_name}`
+          : deviceLabel(d.id, d.label),
+      cost_cents: d.cost_cents,
+      tokens: d.input_tokens + d.output_tokens,
+    }))
+    .filter((d) => d.cost_cents > 0 || d.tokens > 0);
 
   return (
     <div className="space-y-6">
@@ -44,6 +65,7 @@ export default async function DevicesPage({
         <Suspense>
           <div className="flex flex-wrap items-center gap-3">
             <UserFilter members={members} role={user.role} />
+            <UnitsSelector />
             <PeriodSelector />
           </div>
         </Suspense>
@@ -51,20 +73,13 @@ export default async function DevicesPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Cost by Device</CardTitle>
+          <CardTitle>{`${valueWord} by Device`}</CardTitle>
         </CardHeader>
         <CardContent>
           <CostBarChart
-            data={devices
-              .filter((d) => d.cost_cents > 0)
-              .map((d) => ({
-                label:
-                  showOwnerColumn && d.owner_name
-                    ? `${deviceLabel(d.id, d.label)} — ${d.owner_name}`
-                    : deviceLabel(d.id, d.label),
-                cost_cents: d.cost_cents,
-              }))}
-            emptyLabel="No device cost data for this period"
+            data={chartRows}
+            emptyLabel={`No device ${valueWord.toLowerCase()} data for this period`}
+            unit={unit}
           />
         </CardContent>
       </Card>
@@ -83,7 +98,7 @@ export default async function DevicesPage({
                     <th className="pb-2 font-medium">Owner</th>
                   )}
                   <th className="pb-2 font-medium">Last seen</th>
-                  <th className="pb-2 text-right font-medium">Cost</th>
+                  <th className="pb-2 text-right font-medium">{valueWord}</th>
                 </tr>
               </thead>
               <tbody>
@@ -101,7 +116,7 @@ export default async function DevicesPage({
                       {fmtRelative(d.last_seen)}
                     </td>
                     <td className="py-2 text-right tabular-nums text-zinc-300">
-                      {fmtCost(d.cost_cents)}
+                      {fmtValue(d.cost_cents, d.input_tokens + d.output_tokens)}
                     </td>
                   </tr>
                 ))}
@@ -115,7 +130,7 @@ export default async function DevicesPage({
                       {deviceLabel(d.id, d.label)}
                     </span>
                     <span className="tabular-nums text-zinc-300">
-                      {fmtCost(d.cost_cents)}
+                      {fmtValue(d.cost_cents, d.input_tokens + d.output_tokens)}
                     </span>
                   </div>
                   <div className="text-xs text-zinc-500">

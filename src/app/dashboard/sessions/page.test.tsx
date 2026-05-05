@@ -84,6 +84,10 @@ describe("dashboard/sessions /page", () => {
     expect(text).toContain("Sessions");
     expect(text).toContain("Recent Sessions");
     // Lock down the column contract so a regression that drops one shows up.
+    // The trailing "Cost" column is unit-aware (#128): under the default
+    // dollars view it reads `Cost`; with `?units=tokens` it flips to
+    // `Tokens`. The standalone Tokens column was retired in #128 because
+    // the unit toggle on the cost column conveys the same signal.
     for (const col of [
       "Provider",
       "Started",
@@ -91,11 +95,19 @@ describe("dashboard/sessions /page", () => {
       "Repo",
       "Branch",
       "Messages",
-      "Tokens",
       "Cost",
     ]) {
       expect(text).toContain(col);
     }
+  });
+
+  it("units toggle: ?units=tokens flips the Cost column header to Tokens (#128)", async () => {
+    const node = await render({ units: "tokens" });
+    const text = extractText(node);
+    // Header now reads `Tokens`; the per-row dollar value is replaced with
+    // the input+output token sum.
+    expect(text).toContain("Tokens");
+    expect(text).not.toContain("$");
   });
 
   it("empty: renders the 'No sessions' empty-state copy and skips pagination chrome", async () => {

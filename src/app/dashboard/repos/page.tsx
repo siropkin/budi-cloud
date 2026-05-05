@@ -10,8 +10,10 @@ import {
 import { dateRangeFromDays } from "@/lib/date-range";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
+import { parseUnit } from "@/lib/units";
 import { repoName } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
+import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
 import { CostBarChart } from "@/components/charts/cost-bar-chart";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -19,12 +21,13 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 export default async function ReposPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string; user?: string }>;
+  searchParams: Promise<{ days?: string; user?: string; units?: string }>;
 }) {
   const params = await searchParams;
   const user = await getCurrentUser();
   if (!user?.org_id) return null;
 
+  const unit = parseUnit(params.units);
   const scope = { scopedUserId: params.user || null };
   const earliestActivity =
     params.days === ALL_PERIOD_VALUE
@@ -43,15 +46,28 @@ export default async function ReposPage({
   // (e.g. `"Unassigned"` and `"(untagged)"` both render as `"(no repo)"`),
   // which would otherwise show up as duplicate bars. Merge by label so the
   // chart has one row per bucket the user actually sees.
-  const repoBuckets = new Map<string, number>();
+  const repoBuckets = new Map<
+    string,
+    { cost_cents: number; tokens: number }
+  >();
   for (const r of repos) {
     const label = repoName(r.repo_id);
-    repoBuckets.set(label, (repoBuckets.get(label) ?? 0) + r.cost_cents);
+    const tokens = r.input_tokens + r.output_tokens;
+    const existing = repoBuckets.get(label);
+    if (existing) {
+      existing.cost_cents += r.cost_cents;
+      existing.tokens += tokens;
+    } else {
+      repoBuckets.set(label, { cost_cents: r.cost_cents, tokens });
+    }
   }
-  const repoChartData = Array.from(repoBuckets, ([label, cost_cents]) => ({
+  const repoChartData = Array.from(repoBuckets, ([label, totals]) => ({
     label,
-    cost_cents,
+    cost_cents: totals.cost_cents,
+    tokens: totals.tokens,
   })).sort((a, b) => b.cost_cents - a.cost_cents);
+
+  const valueWord = unit === "tokens" ? "Tokens" : "Cost";
 
   return (
     <div className="space-y-6">
@@ -60,6 +76,7 @@ export default async function ReposPage({
         <Suspense>
           <div className="flex flex-wrap items-center gap-3">
             <UserFilter members={members} role={user.role} />
+            <UnitsSelector />
             <PeriodSelector />
           </div>
         </Suspense>
@@ -68,12 +85,13 @@ export default async function ReposPage({
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Cost by Project</CardTitle>
+            <CardTitle>{`${valueWord} by Project`}</CardTitle>
           </CardHeader>
           <CardContent>
             <CostBarChart
               data={repoChartData}
               emptyLabel="No project data for this period"
+              unit={unit}
             />
             <p className="mt-3 text-xs text-zinc-500">
               <span className="text-zinc-400">(no repo)</span> aggregates spend
@@ -95,15 +113,17 @@ export default async function ReposPage({
 
         <Card>
           <CardHeader>
-            <CardTitle>Cost by Branch</CardTitle>
+            <CardTitle>{`${valueWord} by Branch`}</CardTitle>
           </CardHeader>
           <CardContent>
             <CostBarChart
               data={branches.map((b) => ({
                 label: `${repoName(b.repo_id)} / ${b.git_branch.replace(/^refs\/heads\//, "")}`,
                 cost_cents: b.cost_cents,
+                tokens: b.input_tokens + b.output_tokens,
               }))}
               emptyLabel="No branch data for this period"
+              unit={unit}
             />
           </CardContent>
         </Card>
@@ -111,15 +131,17 @@ export default async function ReposPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Cost by Ticket</CardTitle>
+          <CardTitle>{`${valueWord} by Ticket`}</CardTitle>
         </CardHeader>
         <CardContent>
           <CostBarChart
             data={tickets.map((t) => ({
               label: t.ticket,
               cost_cents: t.cost_cents,
+              tokens: t.input_tokens + t.output_tokens,
             }))}
             emptyLabel="No ticket data for this period"
+            unit={unit}
           />
         </CardContent>
       </Card>

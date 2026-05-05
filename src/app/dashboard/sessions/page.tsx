@@ -14,8 +14,10 @@ import {
 import { dateRangeFromDays } from "@/lib/date-range";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
+import { parseUnit } from "@/lib/units";
 import { fmtCost, fmtNum, formatDuration, repoName } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
+import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
@@ -46,6 +48,7 @@ export default async function SessionsPage({
   searchParams: Promise<{
     days?: string;
     user?: string;
+    units?: string;
     cursor?: string;
     p?: string;
   }>;
@@ -54,6 +57,8 @@ export default async function SessionsPage({
   const user = await getCurrentUser();
   if (!user?.org_id) return null;
 
+  const unit = parseUnit(params.units);
+  const isTokens = unit === "tokens";
   const scope = { scopedUserId: params.user || null };
   const earliestActivity =
     params.days === ALL_PERIOD_VALUE
@@ -74,13 +79,14 @@ export default async function SessionsPage({
   const hasOlder = nextCursor !== null;
   const hasNewer = page > 1;
 
-  // Preserve the period and user-filter params across page boundaries (#85
-  // acceptance: "Period selector + user filter both preserved across page
-  // boundaries"). Build link params off the *current* search params so any
-  // future filter we add is automatically carried.
+  // Preserve the period, unit, and user-filter params across page boundaries
+  // (#85 acceptance: "Period selector + user filter both preserved across
+  // page boundaries"). Build link params off the *current* search params so
+  // any future filter we add is automatically carried.
   const baseParams = new URLSearchParams();
   if (params.days) baseParams.set("days", params.days);
   if (params.user) baseParams.set("user", params.user);
+  if (params.units) baseParams.set("units", params.units);
 
   const newerParams = new URLSearchParams(baseParams);
   // "Newer" returns to the first page — drops cursor and `p`. Browser back
@@ -99,6 +105,7 @@ export default async function SessionsPage({
         <Suspense>
           <div className="flex flex-wrap items-center gap-3">
             <UserFilter members={members} role={user.role} />
+            <UnitsSelector />
             <PeriodSelector />
           </div>
         </Suspense>
@@ -130,8 +137,9 @@ export default async function SessionsPage({
                     <th className="pr-3 pb-2 text-right font-medium">
                       Messages
                     </th>
-                    <th className="pr-3 pb-2 text-right font-medium">Tokens</th>
-                    <th className="pb-2 text-right font-medium">Cost</th>
+                    <th className="pb-2 text-right font-medium">
+                      {isTokens ? "Tokens" : "Cost"}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -178,17 +186,14 @@ export default async function SessionsPage({
                             {fmtNum(s.message_count)}
                           </Link>
                         </td>
-                        <td className="text-right tabular-nums text-zinc-300">
-                          <Link href={href} className="block py-2 pr-3">
-                            {fmtNum(
-                              Number(s.total_input_tokens) +
-                                Number(s.total_output_tokens)
-                            )}
-                          </Link>
-                        </td>
                         <td className="text-right tabular-nums text-zinc-200">
                           <Link href={href} className="block py-2">
-                            {fmtCost(Number(s.total_cost_cents))}
+                            {isTokens
+                              ? fmtNum(
+                                  Number(s.total_input_tokens) +
+                                    Number(s.total_output_tokens)
+                                )
+                              : fmtCost(Number(s.total_cost_cents))}
                           </Link>
                         </td>
                       </tr>

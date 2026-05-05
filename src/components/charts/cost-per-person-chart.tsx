@@ -9,15 +9,24 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { fmtCost, fmtDate, fmtFullDate } from "@/lib/format";
+import { fmtCost, fmtDate, fmtFullDate, fmtNum } from "@/lib/format";
+import type { Unit } from "@/lib/units";
 
 interface CostPerPersonDatum {
   bucket_day: string;
   cost_cents: number;
+  input_tokens: number;
+  output_tokens: number;
   active_members: number;
 }
 
-export function CostPerPersonChart({ data }: { data: CostPerPersonDatum[] }) {
+export function CostPerPersonChart({
+  data,
+  unit = "dollars",
+}: {
+  data: CostPerPersonDatum[];
+  unit?: Unit;
+}) {
   if (data.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center text-sm text-zinc-500">
@@ -26,14 +35,22 @@ export function CostPerPersonChart({ data }: { data: CostPerPersonDatum[] }) {
     );
   }
 
+  const isTokens = unit === "tokens";
+  const fmt = isTokens ? fmtNum : fmtCost;
+  const seriesLabel = isTokens ? "Tokens / person" : "Cost / person";
+
   // Days with no active members render as gaps rather than NaN/Infinity bars
   // so the chart visually matches the empty-state semantics elsewhere on the
   // page (#127 acceptance: "render a gap rather than dividing by zero").
-  const series = data.map((d) => ({
-    bucket_day: d.bucket_day,
-    cost_per_person_cents:
-      d.active_members > 0 ? d.cost_cents / d.active_members : null,
-  }));
+  const series = data.map((d) => {
+    if (d.active_members <= 0) {
+      return { bucket_day: d.bucket_day, value: null as number | null };
+    }
+    const numerator = isTokens
+      ? d.input_tokens + d.output_tokens
+      : d.cost_cents;
+    return { bucket_day: d.bucket_day, value: numerator / d.active_members };
+  });
 
   return (
     <ResponsiveContainer width="100%" height={300}>
@@ -54,13 +71,13 @@ export function CostPerPersonChart({ data }: { data: CostPerPersonDatum[] }) {
           axisLine={false}
         />
         <YAxis
-          tickFormatter={(v) => fmtCost(Number(v))}
+          tickFormatter={(v) => fmt(Number(v))}
           tick={{ fill: "#71717a", fontSize: 12 }}
           tickLine={false}
           axisLine={false}
           width={72}
           label={{
-            value: "Cost / person",
+            value: seriesLabel,
             angle: -90,
             position: "insideLeft",
             offset: 0,
@@ -77,10 +94,10 @@ export function CostPerPersonChart({ data }: { data: CostPerPersonDatum[] }) {
             fontSize: "13px",
           }}
           labelFormatter={(label) => fmtFullDate(String(label))}
-          formatter={(value) => [fmtCost(Number(value)), "Cost / person"]}
+          formatter={(value) => [fmt(Number(value)), seriesLabel]}
         />
         <Bar
-          dataKey="cost_per_person_cents"
+          dataKey="value"
           fill="#f59e0b"
           maxBarSize={28}
           radius={[4, 4, 0, 0]}

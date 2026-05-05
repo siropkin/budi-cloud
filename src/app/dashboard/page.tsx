@@ -10,9 +10,11 @@ import {
 import { dateRangeFromDays } from "@/lib/date-range";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
+import { parseUnit } from "@/lib/units";
 import { fmtCost, fmtNum } from "@/lib/format";
 import { StatCard } from "@/components/stat-card";
 import { PeriodSelector } from "@/components/period-selector";
+import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
 import { ActivityChart } from "@/components/charts/activity-chart";
 import {
@@ -24,12 +26,13 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 export default async function OverviewPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string; user?: string }>;
+  searchParams: Promise<{ days?: string; user?: string; units?: string }>;
 }) {
   const params = await searchParams;
   const user = await getCurrentUser();
   if (!user?.org_id) return null;
 
+  const unit = parseUnit(params.units);
   const scopedUserId = params.user || null;
   const scope = { scopedUserId };
   const earliestActivity =
@@ -60,6 +63,7 @@ export default async function OverviewPage({
         <Suspense>
           <div className="flex flex-wrap items-center gap-3">
             <UserFilter members={members} role={user.role} />
+            <UnitsSelector />
             <PeriodSelector />
           </div>
         </Suspense>
@@ -68,23 +72,26 @@ export default async function OverviewPage({
       {showLinkBanner && <LinkDaemonBanner apiKey={user.api_key} />}
       {showFirstSyncBanner && <FirstSyncInProgressBanner />}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Total Cost" value={fmtCost(stats.totalCostCents)} />
-        <StatCard
-          title="Total Tokens"
-          value={fmtNum(stats.totalInputTokens + stats.totalOutputTokens)}
-          subtitle={`${fmtNum(stats.totalInputTokens)} in / ${fmtNum(stats.totalOutputTokens)} out`}
-        />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {unit === "tokens" ? (
+          <StatCard
+            title="Total Tokens"
+            value={fmtNum(stats.totalInputTokens + stats.totalOutputTokens)}
+            subtitle={`${fmtNum(stats.totalInputTokens)} in / ${fmtNum(stats.totalOutputTokens)} out`}
+          />
+        ) : (
+          <StatCard title="Total Cost" value={fmtCost(stats.totalCostCents)} />
+        )}
         <StatCard title="Messages" value={fmtNum(stats.totalMessages)} />
         <StatCard title="Sessions" value={fmtNum(stats.totalSessions)} />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Daily Activity (Tokens)</CardTitle>
+          <CardTitle>{`Daily Activity (${unit === "tokens" ? "Tokens" : "Cost"})`}</CardTitle>
         </CardHeader>
         <CardContent>
-          <ActivityChart data={activity} />
+          <ActivityChart data={activity} unit={unit} />
         </CardContent>
       </Card>
     </div>
