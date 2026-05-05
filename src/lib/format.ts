@@ -106,7 +106,10 @@ export function deviceLabel(
  * low-precision (minute granularity, no ticking) — the dashboard layout is
  * `force-dynamic` so each page load recomputes against a fresh `Date.now()`.
  */
-export function fmtRelative(iso: string | null, now: number = Date.now()): string {
+export function fmtRelative(
+  iso: string | null,
+  now: number = Date.now()
+): string {
   if (!iso) return "never";
   const diff = Math.max(0, now - Date.parse(iso));
   const s = Math.floor(diff / 1000);

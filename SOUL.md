@@ -10,11 +10,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## Product boundaries
 
-| Product | Repo | Role |
-|---------|------|------|
-| **budi-core** | [`siropkin/budi`](https://github.com/siropkin/budi) | Rust daemon + CLI. Owns SQLite, pushes aggregates to this service. |
-| **budi-cursor** | [`siropkin/budi-cursor`](https://github.com/siropkin/budi-cursor) | VS Code/Cursor extension. Unrelated to the cloud. |
-| **budi-cloud** | **this repo** (`siropkin/budi-cloud`) | Cloud dashboard + ingest API. |
+| Product         | Repo                                                              | Role                                                                                     |
+| --------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **budi-core**   | [`siropkin/budi`](https://github.com/siropkin/budi)               | Rust daemon + CLI. Owns SQLite, pushes aggregates to this service.                       |
+| **budi-cursor** | [`siropkin/budi-cursor`](https://github.com/siropkin/budi-cursor) | VS Code/Cursor extension. Unrelated to the cloud.                                        |
+| **budi-cloud**  | **this repo** (`siropkin/budi-cloud`)                             | Cloud dashboard + ingest API.                                                            |
 | **getbudi.dev** | [`siropkin/getbudi.dev`](https://github.com/siropkin/getbudi.dev) | Public marketing landing page. Different subdomain (`getbudi.dev` vs `app.getbudi.dev`). |
 
 Extraction boundaries are defined in [ADR-0086](https://github.com/siropkin/budi/blob/main/docs/adr/0086-extraction-boundaries.md) in the main repo. The privacy contract is [ADR-0083](https://github.com/siropkin/budi/blob/main/docs/adr/0083-cloud-ingest-identity-and-privacy-contract.md). Read both before touching the ingest path.
@@ -57,13 +57,13 @@ The daemon pushes **pre-aggregated daily rollups and session summaries** — num
 
 ## Team model (v1)
 
-| Aspect | Detail |
-|--------|--------|
-| **Roles** | `manager` (view all org data, manage members) and `member` (sync own data, view own data) |
-| **Granularity** | Daily aggregates; no per-message, per-hour, or real-time views |
-| **Retention** | 90 days |
-| **Multi-org** | One user, one org (no multi-tenancy per user in v1) |
-| **SSO / SAML** | Not supported in v1 |
+| Aspect          | Detail                                                                                    |
+| --------------- | ----------------------------------------------------------------------------------------- |
+| **Roles**       | `manager` (view all org data, manage members) and `member` (sync own data, view own data) |
+| **Granularity** | Daily aggregates; no per-message, per-hour, or real-time views                            |
+| **Retention**   | 90 days                                                                                   |
+| **Multi-org**   | One user, one org (no multi-tenancy per user in v1)                                       |
+| **SSO / SAML**  | Not supported in v1                                                                       |
 
 ## Ingest API contract
 
