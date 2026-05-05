@@ -405,7 +405,9 @@ function SyncFreshnessLabel({
   if (state === "refreshing") {
     return (
       <>
-        <span className="hidden sm:inline">Local Budi · new data, refreshing…</span>
+        <span className="hidden sm:inline">
+          Local Budi · new data, refreshing…
+        </span>
         <span className="sm:hidden">Refreshing…</span>
       </>
     );
