@@ -5,6 +5,7 @@ import {
   getCostByUser,
   getEarliestActivity,
   getTeamActivityByDay,
+  UNASSIGNED_USER_ID,
 } from "@/lib/dal";
 import { dateRangeFromDays } from "@/lib/date-range";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
@@ -48,36 +49,33 @@ export default async function TeamPage({
   const fmtValue = (cost_cents: number, tokens: number) =>
     isTokens ? fmtNum(tokens) : fmtCost(cost_cents);
 
-  // Headline averages for the time-series cards (#131). "Avg active members"
-  // is the mean of the daily distinct-member counts over days that have data
-  // (empty days are dropped upstream, so we divide by the row count). Avg
-  // per-person matches the chart's per-day formula: total numerator divided
-  // by total active-member-days, so the headline reads as the period-level
-  // weighted average of the curve below it.
-  const dayCount = teamActivity.length;
-  const totalActiveMemberDays = teamActivity.reduce(
-    (s, d) => s + d.active_members,
+  // Headline stats for the time-series cards (#131, #135). Both reduce to the
+  // period-level "per identifiable person" reading, sourced from `userCosts`
+  // which already aggregates each visible team member across the range and
+  // matches the Overview totals (see `getCostByUser` reconciliation note).
+  // Rollups that don't resolve to a visible owner collapse into the
+  // `Unassigned` bucket, which is not a person and is excluded from both the
+  // count and the per-person numerator.
+  const identifiedMembers = userCosts.filter(
+    (u) => u.id !== UNASSIGNED_USER_ID
+  );
+  const distinctActiveMembers = identifiedMembers.length;
+  const totalCostCents = identifiedMembers.reduce(
+    (s, u) => s + u.cost_cents,
     0
   );
-  const totalCostCents = teamActivity.reduce((s, d) => s + d.cost_cents, 0);
-  const totalTokens = teamActivity.reduce(
-    (s, d) => s + d.input_tokens + d.output_tokens,
+  const totalTokens = identifiedMembers.reduce(
+    (s, u) => s + u.input_tokens + u.output_tokens,
     0
   );
-  const avgActiveMembers =
-    dayCount > 0 ? totalActiveMemberDays / dayCount : null;
   const perPersonNumerator = isTokens ? totalTokens : totalCostCents;
   const avgPerPerson =
-    totalActiveMemberDays > 0
-      ? perPersonNumerator / totalActiveMemberDays
+    distinctActiveMembers > 0
+      ? perPersonNumerator / distinctActiveMembers
       : null;
 
-  const avgActiveMembersLabel =
-    avgActiveMembers === null
-      ? "—"
-      : avgActiveMembers.toLocaleString("en-US", {
-          maximumFractionDigits: 1,
-        });
+  const activeMembersLabel =
+    distinctActiveMembers > 0 ? fmtNum(distinctActiveMembers) : "—";
   const avgPerPersonLabel =
     avgPerPerson === null
       ? "—"
@@ -171,10 +169,7 @@ export default async function TeamPage({
         </CardHeader>
         <CardContent>
           <div className="grid gap-6 sm:grid-cols-[auto,1fr] sm:items-center">
-            <StatCard
-              title="Avg active members"
-              value={avgActiveMembersLabel}
-            />
+            <StatCard title="Active members" value={activeMembersLabel} />
             <TeamCountChart data={teamActivity} />
           </div>
         </CardContent>

@@ -199,7 +199,7 @@ export async function getEarliestActivity(
 }
 
 /** Synthetic user id used to group rollups whose owner we can't surface. */
-const UNASSIGNED_USER_ID = "__unassigned__";
+export const UNASSIGNED_USER_ID = "__unassigned__";
 
 /**
  * Get cost breakdown by user/device.
