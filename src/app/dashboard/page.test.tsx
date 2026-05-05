@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { containsSuspense, extractText } from "@/test-utils/page-tree";
+import {
+  collectClassNames,
+  containsSuspense,
+  extractText,
+} from "@/test-utils/page-tree";
 
 /**
  * Page-level coverage for `/dashboard` (the Overview page).
@@ -129,6 +133,28 @@ describe("dashboard /page (Overview)", () => {
   it("error: a DAL fault propagates so the framework error boundary can render its fallback", async () => {
     dal.getOverviewStats.mockRejectedValue(new Error("__DAL_BOOM__"));
     await expect(render()).rejects.toThrow("__DAL_BOOM__");
+  });
+
+  it("mobile: header stacks below sm: and the filter cluster wraps so the time-range buttons cannot be clipped (#117)", async () => {
+    const node = await render();
+    const classes = collectClassNames(node);
+    // Outer header row stacks vertically by default and only switches to a
+    // horizontal layout at the `sm` breakpoint — this is what keeps the
+    // title + team scope + period buttons from sharing one ~470px row on
+    // a 375px phone.
+    const stacked = classes.find(
+      (c) =>
+        c.includes("flex-col") &&
+        c.includes("sm:flex-row") &&
+        c.includes("sm:justify-between")
+    );
+    expect(stacked).toBeTruthy();
+    // Inner filter cluster must opt into wrapping; without `flex-wrap` the
+    // PeriodSelector's "All" button is what gets pushed off-screen.
+    const wrapping = classes.find(
+      (c) => c.includes("flex-wrap") && c.includes("items-center")
+    );
+    expect(wrapping).toBeTruthy();
   });
 
   it("returns null (no leak) when the viewer has no org_id yet", async () => {
