@@ -111,3 +111,33 @@ function findSuspense(node: Node, seen: WeakSet<object>): boolean {
   }
   return findSuspense(el.props?.children, seen);
 }
+
+/**
+ * Collect every `className` string reachable from `node` in tree order. Used
+ * by mobile-layout regression tests (#117) to assert the page header opts
+ * into responsive stacking (`flex-col … sm:flex-row`) and that the inner
+ * filter cluster wraps (`flex-wrap`) instead of overflowing the viewport.
+ */
+export function collectClassNames(node: Node): string[] {
+  const seen = new WeakSet<object>();
+  const out: string[] = [];
+  walkClass(node, out, seen);
+  return out;
+}
+
+function walkClass(node: Node, out: string[], seen: WeakSet<object>): void {
+  if (node == null || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    for (const child of node) walkClass(child, out, seen);
+    return;
+  }
+  if (seen.has(node as object)) return;
+  seen.add(node as object);
+
+  const el = node as ReactElement & {
+    props?: Record<string, unknown> & { children?: unknown };
+  };
+  const className = el.props?.className;
+  if (typeof className === "string") out.push(className);
+  walkClass(el.props?.children, out, seen);
+}
