@@ -61,22 +61,29 @@ describe("CostBarChart", () => {
 
     const bar = nodes.find((n) => n.type === Bar);
     expect(bar, "Bar should be in the rendered tree").toBeDefined();
-    expect(bar!.props.minPointSize).toBeGreaterThanOrEqual(4);
-    expect(bar!.props.isAnimationActive).toBe(false);
+    const barProps = bar!.props as {
+      minPointSize: number;
+      isAnimationActive: boolean;
+    };
+    expect(barProps.minPointSize).toBeGreaterThanOrEqual(4);
+    expect(barProps.isAnimationActive).toBe(false);
 
     const labelList = nodes.find((n) => n.type === LabelList);
     expect(
       labelList,
       "LabelList should be inside Bar so each row gets a $X.XX suffix"
     ).toBeDefined();
-    expect(labelList!.props.dataKey).toBe("cost_cents");
-    expect(labelList!.props.position).toBe("right");
+    const labelListProps = labelList!.props as {
+      dataKey: string;
+      position: string;
+      formatter: (v: unknown) => string | number;
+    };
+    expect(labelListProps.dataKey).toBe("cost_cents");
+    expect(labelListProps.position).toBe("right");
 
     // Formatter must round-trip a cents amount into the fmtCost form so the
     // regression where `$X.XX` goes missing can't sneak back in.
-    const formatter = labelList!.props.formatter as (
-      v: unknown
-    ) => string | number;
+    const formatter = labelListProps.formatter;
     expect(formatter).toBeTypeOf("function");
     expect(formatter(3000)).toBe(fmtCost(3000));
     expect(formatter(81)).toBe(fmtCost(81));
