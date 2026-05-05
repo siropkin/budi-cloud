@@ -58,7 +58,7 @@ describe("SessionVitals", () => {
     expect(beforeFirstLi).toMatch(/amber-500\/15/);
   });
 
-  it("renders the upgrade-daemon notice when every vital is null", () => {
+  it("renders a neutral unavailable notice when every vital is null", () => {
     const html = renderToStaticMarkup(
       <SessionVitals
         contextDrag={{ state: null, metric: null }}
@@ -69,9 +69,11 @@ describe("SessionVitals", () => {
       />
     );
 
-    expect(html).toContain(
-      "Vitals not yet available — upgrade local daemon to ≥ 8.3.15."
-    );
+    expect(html).toContain("Vitals unavailable for this session.");
+    // We can't reliably tell an old daemon from a too-short session here, so
+    // the copy must not finger-wag at viewers about upgrading.
+    expect(html).not.toMatch(/upgrade/i);
+    expect(html).not.toContain("8.3.15");
     // No badges, no row scaffolding.
     expect(html).not.toMatch(/emerald-500\/15/);
     expect(html).not.toMatch(/amber-500\/15/);

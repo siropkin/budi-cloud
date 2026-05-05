@@ -9,8 +9,9 @@ import type { VitalState } from "@/lib/dal";
  * response content); see ADR-0083 §1 and `006_session_vitals.sql`.
  *
  * When *all* vitals are null, the daemon either hasn't been upgraded or the
- * session was too short to score. We show a single inline notice rather than
- * five empty rows so the surface stays useful for older daemons.
+ * session was too short to score. The cloud can't reliably tell those two
+ * cases apart from the row alone, so we show a single neutral notice rather
+ * than misdirecting current daemons to a version upgrade.
  */
 
 export interface SessionVitalsProps {
@@ -79,7 +80,7 @@ export function SessionVitals(props: SessionVitalsProps) {
   if (allEmpty) {
     return (
       <p className="text-sm text-zinc-400">
-        Vitals not yet available — upgrade local daemon to ≥ 8.3.15.
+        Vitals unavailable for this session.
       </p>
     );
   }
