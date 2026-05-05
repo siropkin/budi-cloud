@@ -1,12 +1,19 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { getCurrentUser, getCostByUser, getEarliestActivity } from "@/lib/dal";
+import {
+  getCurrentUser,
+  getCostByUser,
+  getEarliestActivity,
+  getTeamActivityByDay,
+} from "@/lib/dal";
 import { dateRangeFromDays } from "@/lib/date-range";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { fmtCost } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
 import { CostBarChart } from "@/components/charts/cost-bar-chart";
+import { TeamCountChart } from "@/components/charts/team-count-chart";
+import { CostPerPersonChart } from "@/components/charts/cost-per-person-chart";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 export default async function TeamPage({
@@ -26,7 +33,10 @@ export default async function TeamPage({
     params.days === ALL_PERIOD_VALUE ? await getEarliestActivity(user) : null;
   const tz = await getViewerTimeZone();
   const range = dateRangeFromDays(params.days, earliestActivity, tz);
-  const userCosts = await getCostByUser(user, range);
+  const [userCosts, teamActivity] = await Promise.all([
+    getCostByUser(user, range),
+    getTeamActivityByDay(user, range),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -49,6 +59,24 @@ export default async function TeamPage({
             }))}
             emptyLabel="No team cost data for this period"
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Team Count</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TeamCountChart data={teamActivity} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Cost per Person</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CostPerPersonChart data={teamActivity} />
         </CardContent>
       </Card>
 

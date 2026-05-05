@@ -31,6 +31,7 @@ const dal = {
   getCurrentUser: vi.fn(),
   getCostByUser: vi.fn(),
   getEarliestActivity: vi.fn(),
+  getTeamActivityByDay: vi.fn(),
 };
 vi.mock("@/lib/dal", () => dal);
 
@@ -51,6 +52,10 @@ beforeEach(() => {
     { id: "usr_jane", name: "Jane", cost_cents: 1_500_00 },
   ]);
   dal.getEarliestActivity.mockReset().mockResolvedValue("2026-04-01");
+  dal.getTeamActivityByDay.mockReset().mockResolvedValue([
+    { bucket_day: "2026-05-01", active_members: 2, cost_cents: 4_000_00 },
+    { bucket_day: "2026-05-02", active_members: 1, cost_cents: 1_000_00 },
+  ]);
 });
 
 async function render(searchParams: Record<string, string> = {}) {
