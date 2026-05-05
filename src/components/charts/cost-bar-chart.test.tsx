@@ -1,14 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
 import type { ReactElement } from "react";
-import { Bar, LabelList } from "recharts";
+import { Bar, BarChart, LabelList } from "recharts";
 import { fmtCost } from "@/lib/format";
 
 // CostBarChart now calls `useMediaQuery` to shrink the y-axis column on
-// narrow viewports. The test walks the React element tree without rendering,
-// so stub the hook with a plain function — this keeps the test in the node
-// env and still exercises the non-compact prop values.
+// narrow viewports. The hook is stubbed by a controllable function so each
+// test can switch between the desktop and compact code paths.
+let isCompact = false;
 vi.mock("@/lib/use-media-query", () => ({
-  useMediaQuery: () => false,
+  useMediaQuery: () => isCompact,
 }));
 
 // Lazy import so the mock is applied before the component module evaluates.
@@ -87,5 +87,55 @@ describe("CostBarChart", () => {
     expect(formatter).toBeTypeOf("function");
     expect(formatter(3000)).toBe(fmtCost(3000));
     expect(formatter(81)).toBe(fmtCost(81));
+  });
+
+  it("strips the shared label prefix on compact widths so rows are visibly distinct (#121)", () => {
+    isCompact = true;
+    try {
+      const collidingPrefix = [
+        { label: "claude_code / claude-sonnet-4-5", cost_cents: 5000 },
+        { label: "claude_code / claude-haiku-4-5", cost_cents: 3000 },
+        { label: "claude_code / claude-opus-4-7", cost_cents: 1000 },
+      ];
+      const tree = CostBarChart({
+        data: collidingPrefix,
+        emptyLabel: "unused",
+      });
+      const nodes = Array.from(walk(tree));
+      const barChart = nodes.find((n) => n.type === BarChart);
+      expect(barChart).toBeDefined();
+      const data = (barChart!.props as { data: { displayLabel: string }[] })
+        .data;
+      // Common prefix `claude_code / claude-` is stripped so the model id is
+      // what reaches the y-axis renderer (and stays distinct after truncation).
+      expect(data.map((d) => d.displayLabel)).toEqual([
+        "sonnet-4-5",
+        "haiku-4-5",
+        "opus-4-7",
+      ]);
+    } finally {
+      isCompact = false;
+    }
+  });
+
+  it("leaves labels alone when truncation alone keeps rows distinct", () => {
+    isCompact = true;
+    try {
+      const distinctEnough = [
+        { label: "alpha", cost_cents: 100 },
+        { label: "beta", cost_cents: 50 },
+      ];
+      const tree = CostBarChart({
+        data: distinctEnough,
+        emptyLabel: "unused",
+      });
+      const nodes = Array.from(walk(tree));
+      const barChart = nodes.find((n) => n.type === BarChart);
+      const data = (barChart!.props as { data: { displayLabel: string }[] })
+        .data;
+      expect(data.map((d) => d.displayLabel)).toEqual(["alpha", "beta"]);
+    } finally {
+      isCompact = false;
+    }
   });
 });

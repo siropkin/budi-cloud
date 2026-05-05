@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatDuration } from "./format";
+import { formatDuration, repoName } from "./format";
 
 describe("formatDuration (#88)", () => {
   it("uses duration_ms when provided", () => {
@@ -46,5 +46,29 @@ describe("formatDuration (#88)", () => {
     expect(
       formatDuration(60_000, "2026-04-29T10:00:00Z", "2026-04-29T11:00:00Z")
     ).toBe("1m");
+  });
+});
+
+describe("repoName (#121)", () => {
+  it("returns sentinel display strings for empty / untagged ids", () => {
+    expect(repoName(null)).toBe("(unknown)");
+    expect(repoName("Unassigned")).toBe("(no repo)");
+    expect(repoName("(untagged)")).toBe("(no repo)");
+  });
+
+  it("strips the host so `owner/repo` survives chart label truncation", () => {
+    expect(repoName("github.com/siropkin/budi-cloud")).toBe(
+      "siropkin/budi-cloud"
+    );
+    expect(repoName("gitlab.com/team/project")).toBe("team/project");
+  });
+
+  it("keeps short non-URL ids as-is and shortens long opaque ids", () => {
+    expect(repoName("local")).toBe("local");
+    expect(repoName("a-fairly-long-opaque-id-string")).toBe("a-fairly-lon...");
+  });
+
+  it("shortens hashed sha256 ids", () => {
+    expect(repoName("sha256:abcdef0123456789xyz")).toBe("abcdef01...");
   });
 });

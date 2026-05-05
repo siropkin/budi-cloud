@@ -61,6 +61,12 @@ export function repoName(repoId: string | null): string {
   if (!repoId) return "(unknown)";
   if (repoId === "Unassigned" || repoId === "(untagged)") return "(no repo)";
   if (repoId.startsWith("sha256:")) return repoId.slice(7, 15) + "...";
+  // For URL-like git remotes ("host.tld/owner/repo[/...]") drop the host so
+  // the discriminating "owner/repo" survives the chart's narrow label column;
+  // a length-based slice would otherwise keep "github.com/o..." for every
+  // row and erase what differentiates them (#121).
+  const hostOwnerRepo = repoId.match(/^[^/\s]+\.[a-z]{2,}\/(.+)$/i);
+  if (hostOwnerRepo) return hostOwnerRepo[1];
   if (repoId.length > 16) return repoId.slice(0, 12) + "...";
   return repoId;
 }
