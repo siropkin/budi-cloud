@@ -44,7 +44,10 @@ export function CostBarChart({
   const yAxisWidth = isCompact ? 110 : 180;
   const rightMargin = isCompact ? 24 : 56;
   const leftMargin = isCompact ? 4 : 20;
-  const labelMaxLen = isCompact ? 18 : 28;
+  // On compact, 18 chars at fontSize 12 can exceed the 110px label column,
+  // pushing right-anchored text into negative X so leading characters get
+  // clipped (#120). 14 chars fits comfortably.
+  const labelMaxLen = isCompact ? 14 : 28;
 
   const sorted = [...data]
     .sort((a, b) => b.cost_cents - a.cost_cents)
