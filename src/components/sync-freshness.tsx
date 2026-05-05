@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { clsx } from "clsx";
 import { ChevronDown } from "lucide-react";
@@ -24,16 +25,31 @@ const STALLED_AFTER_MS = 24 * 60 * 60 * 1000;
  */
 const SESSIONS_LAG_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Cadence for polling `/api/freshness` to spot a newer daemon upload than
+ * what the page was SSR'd with. 60s is comfortably below the daemon's own
+ * 10–15 min sync cadence; the request itself is two cheap COUNT/MAX queries
+ * (see `getSyncFreshness` in `dal.ts`).
+ */
+const FRESHNESS_POLL_INTERVAL_MS = 60_000;
+
 export function SyncFreshness({
   deviceCount,
   lastSeenAt,
   lastRollupAt,
   lastSessionAt,
+  renderedRollupAt,
 }: {
   deviceCount: number;
   lastSeenAt: string | null;
   lastRollupAt: string | null;
   lastSessionAt: string | null;
+  /**
+   * The `lastRollupAt` the page was SSR'd with. Snapshotted on the server
+   * and passed down so the client poll can detect when a newer upload has
+   * landed and trigger `router.refresh()` (#133).
+   */
+  renderedRollupAt?: string | null;
 }) {
   // Not-linked is rendered as a call-to-action so it's obvious what to do
   // next instead of looking like a silent empty dashboard.
@@ -61,6 +77,7 @@ export function SyncFreshness({
       lastSeenAt={lastSeenAt}
       lastRollupAt={lastRollupAt}
       lastSessionAt={lastSessionAt}
+      renderedRollupAt={renderedRollupAt ?? lastRollupAt}
     />
   );
 }
@@ -75,12 +92,15 @@ function LinkedSyncFreshness({
   lastSeenAt,
   lastRollupAt,
   lastSessionAt,
+  renderedRollupAt,
 }: {
   lastSeenAt: string | null;
   lastRollupAt: string | null;
   lastSessionAt: string | null;
+  renderedRollupAt: string | null;
 }) {
   const now = useNow(60_000);
+  const isRefreshing = useFreshnessAutoRefresh(renderedRollupAt);
   const effective = lastRollupAt ?? lastSeenAt;
   const isStalled =
     effective !== null && now - Date.parse(effective) > STALLED_AFTER_MS;
@@ -94,13 +114,19 @@ function LinkedSyncFreshness({
     lastSessionAt !== null &&
     Date.parse(lastRollupAt) - Date.parse(lastSessionAt) >
       SESSIONS_LAG_THRESHOLD_MS;
-  const state: "linked_no_data" | "stalled" | "sessions_stalled" | "ok" =
-    !lastRollupAt
-      ? "linked_no_data"
-      : isStalled
-        ? "stalled"
-        : isSessionsStalled
-          ? "sessions_stalled"
+  const state:
+    | "linked_no_data"
+    | "stalled"
+    | "sessions_stalled"
+    | "refreshing"
+    | "ok" = !lastRollupAt
+    ? "linked_no_data"
+    : isStalled
+      ? "stalled"
+      : isSessionsStalled
+        ? "sessions_stalled"
+        : isRefreshing
+          ? "refreshing"
           : "ok";
 
   // Stalled mirrors the `not_linked` CTA pattern: make it actionable so the
@@ -126,6 +152,8 @@ function LinkedSyncFreshness({
         "inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs font-medium",
         state === "ok" &&
           "border-emerald-400/20 bg-emerald-400/5 text-emerald-300",
+        state === "refreshing" &&
+          "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
         state === "linked_no_data" &&
           "border-sky-400/20 bg-sky-400/5 text-sky-300"
       )}
@@ -141,6 +169,7 @@ function LinkedSyncFreshness({
         className={clsx(
           "h-1.5 w-1.5 rounded-full",
           state === "ok" && "bg-emerald-300",
+          state === "refreshing" && "animate-pulse bg-emerald-300",
           state === "linked_no_data" && "animate-pulse bg-sky-300"
         )}
       />
@@ -196,7 +225,7 @@ function StalledBadge({
         className="inline-flex items-center gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-xs font-medium text-amber-300 transition-colors hover:border-amber-400/60 hover:bg-amber-400/20"
       >
         <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
-        <span className="hidden sm:inline">Stalled — last synced </span>
+        <span className="hidden sm:inline">Local Budi stalled · </span>
         <span>{relative}</span>
         <ChevronDown
           className={clsx("h-3 w-3 transition-transform", open && "rotate-180")}
@@ -358,7 +387,7 @@ function SyncFreshnessLabel({
   effective,
   now,
 }: {
-  state: "linked_no_data" | "ok";
+  state: "linked_no_data" | "ok" | "refreshing";
   effective: string | null;
   now: number;
 }) {
@@ -367,9 +396,19 @@ function SyncFreshnessLabel({
       <>
         {/* Below `sm` the dot already conveys the state; shorten the copy. */}
         <span className="hidden sm:inline">
-          Linked — waiting for first sync…
+          Local Budi · waiting for first upload…
         </span>
         <span className="sm:hidden">Waiting…</span>
+      </>
+    );
+  }
+  if (state === "refreshing") {
+    return (
+      <>
+        <span className="hidden sm:inline">
+          Local Budi · new data, refreshing…
+        </span>
+        <span className="sm:hidden">Refreshing…</span>
       </>
     );
   }
@@ -377,11 +416,11 @@ function SyncFreshnessLabel({
   return (
     <>
       {/*
-        Prefix ("Synced") is redundant with the colored dot at mobile widths.
+        Source prefix is redundant with the colored dot at mobile widths.
         Drop it below `sm` so the whole badge fits next to the hamburger +
         logout icon on a 390px viewport.
       */}
-      <span className="hidden sm:inline">Synced </span>
+      <span className="hidden sm:inline">Local Budi · uploaded </span>
       <span>{formatRelative(Date.parse(effective), now)}</span>
     </>
   );
@@ -394,6 +433,94 @@ function useNow(intervalMs: number): number {
     return () => window.clearInterval(id);
   }, [intervalMs]);
   return now;
+}
+
+/**
+ * Polls `/api/freshness` while the tab is visible and triggers a server
+ * re-render when the daemon has uploaded something newer than what the
+ * page was SSR'd with. Returns `true` for the brief window between
+ * "we noticed new data" and "the new SSR has flowed back" so the badge
+ * can show a transient `refreshing…` state (#133).
+ *
+ * Visibility-aware so backgrounded tabs don't burn one request/min, and
+ * `router.refresh()` is deferred to the next tick to avoid yanking chart
+ * state mid-interaction (e.g. if a period button was just clicked).
+ */
+function useFreshnessAutoRefresh(renderedRollupAt: string | null): boolean {
+  const router = useRouter();
+  // The newest watermark the poller has *seen* on the server. The badge
+  // is "refreshing" while this is strictly newer than the prop the page
+  // was SSR'd with — once a fresh SSR flows back through `renderedRollupAt`,
+  // the comparison naturally goes false (no effect needed to clear it).
+  const [pendingRollupAt, setPendingRollupAt] = useState<string | null>(null);
+  // Mirror the latest SSR'd watermark into a ref so the polling closure
+  // doesn't need to re-subscribe each render.
+  const renderedRef = useRef<string | null>(renderedRollupAt);
+  useEffect(() => {
+    renderedRef.current = renderedRollupAt;
+  }, [renderedRollupAt]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    async function check() {
+      if (typeof document !== "undefined" && document.hidden) return;
+      try {
+        const res = await fetch("/api/freshness", { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { lastRollupAt: string | null };
+        const seen = renderedRef.current;
+        if (
+          data.lastRollupAt &&
+          (!seen || Date.parse(data.lastRollupAt) > Date.parse(seen))
+        ) {
+          setPendingRollupAt(data.lastRollupAt);
+          // Defer to the next tick so we don't preempt a just-fired
+          // navigation (e.g. a period-selector click).
+          setTimeout(() => {
+            if (!cancelled) router.refresh();
+          }, 0);
+        }
+      } catch {
+        // Network blip — try again next tick.
+      }
+    }
+
+    function start() {
+      if (timer !== null) return;
+      timer = setInterval(check, FRESHNESS_POLL_INTERVAL_MS);
+    }
+    function stop() {
+      if (timer !== null) {
+        clearInterval(timer);
+        timer = null;
+      }
+    }
+    function onVisibility() {
+      if (document.hidden) {
+        stop();
+      } else {
+        // Catch up the moment the tab is foregrounded — don't make the user
+        // wait up to a full minute for the next tick.
+        check();
+        start();
+      }
+    }
+
+    if (typeof document !== "undefined" && !document.hidden) start();
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      stop();
+    };
+  }, [router]);
+
+  if (!pendingRollupAt) return false;
+  if (!renderedRollupAt) return true;
+  return Date.parse(pendingRollupAt) > Date.parse(renderedRollupAt);
 }
 
 export function formatRelative(

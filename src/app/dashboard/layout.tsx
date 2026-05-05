@@ -37,6 +37,7 @@ export default async function DashboardLayout({
             lastSeenAt={freshness.lastSeenAt}
             lastRollupAt={freshness.lastRollupAt}
             lastSessionAt={freshness.lastSessionAt}
+            renderedRollupAt={freshness.lastRollupAt}
           />
           <UserMenu displayName={user.display_name} email={user.email} />
         </header>
