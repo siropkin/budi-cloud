@@ -734,7 +734,8 @@ export async function getSessions(
   const { data } = await query;
   const fetched = (data ?? []) as SessionRow[];
   const hasMore = fetched.length > pageSize;
-  const rows = hasMore ? fetched.slice(0, pageSize) : fetched;
+  const trimmed = hasMore ? fetched.slice(0, pageSize) : fetched;
+  const rows = await attachOwners(admin, user, trimmed);
   const tail = rows[rows.length - 1];
   const nextCursor =
     hasMore && tail
@@ -742,6 +743,58 @@ export async function getSessions(
       : null;
 
   return { rows, nextCursor };
+}
+
+/**
+ * Resolve owner display labels for a batch of session rows. Manager-only:
+ * member viewers already know every row is theirs (#138), so we leave
+ * `owner_name` null and skip the device→user→identity joins entirely.
+ *
+ * Falls back through `display_name → email → id-prefix` so a freshly-invited
+ * teammate without a profile name still renders something a manager can match
+ * to a person in the team list. Mirrors the lookup already proven out in
+ * `getCostByDevice` so the two surfaces label the same teammate identically.
+ */
+async function attachOwners(
+  admin: ReturnType<typeof createAdminClient>,
+  user: BudiUser,
+  rows: SessionRow[]
+): Promise<SessionRow[]> {
+  if (user.role !== "manager" || rows.length === 0) return rows;
+
+  const deviceIds = Array.from(new Set(rows.map((r) => r.device_id)));
+  const { data: devices } = await admin
+    .from("devices")
+    .select("id, user_id")
+    .in("id", deviceIds);
+  const deviceToUser = new Map<string, string>();
+  for (const d of devices ?? []) {
+    deviceToUser.set(d.id as string, d.user_id as string);
+  }
+
+  const ownerIds = Array.from(new Set(deviceToUser.values()));
+  if (ownerIds.length === 0) return rows;
+
+  const { data: owners } = await admin
+    .from("users")
+    .select("id, display_name, email")
+    .in("id", ownerIds);
+  const ownerLookup = new Map<string, string>(
+    (owners ?? []).map((u) => [
+      u.id as string,
+      (u.display_name as string | null) ||
+        (u.email as string | null) ||
+        (u.id as string).slice(0, 8),
+    ])
+  );
+
+  return rows.map((r) => {
+    const ownerId = deviceToUser.get(r.device_id);
+    return {
+      ...r,
+      owner_name: ownerId ? (ownerLookup.get(ownerId) ?? null) : null,
+    };
+  });
 }
 
 export interface SessionRow {
@@ -762,6 +815,12 @@ export interface SessionRow {
   // started emitting `primary_model`, and for sessions with zero scored
   // messages — render as em-dash in those cases.
   main_model: string | null;
+  // Resolved owner label for the device this session ran on (#138). Only
+  // populated for manager viewers; null for member viewers (every row is
+  // theirs) and for sessions whose device→user mapping cannot be resolved.
+  // Not a column on `session_summaries` — joined in by the DAL via
+  // `attachOwners`.
+  owner_name?: string | null;
   // The schema also has `vital_*` columns (006_session_vitals.sql) but the
   // daemon has never populated them, so the dashboard stopped reading them in
   // #141. Reintroduce typed fields here once budi-core ships vitals on the
@@ -793,7 +852,10 @@ export async function getSessionDetail(
     .eq("session_id", sessionId)
     .maybeSingle();
 
-  return (data as SessionRow | null) ?? null;
+  const row = (data as SessionRow | null) ?? null;
+  if (!row) return null;
+  const [enriched] = await attachOwners(admin, user, [row]);
+  return enriched ?? row;
 }
 
 /**

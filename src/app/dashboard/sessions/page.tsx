@@ -65,6 +65,7 @@ export default async function SessionsPage({
 
   const unit = parseUnit(params.units);
   const isTokens = unit === "tokens";
+  const isManager = user.role === "manager";
   const scope = { scopedUserId: params.user || null };
   const earliestActivity =
     params.days === ALL_PERIOD_VALUE
@@ -77,7 +78,7 @@ export default async function SessionsPage({
 
   const [{ rows: sessions, nextCursor }, members] = await Promise.all([
     getSessions(user, range, scope, { cursor }),
-    user.role === "manager" ? getOrgMembers(user.org_id) : Promise.resolve([]),
+    isManager ? getOrgMembers(user.org_id) : Promise.resolve([]),
   ]);
 
   const startIndex = (page - 1) * SESSIONS_PAGE_SIZE + 1;
@@ -135,6 +136,9 @@ export default async function SessionsPage({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/10 text-left text-zinc-400">
+                    {isManager && (
+                      <th className="pr-3 pb-2 font-medium">Member</th>
+                    )}
                     <th className="pr-3 pb-2 font-medium">Provider</th>
                     <th className="pr-3 pb-2 font-medium">Model</th>
                     <th className="pr-3 pb-2 font-medium">Started</th>
@@ -159,6 +163,19 @@ export default async function SessionsPage({
                         key={`${s.device_id}-${s.session_id}`}
                         className="border-b border-white/5 transition-colors hover:bg-white/5"
                       >
+                        {isManager && (
+                          <td
+                            className="text-zinc-300"
+                            title={s.owner_name ?? undefined}
+                          >
+                            <Link
+                              href={href}
+                              className="block max-w-[20ch] truncate py-2 pr-3"
+                            >
+                              {s.owner_name ?? "-"}
+                            </Link>
+                          </td>
+                        )}
                         <td className="text-zinc-300">
                           <Link href={href} className="block py-2 pr-3">
                             {s.provider}
