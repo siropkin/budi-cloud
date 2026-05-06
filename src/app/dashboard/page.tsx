@@ -63,6 +63,13 @@ export default async function OverviewPage({
   // a `?user=` filter the rest of the page already narrows to one teammate, so
   // a "leader" card showing that same teammate at 100% would be noise.
   const showTopContributor = user.role === "manager" && !scopedUserId;
+  // Pick heatmap shape by period: hourly (DOW × hour) for short windows where
+  // time-of-day is the interesting signal; GitHub-style calendar (DOW × week)
+  // for 30d / lifetime where "which calendar days were active" is what the
+  // viewer actually wants. Default `?days` is 7d, so missing → hourly.
+  const heatmapMode: "hourly" | "calendar" = isHourlyHeatmapPeriod(params.days)
+    ? "hourly"
+    : "calendar";
   const [
     stats,
     activity,
@@ -84,7 +91,9 @@ export default async function OverviewPage({
     getCostByModel(user, range, scope),
     getCostByRepo(user, range, scope),
     showTopContributor ? getCostByUser(user, range) : Promise.resolve([]),
-    getActivityHeatmap(user, range, tz, scope),
+    heatmapMode === "hourly"
+      ? getActivityHeatmap(user, range, tz, scope)
+      : Promise.resolve([]),
   ]);
 
   // Caption for the headline-card delta (e.g. "vs previous 7d"). For numeric
@@ -241,15 +250,40 @@ export default async function OverviewPage({
       {hasSynced && (
         <Card>
           <CardHeader>
-            <CardTitle>{`Activity by Day & Hour (${unit === "tokens" ? "Sessions" : "Cost"})`}</CardTitle>
+            <CardTitle>{heatmapTitle(heatmapMode, unit)}</CardTitle>
           </CardHeader>
           <CardContent>
-            <ActivityHeatmap data={heatmap} unit={unit} />
+            {heatmapMode === "hourly" ? (
+              <ActivityHeatmap mode="hourly" data={heatmap} unit={unit} />
+            ) : (
+              <ActivityHeatmap
+                mode="calendar"
+                data={activity}
+                range={{ from: range.from, to: range.to }}
+                unit={unit}
+              />
+            )}
           </CardContent>
         </Card>
       )}
     </div>
   );
+}
+
+function isHourlyHeatmapPeriod(days: string | undefined): boolean {
+  // Default window is 7d (matches `dateRangeFromDays`), so an absent `days`
+  // param is hourly. Anything beyond 7 days switches to the calendar view.
+  if (days === undefined || days === "" || days === "1" || days === "7") {
+    return true;
+  }
+  return false;
+}
+
+function heatmapTitle(mode: "hourly" | "calendar", unit: Unit): string {
+  if (mode === "hourly") {
+    return `Activity by Day & Hour (${unit === "tokens" ? "Sessions" : "Cost"})`;
+  }
+  return `Activity Calendar (${unit === "tokens" ? "Tokens" : "Cost"})`;
 }
 
 function sparkValues(
