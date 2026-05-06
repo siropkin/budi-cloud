@@ -155,23 +155,27 @@ describe("dashboard/sessions/[id] /page", () => {
     expect(text).not.toContain("claude-opus-4-7");
   });
 
-  it("orders summary fields so Provider and Model sit together on the top row (#137, #140)", async () => {
+  it("groups summary fields so each pair on a row reads as a phrase (#137, #140)", async () => {
     // The 2-col grid renders fields in document order, left-to-right then
-    // top-to-bottom. After #140 the top row is Provider/Model — these are the
-    // two "what tool" identifiers and belong adjacent so a manager skimming
-    // the card can read them as a single phrase. Started slides down to row
-    // 2, paired with Repo. The earlier Repo/Branch pairing from #137 gives
-    // way once a 9th field is in the grid; the new pin is the Provider/Model
-    // adjacency.
+    // top-to-bottom. The pin is the *pair groupings* a viewer reads as a
+    // single phrase, not just monotonic order:
+    //   Row 1: Provider / Model     (what tool)
+    //   Row 2: Started  / Duration  (when, how long)
+    //   Row 3: Repo     / Branch    (where in the codebase)
+    //   Row 4: Messages / Tokens    (volume)
+    //   Row 5: Cost                 (the dollar takeaway)
+    // Earlier rounds (#137, #140) walked through Provider/Started and
+    // Provider/Model adjacency; this is the next iteration once Duration is
+    // promoted next to Started so the temporal pair sits together.
     const node = await render();
     const text = extractText(node);
     const order = [
       "Provider",
       "Model",
       "Started",
+      "Duration",
       "Repo",
       "Branch",
-      "Duration",
       "Messages",
       "Tokens",
       "Cost",
