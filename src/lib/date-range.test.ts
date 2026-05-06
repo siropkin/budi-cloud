@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { dateRangeFromDays } from "@/lib/date-range";
+import { dateRangeFromDays, previousDateRange } from "@/lib/date-range";
 
 /**
  * Pins the rolling-window contract introduced in #75. Each `days=N` query
@@ -163,5 +163,45 @@ describe("dateRangeFromDays (TZ-aware bucket bounds, #78)", () => {
     // the daemon already wrote it in UTC, so the literal date is correct.
     expect(r.bucketFrom).toBe("2026-01-15");
     expect(r.bucketTo).toBe("2026-04-28");
+  });
+});
+
+describe("previousDateRange (#150 — period-over-period on Overview)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-18T12:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("7d: returns the 8-day window immediately preceding the current 8-day window", () => {
+    // Current 7d range is Apr 11 → Apr 18 (8 day buckets); the comparable
+    // previous window is the 8 days ending the day before — Apr 3 → Apr 10.
+    const current = dateRangeFromDays("7");
+    const prev = previousDateRange(current);
+    expect(prev?.from).toBe("2026-04-03");
+    expect(prev?.to).toBe("2026-04-10");
+  });
+
+  it("1d: previous window is the two days before yesterday/today", () => {
+    const current = dateRangeFromDays("1");
+    const prev = previousDateRange(current);
+    expect(prev?.from).toBe("2026-04-15");
+    expect(prev?.to).toBe("2026-04-16");
+  });
+
+  it("preserves bucket and started_at bounds in the supplied timezone", () => {
+    vi.setSystemTime(new Date("2026-04-28T00:30:00Z"));
+    const current = dateRangeFromDays("1", null, "America/Los_Angeles");
+    const prev = previousDateRange(current, "America/Los_Angeles");
+    // Current is Apr 26–27 PDT; previous is Apr 24–25 PDT, with a UTC bucket
+    // upper bound of Apr 26 (the bucket containing Apr 25 PDT evening) — same
+    // shape as the current-window contract pinned above.
+    expect(prev?.from).toBe("2026-04-24");
+    expect(prev?.to).toBe("2026-04-25");
+    expect(prev?.bucketFrom).toBe("2026-04-24");
+    expect(prev?.bucketTo).toBe("2026-04-26");
   });
 });

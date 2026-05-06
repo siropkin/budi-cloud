@@ -7,11 +7,11 @@ import {
   getOrgMembers,
   getSyncFreshness,
 } from "@/lib/dal";
-import { dateRangeFromDays } from "@/lib/date-range";
+import { dateRangeFromDays, previousDateRange } from "@/lib/date-range";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { parseUnit } from "@/lib/units";
-import { fmtCost, fmtNum } from "@/lib/format";
+import { fmtCost, fmtDelta, fmtNum } from "@/lib/format";
 import { StatCard } from "@/components/stat-card";
 import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
@@ -41,12 +41,40 @@ export default async function OverviewPage({
       : null;
   const tz = await getViewerTimeZone();
   const range = dateRangeFromDays(params.days, earliestActivity, tz);
-  const [stats, activity, freshness, members] = await Promise.all([
-    getOverviewStats(user, range, scope),
-    getDailyActivity(user, range, scope),
-    getSyncFreshness(user),
-    user.role === "manager" ? getOrgMembers(user.org_id) : Promise.resolve([]),
-  ]);
+  // Same-length window immediately preceding `range` for period-over-period
+  // deltas (#150). `null` for the lifetime preset where "the period before
+  // earliest-activity" is empty by definition.
+  const previousRange =
+    params.days === ALL_PERIOD_VALUE ? null : previousDateRange(range, tz);
+  const [stats, activity, freshness, members, previousStats, previousActivity] =
+    await Promise.all([
+      getOverviewStats(user, range, scope),
+      getDailyActivity(user, range, scope),
+      getSyncFreshness(user),
+      user.role === "manager"
+        ? getOrgMembers(user.org_id)
+        : Promise.resolve([]),
+      previousRange
+        ? getOverviewStats(user, previousRange, scope)
+        : Promise.resolve(null),
+      previousRange
+        ? getDailyActivity(user, previousRange, scope)
+        : Promise.resolve([]),
+    ]);
+
+  // Caption for the headline-card delta (e.g. "vs previous 7d"). For numeric
+  // ?days= we show the length verbatim; for any other window we say "previous
+  // period" so the label stays accurate without inventing a number.
+  const periodLengthDays = Number(params.days);
+  const deltaCaption =
+    Number.isFinite(periodLengthDays) && periodLengthDays >= 1
+      ? `vs previous ${Math.floor(periodLengthDays)}d`
+      : "vs previous period";
+
+  const totalTokens = stats.totalInputTokens + stats.totalOutputTokens;
+  const previousTotalTokens = previousStats
+    ? previousStats.totalInputTokens + previousStats.totalOutputTokens
+    : 0;
 
   // Decide which empty-state banner (if any) is most informative. The
   // freshness snapshot lets us tell "no devices yet" apart from "devices
@@ -76,14 +104,47 @@ export default async function OverviewPage({
         {unit === "tokens" ? (
           <StatCard
             title="Total Tokens"
-            value={fmtNum(stats.totalInputTokens + stats.totalOutputTokens)}
+            value={fmtNum(totalTokens)}
             subtitle={`${fmtNum(stats.totalInputTokens)} in / ${fmtNum(stats.totalOutputTokens)} out`}
+            delta={
+              previousStats
+                ? fmtDelta(totalTokens, previousTotalTokens)
+                : undefined
+            }
+            deltaCaption={previousStats ? deltaCaption : undefined}
           />
         ) : (
-          <StatCard title="Total Cost" value={fmtCost(stats.totalCostCents)} />
+          <StatCard
+            title="Total Cost"
+            value={fmtCost(stats.totalCostCents)}
+            delta={
+              previousStats
+                ? fmtDelta(stats.totalCostCents, previousStats.totalCostCents)
+                : undefined
+            }
+            deltaCaption={previousStats ? deltaCaption : undefined}
+          />
         )}
-        <StatCard title="Messages" value={fmtNum(stats.totalMessages)} />
-        <StatCard title="Sessions" value={fmtNum(stats.totalSessions)} />
+        <StatCard
+          title="Messages"
+          value={fmtNum(stats.totalMessages)}
+          delta={
+            previousStats
+              ? fmtDelta(stats.totalMessages, previousStats.totalMessages)
+              : undefined
+          }
+          deltaCaption={previousStats ? deltaCaption : undefined}
+        />
+        <StatCard
+          title="Sessions"
+          value={fmtNum(stats.totalSessions)}
+          delta={
+            previousStats
+              ? fmtDelta(stats.totalSessions, previousStats.totalSessions)
+              : undefined
+          }
+          deltaCaption={previousStats ? deltaCaption : undefined}
+        />
       </div>
 
       <Card>
@@ -91,7 +152,11 @@ export default async function OverviewPage({
           <CardTitle>{`Daily Activity (${unit === "tokens" ? "Tokens" : "Cost"})`}</CardTitle>
         </CardHeader>
         <CardContent>
-          <ActivityChart data={activity} unit={unit} />
+          <ActivityChart
+            data={activity}
+            previousData={previousActivity}
+            unit={unit}
+          />
         </CardContent>
       </Card>
     </div>
