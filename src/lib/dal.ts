@@ -83,6 +83,13 @@ export async function getCurrentUser(): Promise<BudiUser | null> {
  * Aggregation runs server-side via `dashboard_overview_stats` (#92) so the
  * sums are independent of any PostgREST row cap — `getOverviewStats` and
  * every breakdown query agree on the same row set regardless of org size.
+ *
+ * The session count is filtered by the same `bucket_day` calendar range as
+ * the rollup totals (#155). Pre-#155 the count used a precise TIMESTAMPTZ
+ * window over `started_at`, which excluded sessions with NULL `started_at`
+ * and was narrower than the rollup window — on `?days=1` that asymmetry
+ * was enough to collapse the previous-period count to zero while every
+ * other card on the same row showed real period-over-period deltas.
  */
 export async function getOverviewStats(
   user: BudiUser,
@@ -106,8 +113,6 @@ export async function getOverviewStats(
     p_device_ids: deviceIds,
     p_bucket_from: range.bucketFrom,
     p_bucket_to: range.bucketTo,
-    p_started_from: range.startedAtFrom,
-    p_started_to: range.startedAtTo,
   });
   if (error) throw error;
 

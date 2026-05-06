@@ -46,8 +46,6 @@ class FakeSupabase {
     const deviceIds = new Set(args.p_device_ids as string[]);
     const from = args.p_bucket_from as string;
     const to = args.p_bucket_to as string;
-    const startedFrom = args.p_started_from as string;
-    const startedTo = args.p_started_to as string;
     const rollups = (this.tables.get("daily_rollups") ?? []).filter(
       (r) =>
         deviceIds.has(r.device_id as string) &&
@@ -74,10 +72,15 @@ class FakeSupabase {
       }
     );
     const total_sessions = (this.tables.get("session_summaries") ?? []).filter(
-      (s) =>
-        deviceIds.has(s.device_id as string) &&
-        String(s.started_at ?? "") >= startedFrom &&
-        String(s.started_at ?? "") <= startedTo
+      (s) => {
+        if (!deviceIds.has(s.device_id as string)) return false;
+        // Mirrors `COALESCE(started_at, ended_at, synced_at)::date` (#155).
+        const anchor = (s.started_at ?? s.ended_at ?? s.synced_at ?? "") as
+          | string
+          | null;
+        const date = anchor ? String(anchor).slice(0, 10) : "";
+        return date !== "" && date >= from && date <= to;
+      }
     ).length;
     return Promise.resolve({
       data: [{ ...totals, total_sessions }],
