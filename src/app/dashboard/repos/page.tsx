@@ -15,10 +15,8 @@ import { fmtCost, fmtNum, repoName } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
-import {
-  CostBarChart,
-  COST_BAR_CHART_MAX_ITEMS,
-} from "@/components/charts/cost-bar-chart";
+import { CostBarChart } from "@/components/charts/cost-bar-chart";
+import { COST_BAR_CHART_MAX_ITEMS } from "@/components/charts/cost-bar-chart-config";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 export default async function ReposPage({
