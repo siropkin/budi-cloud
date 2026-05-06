@@ -39,8 +39,14 @@ const dal = {
   getEarliestActivity: vi.fn(),
   getOrgMembers: vi.fn(),
   getSyncFreshness: vi.fn(),
+  getCostByModel: vi.fn(),
+  getCostByRepo: vi.fn(),
+  getCostByUser: vi.fn(),
 };
-vi.mock("@/lib/dal", () => dal);
+vi.mock("@/lib/dal", () => ({
+  ...dal,
+  UNASSIGNED_USER_ID: "__unassigned__",
+}));
 
 const MANAGER = {
   id: "usr_ivan",
@@ -78,6 +84,32 @@ beforeEach(() => {
     lastRollupAt: "2026-04-15T10:00:00Z",
     lastSessionAt: "2026-04-15T10:00:00Z",
   });
+  dal.getCostByModel.mockResolvedValue([
+    {
+      provider: "anthropic",
+      model: "claude-sonnet-4-5",
+      cost_cents: 80_000,
+      input_tokens: 3000,
+      output_tokens: 1500,
+    },
+  ]);
+  dal.getCostByRepo.mockResolvedValue([
+    {
+      repo_id: "github.com/acme/widgets",
+      cost_cents: 60_000,
+      input_tokens: 2000,
+      output_tokens: 1000,
+    },
+  ]);
+  dal.getCostByUser.mockResolvedValue([
+    {
+      id: "usr_alice",
+      name: "Alice",
+      cost_cents: 90_000,
+      input_tokens: 3500,
+      output_tokens: 1800,
+    },
+  ]);
 });
 
 async function render(searchParams: Record<string, string> = {}) {
@@ -171,5 +203,45 @@ describe("dashboard /page (Overview)", () => {
     dal.getCurrentUser.mockResolvedValue({ ...MANAGER, org_id: null });
     const node = await render();
     expect(node).toBeNull();
+  });
+
+  it("top-breakdowns: manager sees Top model / Top contributor / Top repo cards once data has synced (#150)", async () => {
+    const node = await render();
+    const text = extractText(node);
+    expect(text).toContain("Top model");
+    expect(text).toContain("Top contributor");
+    expect(text).toContain("Top repo");
+    expect(text).toContain("claude-sonnet-4-5");
+    expect(text).toContain("Alice");
+  });
+
+  it("top-breakdowns: members never see the Top contributor card (their own row would be the only one)", async () => {
+    dal.getCurrentUser.mockResolvedValue({ ...MANAGER, role: "member" });
+    const node = await render();
+    const text = extractText(node);
+    expect(text).toContain("Top model");
+    expect(text).toContain("Top repo");
+    expect(text).not.toContain("Top contributor");
+  });
+
+  it("top-breakdowns: do not render before first sync (link banner / first-sync banner suppress the row)", async () => {
+    dal.getSyncFreshness.mockResolvedValue({
+      deviceCount: 0,
+      lastSeenAt: null,
+      lastRollupAt: null,
+      lastSessionAt: null,
+    });
+    const node = await render();
+    const text = extractText(node);
+    expect(text).not.toContain("Top model");
+    expect(text).not.toContain("Top repo");
+  });
+
+  it("top-breakdowns: a manager who has scoped to a single user does not see Top contributor (it would only echo the filter)", async () => {
+    const node = await render({ user: "usr_bob" });
+    const text = extractText(node);
+    expect(text).toContain("Top model");
+    expect(text).toContain("Top repo");
+    expect(text).not.toContain("Top contributor");
   });
 });
