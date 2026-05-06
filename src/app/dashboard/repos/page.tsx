@@ -15,7 +15,10 @@ import { fmtCost, fmtNum, repoName } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
-import { CostBarChart } from "@/components/charts/cost-bar-chart";
+import {
+  CostBarChart,
+  COST_BAR_CHART_MAX_ITEMS,
+} from "@/components/charts/cost-bar-chart";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 export default async function ReposPage({
@@ -71,20 +74,38 @@ export default async function ReposPage({
       });
     }
   }
+  // Pick the same metric the chart sorts on so the table mirrors the chart's
+  // order regardless of the active unit toggle.
+  const sortValue = (r: {
+    cost_cents: number;
+    input_tokens: number;
+    output_tokens: number;
+  }) => (isTokens ? r.input_tokens + r.output_tokens : r.cost_cents);
+
   const repoRows = Array.from(repoBuckets, ([label, totals]) => ({
     label,
     cost_cents: totals.cost_cents,
     input_tokens: totals.input_tokens,
     output_tokens: totals.output_tokens,
-  })).sort((a, b) => b.cost_cents - a.cost_cents);
+  }))
+    .sort((a, b) => sortValue(b) - sortValue(a))
+    .slice(0, COST_BAR_CHART_MAX_ITEMS);
 
-  const branchRows = branches.map((b) => ({
-    project: repoName(b.repo_id),
-    branch: b.git_branch.replace(/^refs\/heads\//, ""),
-    cost_cents: b.cost_cents,
-    input_tokens: b.input_tokens,
-    output_tokens: b.output_tokens,
-  }));
+  const branchRows = branches
+    .map((b) => ({
+      project: repoName(b.repo_id),
+      branch: b.git_branch.replace(/^refs\/heads\//, ""),
+      cost_cents: b.cost_cents,
+      input_tokens: b.input_tokens,
+      output_tokens: b.output_tokens,
+    }))
+    .sort((a, b) => sortValue(b) - sortValue(a))
+    .slice(0, COST_BAR_CHART_MAX_ITEMS);
+
+  const ticketRows = tickets
+    .slice()
+    .sort((a, b) => sortValue(b) - sortValue(a))
+    .slice(0, COST_BAR_CHART_MAX_ITEMS);
 
   return (
     <div className="space-y-6">
@@ -298,7 +319,7 @@ export default async function ReposPage({
           <CardTitle>{`${valueWord} by Ticket`}</CardTitle>
         </CardHeader>
         <CardContent>
-          {tickets.length === 0 ? (
+          {ticketRows.length === 0 ? (
             <CostBarChart
               data={[]}
               emptyLabel="No ticket data for this period"
@@ -307,7 +328,7 @@ export default async function ReposPage({
           ) : (
             <div className="grid gap-6 sm:grid-cols-2">
               <CostBarChart
-                data={tickets.map((t) => ({
+                data={ticketRows.map((t) => ({
                   label: t.ticket,
                   cost_cents: t.cost_cents,
                   tokens: t.input_tokens + t.output_tokens,
@@ -328,7 +349,7 @@ export default async function ReposPage({
                     </tr>
                   </thead>
                   <tbody>
-                    {tickets.map((t, i) => (
+                    {ticketRows.map((t, i) => (
                       <tr key={i} className="border-b border-white/5">
                         <td className="py-2 text-zinc-200">{t.ticket}</td>
                         <td className="py-2 pl-4 text-right tabular-nums text-zinc-400">
@@ -348,7 +369,7 @@ export default async function ReposPage({
                   </tbody>
                 </table>
                 <ul className="divide-y divide-white/5 text-sm sm:hidden">
-                  {tickets.map((t, i) => (
+                  {ticketRows.map((t, i) => (
                     <li key={i} className="flex flex-col gap-1 py-2">
                       <div className="flex items-center justify-between">
                         <span className="text-zinc-200">{t.ticket}</span>
