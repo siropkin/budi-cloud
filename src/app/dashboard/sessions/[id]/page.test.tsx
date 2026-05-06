@@ -43,6 +43,15 @@ const MANAGER = {
   email: "ivan@example.com",
 };
 
+const MEMBER = {
+  id: "usr_jane",
+  org_id: "org_team",
+  role: "member",
+  api_key: "budi_j",
+  display_name: "Jane",
+  email: "jane@example.com",
+};
+
 const SESSION = {
   device_id: "dev_ivan",
   session_id: "sess_v",
@@ -58,6 +67,7 @@ const SESSION = {
   total_output_tokens: 800,
   total_cost_cents: 250,
   main_model: "claude-opus-4-7-20260101",
+  owner_name: "Jane Smith",
 };
 
 beforeEach(() => {
@@ -125,6 +135,7 @@ describe("dashboard/sessions/[id] /page", () => {
     expect(text).not.toContain("Vitals unavailable");
     // Lock down the summary field labels so a refactor that drops one shows up.
     for (const label of [
+      "Member",
       "Provider",
       "Model",
       "Started",
@@ -137,11 +148,27 @@ describe("dashboard/sessions/[id] /page", () => {
     ]) {
       expect(text).toContain(label);
     }
+    // Manager-attribution (#138): the resolved owner label renders next to
+    // the Provider field so a manager can tell whose session this is without
+    // pivoting back to the device list.
+    expect(text).toContain("Jane Smith");
     // The date suffix on the model id is render-only noise (`-20260101`);
     // formatModelName strips it. Pin both halves so a regression that drops
     // the formatter or shows the raw id is caught here (#140).
     expect(text).toContain("claude-opus-4-7");
     expect(text).not.toContain("claude-opus-4-7-20260101");
+  });
+
+  it("hides the Member field for non-manager (member) viewers (#138)", async () => {
+    // Members only see their own sessions, so attribution would be a constant
+    // restating their own name. Suppress it to keep the card focused.
+    dal.getCurrentUser.mockResolvedValue(MEMBER);
+    const node = await render();
+    const text = extractText(node);
+    expect(text).not.toContain("Member");
+    // The rest of the summary surface still renders.
+    expect(text).toContain("Provider");
+    expect(text).toContain("Summary");
   });
 
   it("renders a dash for the Model field when the daemon didn't send one (#140)", async () => {
@@ -170,6 +197,7 @@ describe("dashboard/sessions/[id] /page", () => {
     const node = await render();
     const text = extractText(node);
     const order = [
+      "Member",
       "Provider",
       "Model",
       "Started",

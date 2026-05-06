@@ -56,6 +56,7 @@ export default async function SessionDetailPage({
   const session = await getSessionDetail(user, deviceId, sessionId);
   if (!session) notFound();
 
+  const isManager = user.role === "manager";
   const totalTokens =
     Number(session.total_input_tokens) + Number(session.total_output_tokens);
 
@@ -79,6 +80,9 @@ export default async function SessionDetailPage({
         </CardHeader>
         <CardContent>
           <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+            {isManager && (
+              <Field label="Member" value={session.owner_name ?? "-"} />
+            )}
             <Field label="Provider" value={session.provider} />
             <Field
               label="Model"

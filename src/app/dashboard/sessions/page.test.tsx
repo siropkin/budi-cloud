@@ -45,6 +45,15 @@ const MANAGER = {
   email: "ivan@example.com",
 };
 
+const MEMBER = {
+  id: "usr_jane",
+  org_id: "org_team",
+  role: "member",
+  api_key: "budi_j",
+  display_name: "Jane",
+  email: "jane@example.com",
+};
+
 beforeEach(() => {
   dal.getCurrentUser.mockReset().mockResolvedValue(MANAGER);
   dal.getEarliestActivity.mockReset().mockResolvedValue("2026-04-01");
@@ -66,12 +75,13 @@ beforeEach(() => {
         total_output_tokens: 800,
         total_cost_cents: 250,
         main_model: "claude-opus-4-7-20260101",
+        owner_name: "Ivan",
       },
       {
         // Older daemon (#140): no main_model on the wire, column NULL in the
         // DB. Pin the dash-rendering branch so a regression that crashes on
         // null shows up here.
-        device_id: "dev_ivan",
+        device_id: "dev_jane",
         session_id: "sess_b",
         provider: "claude_code",
         started_at: "2026-04-15T09:00:00.000Z",
@@ -85,6 +95,7 @@ beforeEach(() => {
         total_output_tokens: 80,
         total_cost_cents: 30,
         main_model: null,
+        owner_name: "Jane",
       },
     ],
     nextCursor: null,
@@ -109,6 +120,7 @@ describe("dashboard/sessions /page", () => {
     // `Tokens`. The standalone Tokens column was retired in #128 because
     // the unit toggle on the cost column conveys the same signal.
     for (const col of [
+      "Member",
       "Provider",
       "Model",
       "Started",
@@ -126,6 +138,21 @@ describe("dashboard/sessions /page", () => {
     // when the truncated label hides the suffix — that's why we don't pin
     // the suffix's absence here.
     expect(text).toContain("claude-opus-4-7");
+    // Manager attribution (#138): each row reads as "<member> ran <provider>".
+    expect(text).toContain("Ivan");
+    expect(text).toContain("Jane");
+  });
+
+  it("hides the Member column for non-manager (member) viewers (#138)", async () => {
+    // Members only ever see their own rows, so the column would just repeat
+    // their own name on every line. Suppress it to keep the table tight.
+    dal.getCurrentUser.mockResolvedValue(MEMBER);
+    const node = await render();
+    const text = extractText(node);
+    expect(text).not.toContain("Member");
+    // Other column headers must still render — the suppression is scoped.
+    expect(text).toContain("Provider");
+    expect(text).toContain("Started");
   });
 
   it("units toggle: ?units=tokens flips the Cost column header to Tokens (#128)", async () => {
