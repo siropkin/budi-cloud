@@ -60,6 +60,12 @@ export interface IngestSessionSummary {
   total_input_tokens: number;
   total_output_tokens: number;
   total_cost_cents: number;
+  // Per-session "main" model (#140). The model that consumed the largest
+  // share of total (input + output) tokens for the session — see the
+  // 009_session_main_model.sql migration for the full definition. Optional
+  // because older daemons (< 8.3.16) don't emit it, and the daemon
+  // legitimately omits it for sessions with zero scored messages.
+  primary_model?: string | null;
   // Vitals (#99). Optional — older daemons (< 8.3.15) omit these, and budi-core
   // legitimately skips emission for sessions with too few assistant messages.
   vital_context_drag_state?: string | null;
@@ -129,6 +135,7 @@ export function buildSessionRows(
     total_input_tokens: s.total_input_tokens,
     total_output_tokens: s.total_output_tokens,
     total_cost_cents: s.total_cost_cents,
+    main_model: s.primary_model ?? null,
     // Vitals (#99). Each field is normalized independently so a daemon that
     // emits e.g. only the overall state (or only some vitals) still lands the
     // partial signal — the dashboard already renders missing slots as a

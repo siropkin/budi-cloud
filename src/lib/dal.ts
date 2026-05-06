@@ -758,6 +758,10 @@ export interface SessionRow {
   total_input_tokens: number | string;
   total_output_tokens: number | string;
   total_cost_cents: number | string;
+  // Per-session main model (#140). NULL for rows ingested before the daemon
+  // started emitting `primary_model`, and for sessions with zero scored
+  // messages — render as em-dash in those cases.
+  main_model: string | null;
   // The schema also has `vital_*` columns (006_session_vitals.sql) but the
   // daemon has never populated them, so the dashboard stopped reading them in
   // #141. Reintroduce typed fields here once budi-core ships vitals on the

@@ -15,7 +15,13 @@ import { dateRangeFromDays } from "@/lib/date-range";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { parseUnit } from "@/lib/units";
-import { fmtCost, fmtNum, formatDuration, repoName } from "@/lib/format";
+import {
+  fmtCost,
+  fmtNum,
+  formatDuration,
+  formatModelName,
+  repoName,
+} from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
@@ -130,6 +136,7 @@ export default async function SessionsPage({
                 <thead>
                   <tr className="border-b border-white/10 text-left text-zinc-400">
                     <th className="pr-3 pb-2 font-medium">Provider</th>
+                    <th className="pr-3 pb-2 font-medium">Model</th>
                     <th className="pr-3 pb-2 font-medium">Started</th>
                     <th className="pr-3 pb-2 font-medium">Duration</th>
                     <th className="pr-3 pb-2 font-medium">Repo</th>
@@ -155,6 +162,17 @@ export default async function SessionsPage({
                         <td className="text-zinc-300">
                           <Link href={href} className="block py-2 pr-3">
                             {s.provider}
+                          </Link>
+                        </td>
+                        <td
+                          className="text-zinc-400"
+                          title={s.main_model ?? undefined}
+                        >
+                          <Link
+                            href={href}
+                            className="block max-w-[16ch] truncate py-2 pr-3"
+                          >
+                            {s.main_model ? formatModelName(s.main_model) : "-"}
                           </Link>
                         </td>
                         <td className="text-zinc-400">

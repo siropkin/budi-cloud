@@ -65,6 +65,26 @@ beforeEach(() => {
         total_input_tokens: 2000,
         total_output_tokens: 800,
         total_cost_cents: 250,
+        main_model: "claude-opus-4-7-20260101",
+      },
+      {
+        // Older daemon (#140): no main_model on the wire, column NULL in the
+        // DB. Pin the dash-rendering branch so a regression that crashes on
+        // null shows up here.
+        device_id: "dev_ivan",
+        session_id: "sess_b",
+        provider: "claude_code",
+        started_at: "2026-04-15T09:00:00.000Z",
+        ended_at: "2026-04-15T09:30:00.000Z",
+        duration_ms: 1_800_000,
+        repo_id: "repo_x",
+        git_branch: "refs/heads/main",
+        ticket: null,
+        message_count: 4,
+        total_input_tokens: 200,
+        total_output_tokens: 80,
+        total_cost_cents: 30,
+        main_model: null,
       },
     ],
     nextCursor: null,
@@ -90,6 +110,7 @@ describe("dashboard/sessions /page", () => {
     // the unit toggle on the cost column conveys the same signal.
     for (const col of [
       "Provider",
+      "Model",
       "Started",
       "Duration",
       "Repo",
@@ -99,6 +120,12 @@ describe("dashboard/sessions /page", () => {
     ]) {
       expect(text).toContain(col);
     }
+    // New-daemon row renders the model; old-daemon row's NULL can't drop the
+    // row from the page (#140). The full id including the date suffix is
+    // also exposed via the cell's `title` so a hover tooltip surfaces it
+    // when the truncated label hides the suffix — that's why we don't pin
+    // the suffix's absence here.
+    expect(text).toContain("claude-opus-4-7");
   });
 
   it("units toggle: ?units=tokens flips the Cost column header to Tokens (#128)", async () => {
