@@ -1440,15 +1440,6 @@ describe("getSessionDetail (#99)", () => {
         total_input_tokens: 2000,
         total_output_tokens: 800,
         total_cost_cents: 250,
-        vital_context_drag_state: "yellow",
-        vital_context_drag_metric: 18.2,
-        vital_cache_efficiency_state: "green",
-        vital_cache_efficiency_metric: 87,
-        vital_thrashing_state: "red",
-        vital_thrashing_metric: 0.95,
-        vital_cost_acceleration_state: "yellow",
-        vital_cost_acceleration_metric: 42,
-        vital_overall_state: "red",
         ...extras,
       },
       {
@@ -1460,18 +1451,16 @@ describe("getSessionDetail (#99)", () => {
     ]);
   }
 
-  it("returns the session with vital fields when visible to the viewer", async () => {
+  it("returns the session row for the viewer's own device", async () => {
     seedSession();
     const { getSessionDetail } = await loadDal();
 
     const detail = await getSessionDetail(manager, "dev_ivan", "sess_v");
     expect(detail).not.toBeNull();
-    expect(detail?.vital_overall_state).toBe("red");
-    expect(detail?.vital_context_drag_state).toBe("yellow");
-    expect(Number(detail?.vital_context_drag_metric)).toBe(18.2);
-    expect(detail?.vital_cache_efficiency_state).toBe("green");
-    expect(detail?.vital_thrashing_state).toBe("red");
-    expect(detail?.vital_cost_acceleration_state).toBe("yellow");
+    expect(detail?.session_id).toBe("sess_v");
+    expect(detail?.provider).toBe("claude_code");
+    expect(detail?.repo_id).toBe("repo_x");
+    expect(Number(detail?.total_cost_cents)).toBe(250);
   });
 
   it("returns null for a foreign-org session — collapses with not-found", async () => {

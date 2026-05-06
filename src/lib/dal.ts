@@ -744,13 +744,6 @@ export async function getSessions(
   return { rows, nextCursor };
 }
 
-/**
- * One of the four CLI-side `VitalScore` colours, or `null` when the daemon
- * didn't emit a score for this session (older daemons, or a session with too
- * few assistant messages — see `006_session_vitals.sql` and #99).
- */
-export type VitalState = "green" | "yellow" | "red" | null;
-
 export interface SessionRow {
   device_id: string;
   session_id: string;
@@ -765,16 +758,10 @@ export interface SessionRow {
   total_input_tokens: number | string;
   total_output_tokens: number | string;
   total_cost_cents: number | string;
-  // Vitals (#99). Nullable for older daemons / low-signal sessions.
-  vital_context_drag_state?: VitalState;
-  vital_context_drag_metric?: number | string | null;
-  vital_cache_efficiency_state?: VitalState;
-  vital_cache_efficiency_metric?: number | string | null;
-  vital_thrashing_state?: VitalState;
-  vital_thrashing_metric?: number | string | null;
-  vital_cost_acceleration_state?: VitalState;
-  vital_cost_acceleration_metric?: number | string | null;
-  vital_overall_state?: VitalState;
+  // The schema also has `vital_*` columns (006_session_vitals.sql) but the
+  // daemon has never populated them, so the dashboard stopped reading them in
+  // #141. Reintroduce typed fields here once budi-core ships vitals on the
+  // ingest envelope.
 }
 
 /**

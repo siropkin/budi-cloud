@@ -5,8 +5,10 @@ import { extractText } from "@/test-utils/page-tree";
  * Page-level coverage for `/dashboard/sessions/[id]` (#99 + #112).
  *
  * Locks in:
- *   1. Smoke — populated `getSessionDetail` renders the back link, vitals
- *      card, and summary fields.
+ *   1. Smoke — populated `getSessionDetail` renders the back link and
+ *      summary fields. The Session Vitals card was removed in #141 because
+ *      the daemon never emitted vitals to the cloud; this test no longer
+ *      asserts that surface.
  *   2. Empty — a missing `device` query param 404s rather than silently
  *      guessing (the composite PK requires both halves).
  *   3. Loading — there's no Suspense on this page; instead we pin the
@@ -55,15 +57,6 @@ const SESSION = {
   total_input_tokens: 2000,
   total_output_tokens: 800,
   total_cost_cents: 250,
-  vital_context_drag_state: "yellow" as const,
-  vital_context_drag_metric: 18.2,
-  vital_cache_efficiency_state: "green" as const,
-  vital_cache_efficiency_metric: 87,
-  vital_thrashing_state: "red" as const,
-  vital_thrashing_metric: 0.95,
-  vital_cost_acceleration_state: "yellow" as const,
-  vital_cost_acceleration_metric: 42,
-  vital_overall_state: "red" as const,
 };
 
 beforeEach(() => {
@@ -118,13 +111,17 @@ function findSessionsBackHref(node: unknown): string | null {
 }
 
 describe("dashboard/sessions/[id] /page", () => {
-  it("smoke: renders the back link, Session Vitals card, and Summary fields", async () => {
+  it("smoke: renders the back link and Summary fields, with no Session Vitals card (#141)", async () => {
     const node = await render();
     expect(node).toBeTruthy();
     const text = extractText(node);
     expect(text).toContain("← Sessions");
-    expect(text).toContain("Session Vitals");
     expect(text).toContain("Summary");
+    // The vitals card was removed in #141 because the daemon never sent the
+    // numbers to populate it. Pin its absence here so a future revert that
+    // brings the empty card back is loud rather than silent.
+    expect(text).not.toContain("Session Vitals");
+    expect(text).not.toContain("Vitals unavailable");
     // Lock down the summary field labels so a refactor that drops one shows up.
     for (const label of [
       "Provider",
