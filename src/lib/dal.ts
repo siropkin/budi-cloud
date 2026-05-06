@@ -179,6 +179,61 @@ interface DailyActivityRow {
 }
 
 /**
+ * Day-of-week × hour-of-day session counts for the Overview heatmap (#150).
+ * Manager sees full org; member sees own devices only (ADR-0083 §6).
+ * `options.scopedUserId` further narrows a manager view to a single teammate.
+ *
+ * Buckets are computed in the **viewer's IANA timezone** (server-side via
+ * `dashboard_activity_heatmap`) so a US/Pacific viewer's "5pm peak" sits at
+ * `hour=17` instead of drifting to UTC's `hour=00`. Falls back to UTC when
+ * the viewer's TZ cookie is missing — same fallback `dateRangeFromDays`
+ * uses, so the bucketing TZ matches the range-window TZ.
+ *
+ * Returns 0..168 rows (one per non-empty `(dow, hour)` cell). Empty cells
+ * are absent from the result; the client fills them with zero rather than
+ * paying for a `generate_series` cross join on every page load.
+ */
+export async function getActivityHeatmap(
+  user: BudiUser,
+  range: DateRange,
+  timeZone: string | null,
+  options?: ScopeOptions
+): Promise<HeatmapCell[]> {
+  const admin = createAdminClient();
+  const deviceIds = await getVisibleDeviceIds(admin, user, options);
+  if (deviceIds.length === 0) return [];
+
+  const { data, error } = await admin.rpc("dashboard_activity_heatmap", {
+    p_device_ids: deviceIds,
+    p_started_from: range.startedAtFrom,
+    p_started_to: range.startedAtTo,
+    p_time_zone: timeZone ?? "UTC",
+  });
+  if (error) throw error;
+
+  return ((data ?? []) as HeatmapRow[]).map((r) => ({
+    dow: Number(r.dow),
+    hour: Number(r.hour),
+    session_count: Number(r.session_count),
+    cost_cents: Number(r.cost_cents),
+  }));
+}
+
+export interface HeatmapCell {
+  dow: number;
+  hour: number;
+  session_count: number;
+  cost_cents: number;
+}
+
+interface HeatmapRow {
+  dow: number | string;
+  hour: number | string;
+  session_count: number | string;
+  cost_cents: number | string;
+}
+
+/**
  * Earliest day (`YYYY-MM-DD`) with a rollup for any device visible to the
  * viewer, or `null` if the org has never synced anything. Used to materialize
  * the `?days=all` sentinel into a concrete `from` before hitting the

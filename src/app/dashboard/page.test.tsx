@@ -42,6 +42,7 @@ const dal = {
   getCostByModel: vi.fn(),
   getCostByRepo: vi.fn(),
   getCostByUser: vi.fn(),
+  getActivityHeatmap: vi.fn(),
 };
 vi.mock("@/lib/dal", () => ({
   ...dal,
@@ -109,6 +110,9 @@ beforeEach(() => {
       input_tokens: 3500,
       output_tokens: 1800,
     },
+  ]);
+  dal.getActivityHeatmap.mockResolvedValue([
+    { dow: 2, hour: 14, session_count: 3, cost_cents: 50_000 },
   ]);
 });
 
