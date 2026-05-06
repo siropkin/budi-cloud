@@ -39,17 +39,31 @@ const MANAGER = {
 
 beforeEach(() => {
   dal.getCurrentUser.mockReset().mockResolvedValue(MANAGER);
-  dal.getCostByRepo
-    .mockReset()
-    .mockResolvedValue([{ repo_id: "repo_x", cost_cents: 800_00 }]);
-  dal.getCostByBranch
-    .mockReset()
-    .mockResolvedValue([
-      { repo_id: "repo_x", git_branch: "refs/heads/main", cost_cents: 600_00 },
-    ]);
-  dal.getCostByTicket
-    .mockReset()
-    .mockResolvedValue([{ ticket: "TICKET-1", cost_cents: 200_00 }]);
+  dal.getCostByRepo.mockReset().mockResolvedValue([
+    {
+      repo_id: "repo_x",
+      cost_cents: 800_00,
+      input_tokens: 1_000,
+      output_tokens: 500,
+    },
+  ]);
+  dal.getCostByBranch.mockReset().mockResolvedValue([
+    {
+      repo_id: "repo_x",
+      git_branch: "refs/heads/main",
+      cost_cents: 600_00,
+      input_tokens: 700,
+      output_tokens: 300,
+    },
+  ]);
+  dal.getCostByTicket.mockReset().mockResolvedValue([
+    {
+      ticket: "TICKET-1",
+      cost_cents: 200_00,
+      input_tokens: 200,
+      output_tokens: 150,
+    },
+  ]);
   dal.getEarliestActivity.mockReset().mockResolvedValue("2026-04-01");
   dal.getOrgMembers.mockReset().mockResolvedValue([]);
 });
@@ -68,6 +82,19 @@ describe("dashboard/repos /page", () => {
     expect(text).toContain("Cost by Project");
     expect(text).toContain("Cost by Branch");
     expect(text).toContain("Cost by Ticket");
+  });
+
+  it("companion tables: each chart card renders a table next to the bar chart with In/Out columns and the ticket id", async () => {
+    const node = await render();
+    const text = extractText(node);
+    // Project / Branch / Ticket tables share these columns; one assertion per
+    // unique value catches a regression in any of them.
+    expect(text).toContain("Project");
+    expect(text).toContain("Branch");
+    expect(text).toContain("Ticket");
+    expect(text).toContain("In");
+    expect(text).toContain("Out");
+    expect(text).toContain("TICKET-1");
   });
 
   it("empty: renders all three empty-state copies when every breakdown is empty", async () => {
