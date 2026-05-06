@@ -12,6 +12,7 @@ import {
 import { fmtCost, fmtNum } from "@/lib/format";
 import type { Unit } from "@/lib/units";
 import { useMediaQuery } from "@/lib/use-media-query";
+import { COST_BAR_CHART_MAX_ITEMS } from "./cost-bar-chart-config";
 
 interface CostBarDatum {
   label: string;
@@ -19,9 +20,6 @@ interface CostBarDatum {
   tokens: number;
 }
 
-/** Cap on rows the bar chart will render. Exported so companion tables on the
- * Repos page can apply the same cap and stay in lockstep with the chart. */
-export const COST_BAR_CHART_MAX_ITEMS = 10;
 const MAX_ITEMS = COST_BAR_CHART_MAX_ITEMS;
 const BAR_SIZE = 28;
 const BAR_GAP = 8;
