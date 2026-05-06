@@ -102,7 +102,9 @@ export function ActivityHeatmap({
                     )}
                     style={
                       value > 0
-                        ? { backgroundColor: `rgba(59, 130, 246, ${intensity})` }
+                        ? {
+                            backgroundColor: `rgba(59, 130, 246, ${intensity})`,
+                          }
                         : undefined
                     }
                     title={`${dayLabel} ${hourLabel} — ${valueLabel}`}
