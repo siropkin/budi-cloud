@@ -104,13 +104,21 @@ const RPC_HANDLERS: Record<string, RpcHandler> = {
     );
 
     const deviceIds = new Set(args.p_device_ids as string[]);
-    const startedFrom = args.p_started_from as string;
-    const startedTo = args.p_started_to as string;
+    const bucketFrom = args.p_bucket_from as string;
+    const bucketTo = args.p_bucket_to as string;
     const total_sessions = (tables.get("session_summaries") ?? []).filter(
-      (s) =>
-        deviceIds.has(s.device_id as string) &&
-        String(s.started_at ?? "") >= startedFrom &&
-        String(s.started_at ?? "") <= startedTo
+      (s) => {
+        if (!deviceIds.has(s.device_id as string)) return false;
+        // Mirrors `COALESCE(started_at, ended_at, synced_at)::date` on the SQL
+        // side (#155): use the first non-null timestamp and compare its date
+        // component against the bucket range, so a row with NULL `started_at`
+        // still counts and the date key matches what the rollup totals see.
+        const anchor = (s.started_at ?? s.ended_at ?? s.synced_at ?? "") as
+          | string
+          | null;
+        const date = anchor ? String(anchor).slice(0, 10) : "";
+        return date !== "" && date >= bucketFrom && date <= bucketTo;
+      }
     ).length;
 
     return [{ ...totals, total_sessions }];
@@ -1041,6 +1049,87 @@ describe("server-side aggregation (#92)", () => {
 
     expect(ivanDeviceCost).toBeGreaterThan(0);
     expect(ivanDeviceCost).toBe(scopedTotal);
+  });
+});
+
+describe("Overview session count: bucket_day alignment (#155)", () => {
+  // Regression: pre-#155 the session count filtered `started_at` over a
+  // precise TIMESTAMPTZ window while every other column on the same row
+  // summed `daily_rollups` over a calendar-day range. On `?days=1` the
+  // previous-period count collapsed to zero — `fmtDelta` rendered the `—`
+  // sentinel — while the cost/tokens/messages cards on the same row showed
+  // real period-over-period deltas. The fix counts sessions on the same
+  // `bucket_day` range as the rollup totals, with a COALESCE fallback so a
+  // NULL `started_at` doesn't silently disappear.
+
+  const baseUser = {
+    id: "usr_ivan",
+    org_id: "org_solo",
+    role: "manager" as const,
+    api_key: "budi_x",
+    display_name: "Ivan",
+    email: "ivan@example.com",
+  };
+
+  function seedOrg() {
+    fake.seed("orgs", [{ id: "org_solo", name: "solo" }]);
+    fake.seed("users", [{ ...baseUser }]);
+    fake.seed("devices", [{ id: "dev_laptop", user_id: "usr_ivan" }]);
+  }
+
+  it("counts a session whose started_at IS NULL via ended_at/synced_at fallback", async () => {
+    seedOrg();
+    fake.seed("daily_rollups", [rollup("dev_laptop", "2026-04-15", 100)]);
+    fake.seed("session_summaries", [
+      {
+        device_id: "dev_laptop",
+        session_id: "sess_a",
+        provider: "claude_code",
+        started_at: null,
+        ended_at: "2026-04-15T11:00:00Z",
+        synced_at: "2026-04-15T11:30:00Z",
+        message_count: 1,
+      },
+    ]);
+
+    const { getOverviewStats } = await loadDal();
+    const overview = await getOverviewStats(
+      baseUser,
+      utcRange("2026-04-15", "2026-04-15")
+    );
+
+    expect(overview.totalMessages).toBeGreaterThan(0);
+    expect(overview.totalSessions).toBe(1);
+  });
+
+  it("the bucket_day window is the source of truth — sessions and rollups never disagree on inclusion", async () => {
+    seedOrg();
+    // Both a rollup and a session are dated to the same calendar day.
+    fake.seed("daily_rollups", [rollup("dev_laptop", "2026-04-15", 100)]);
+    fake.seed("session_summaries", [
+      {
+        device_id: "dev_laptop",
+        session_id: "sess_a",
+        provider: "claude_code",
+        // Late-evening timestamp — pre-#155 this could fall outside a precise
+        // TIMESTAMPTZ window even when its `bucket_day` was inside the range,
+        // because the bucket bound was widened to cover local-TZ overlap
+        // (`src/lib/timezone.ts`) while the session bound was not.
+        started_at: "2026-04-15T23:30:00Z",
+        ended_at: "2026-04-15T23:55:00Z",
+        synced_at: "2026-04-15T23:55:00Z",
+        message_count: 1,
+      },
+    ]);
+
+    const { getOverviewStats } = await loadDal();
+    const overview = await getOverviewStats(
+      baseUser,
+      utcRange("2026-04-15", "2026-04-15")
+    );
+
+    expect(overview.totalMessages).toBe(1);
+    expect(overview.totalSessions).toBe(1);
   });
 });
 
