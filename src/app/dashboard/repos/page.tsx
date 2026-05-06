@@ -126,9 +126,9 @@ export default async function ReposPage({
                   <thead>
                     <tr className="border-b border-white/10 text-left text-zinc-400">
                       <th className="pb-2 font-medium">Project</th>
-                      <th className="pb-2 text-right font-medium">In</th>
-                      <th className="pb-2 text-right font-medium">Out</th>
-                      <th className="pb-2 text-right font-medium">
+                      <th className="pb-2 pl-4 text-right font-medium">In</th>
+                      <th className="pb-2 pl-4 text-right font-medium">Out</th>
+                      <th className="pb-2 pl-4 text-right font-medium">
                         {valueWord}
                       </th>
                     </tr>
@@ -137,13 +137,13 @@ export default async function ReposPage({
                     {repoRows.map((r, i) => (
                       <tr key={i} className="border-b border-white/5">
                         <td className="py-2 text-zinc-200">{r.label}</td>
-                        <td className="py-2 text-right tabular-nums text-zinc-400">
+                        <td className="py-2 pl-4 text-right tabular-nums text-zinc-400">
                           {fmtNum(r.input_tokens)}
                         </td>
-                        <td className="py-2 text-right tabular-nums text-zinc-400">
+                        <td className="py-2 pl-4 text-right tabular-nums text-zinc-400">
                           {fmtNum(r.output_tokens)}
                         </td>
-                        <td className="py-2 text-right tabular-nums text-zinc-300">
+                        <td className="py-2 pl-4 text-right tabular-nums text-zinc-300">
                           {fmtValue(
                             r.cost_cents,
                             r.input_tokens + r.output_tokens
@@ -221,9 +221,9 @@ export default async function ReposPage({
                     <tr className="border-b border-white/10 text-left text-zinc-400">
                       <th className="pb-2 font-medium">Project</th>
                       <th className="pb-2 font-medium">Branch</th>
-                      <th className="pb-2 text-right font-medium">In</th>
-                      <th className="pb-2 text-right font-medium">Out</th>
-                      <th className="pb-2 text-right font-medium">
+                      <th className="pb-2 pl-4 text-right font-medium">In</th>
+                      <th className="pb-2 pl-4 text-right font-medium">Out</th>
+                      <th className="pb-2 pl-4 text-right font-medium">
                         {valueWord}
                       </th>
                     </tr>
@@ -247,13 +247,13 @@ export default async function ReposPage({
                             {b.branch}
                           </div>
                         </td>
-                        <td className="py-2 text-right tabular-nums text-zinc-400">
+                        <td className="py-2 pl-4 text-right tabular-nums text-zinc-400">
                           {fmtNum(b.input_tokens)}
                         </td>
-                        <td className="py-2 text-right tabular-nums text-zinc-400">
+                        <td className="py-2 pl-4 text-right tabular-nums text-zinc-400">
                           {fmtNum(b.output_tokens)}
                         </td>
-                        <td className="py-2 text-right tabular-nums text-zinc-300">
+                        <td className="py-2 pl-4 text-right tabular-nums text-zinc-300">
                           {fmtValue(
                             b.cost_cents,
                             b.input_tokens + b.output_tokens
@@ -320,9 +320,9 @@ export default async function ReposPage({
                   <thead>
                     <tr className="border-b border-white/10 text-left text-zinc-400">
                       <th className="pb-2 font-medium">Ticket</th>
-                      <th className="pb-2 text-right font-medium">In</th>
-                      <th className="pb-2 text-right font-medium">Out</th>
-                      <th className="pb-2 text-right font-medium">
+                      <th className="pb-2 pl-4 text-right font-medium">In</th>
+                      <th className="pb-2 pl-4 text-right font-medium">Out</th>
+                      <th className="pb-2 pl-4 text-right font-medium">
                         {valueWord}
                       </th>
                     </tr>
@@ -331,13 +331,13 @@ export default async function ReposPage({
                     {tickets.map((t, i) => (
                       <tr key={i} className="border-b border-white/5">
                         <td className="py-2 text-zinc-200">{t.ticket}</td>
-                        <td className="py-2 text-right tabular-nums text-zinc-400">
+                        <td className="py-2 pl-4 text-right tabular-nums text-zinc-400">
                           {fmtNum(t.input_tokens)}
                         </td>
-                        <td className="py-2 text-right tabular-nums text-zinc-400">
+                        <td className="py-2 pl-4 text-right tabular-nums text-zinc-400">
                           {fmtNum(t.output_tokens)}
                         </td>
-                        <td className="py-2 text-right tabular-nums text-zinc-300">
+                        <td className="py-2 pl-4 text-right tabular-nums text-zinc-300">
                           {fmtValue(
                             t.cost_cents,
                             t.input_tokens + t.output_tokens
