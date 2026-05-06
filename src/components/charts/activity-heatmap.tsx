@@ -17,6 +17,10 @@ interface HeatmapDatum {
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DAY_ROW_TO_PG_DOW = [1, 2, 3, 4, 5, 6, 0];
 
+// Match the Daily Activity chart's `ResponsiveContainer height={300}` so the
+// two cards on the Overview line up vertically (#150).
+const HEATMAP_HEIGHT = 300;
+
 export function ActivityHeatmap({
   data,
   unit,
@@ -26,7 +30,10 @@ export function ActivityHeatmap({
 }) {
   if (data.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center text-sm text-zinc-500">
+      <div
+        className="flex items-center justify-center text-sm text-zinc-500"
+        style={{ height: HEATMAP_HEIGHT }}
+      >
         No session activity for this period
       </div>
     );
@@ -48,8 +55,11 @@ export function ActivityHeatmap({
 
   return (
     <div className="overflow-x-auto">
-      <div className="grid w-full gap-y-1" style={{ minWidth: 600 }}>
-        <div className="grid grid-cols-[2.5rem_repeat(24,minmax(0,1fr))] gap-x-1 pl-0">
+      <div
+        className="flex flex-col"
+        style={{ minWidth: 600, height: HEATMAP_HEIGHT }}
+      >
+        <div className="grid flex-none grid-cols-[2.5rem_repeat(24,minmax(0,1fr))] gap-x-1">
           <div />
           {Array.from({ length: 24 }, (_, h) => (
             <div
@@ -61,61 +71,65 @@ export function ActivityHeatmap({
             </div>
           ))}
         </div>
-        {DAY_ROW_TO_PG_DOW.map((dow, rowIdx) => (
-          <div
-            key={dow}
-            className="grid grid-cols-[2.5rem_repeat(24,minmax(0,1fr))] gap-x-1"
-          >
-            <div className="flex items-center text-xs text-zinc-500">
-              {DAY_LABELS[rowIdx]}
+        <div className="mt-1 flex flex-1 flex-col gap-y-1">
+          {DAY_ROW_TO_PG_DOW.map((dow, rowIdx) => (
+            <div
+              key={dow}
+              className="grid flex-1 grid-cols-[2.5rem_repeat(24,minmax(0,1fr))] gap-x-1"
+            >
+              <div className="flex items-center text-xs text-zinc-500">
+                {DAY_LABELS[rowIdx]}
+              </div>
+              {Array.from({ length: 24 }, (_, hour) => {
+                const cell = cells.get(`${dow}-${hour}`);
+                const value = valueOf(cell);
+                const intensity =
+                  value === 0 ? 0 : Math.max(0.08, value / maxValue);
+                const sessions = cell?.session_count ?? 0;
+                const cost = cell?.cost_cents ?? 0;
+                const dayLabel = DAY_LABELS[rowIdx];
+                const hourLabel = `${String(hour).padStart(2, "0")}:00`;
+                const valueLabel =
+                  unit === "tokens"
+                    ? `${fmtNum(sessions)} session${sessions === 1 ? "" : "s"}`
+                    : `${fmtCost(cost)} • ${fmtNum(sessions)} session${sessions === 1 ? "" : "s"}`;
+                return (
+                  <div
+                    key={hour}
+                    className={clsx(
+                      "h-full rounded-sm",
+                      value === 0 && "bg-white/[0.03]"
+                    )}
+                    style={
+                      value > 0
+                        ? {
+                            backgroundColor: `rgba(59, 130, 246, ${intensity})`,
+                          }
+                        : undefined
+                    }
+                    title={`${dayLabel} ${hourLabel} — ${valueLabel}`}
+                  />
+                );
+              })}
             </div>
-            {Array.from({ length: 24 }, (_, hour) => {
-              const cell = cells.get(`${dow}-${hour}`);
-              const value = valueOf(cell);
-              const intensity =
-                value === 0 ? 0 : Math.max(0.08, value / maxValue);
-              const sessions = cell?.session_count ?? 0;
-              const cost = cell?.cost_cents ?? 0;
-              const dayLabel = DAY_LABELS[rowIdx];
-              const hourLabel = `${String(hour).padStart(2, "0")}:00`;
-              const valueLabel =
-                unit === "tokens"
-                  ? `${fmtNum(sessions)} session${sessions === 1 ? "" : "s"}`
-                  : `${fmtCost(cost)} • ${fmtNum(sessions)} session${sessions === 1 ? "" : "s"}`;
-              return (
-                <div
-                  key={hour}
-                  className={clsx(
-                    "aspect-square rounded-sm",
-                    value === 0 && "bg-white/[0.03]"
-                  )}
-                  style={
-                    value > 0
-                      ? { backgroundColor: `rgba(59, 130, 246, ${intensity})` }
-                      : undefined
-                  }
-                  title={`${dayLabel} ${hourLabel} — ${valueLabel}`}
-                />
-              );
-            })}
-          </div>
-        ))}
-      </div>
-      <div className="mt-3 flex items-center gap-2 text-[11px] text-zinc-500">
-        <span>Less</span>
-        {[0, 0.25, 0.5, 0.75, 1].map((step) => (
-          <div
-            key={step}
-            className="h-3 w-3 rounded-sm"
-            style={{
-              backgroundColor:
-                step === 0
-                  ? "rgba(255,255,255,0.06)"
-                  : `rgba(59, 130, 246, ${Math.max(0.08, step)})`,
-            }}
-          />
-        ))}
-        <span>More</span>
+          ))}
+        </div>
+        <div className="mt-3 flex flex-none items-center gap-2 text-[11px] text-zinc-500">
+          <span>Less</span>
+          {[0, 0.25, 0.5, 0.75, 1].map((step) => (
+            <div
+              key={step}
+              className="h-3 w-3 rounded-sm"
+              style={{
+                backgroundColor:
+                  step === 0
+                    ? "rgba(255,255,255,0.06)"
+                    : `rgba(59, 130, 246, ${Math.max(0.08, step)})`,
+              }}
+            />
+          ))}
+          <span>More</span>
+        </div>
       </div>
     </div>
   );
