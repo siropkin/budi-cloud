@@ -57,6 +57,34 @@ export function dateRangeFromDays(
 }
 
 /**
+ * Same-length window immediately preceding `range`, for period-over-period
+ * comparison on the Overview page (#150). Both bounds are derived in the same
+ * `timeZone` as `range` so daylight-saving boundaries don't introduce a
+ * one-hour drift between the two windows.
+ *
+ * Returns `null` when no meaningful comparison exists — the lifetime
+ * (`?days=all`) preset already starts at the org's earliest activity, so
+ * "the period before that" is by definition empty.
+ */
+export function previousDateRange(
+  range: DateRange,
+  timeZone?: string | null
+): DateRange | null {
+  const tz = timeZone && isValidTimeZone(timeZone) ? timeZone : "UTC";
+  const lengthDays = daysBetweenIso(range.from, range.to);
+  if (lengthDays < 0) return null;
+  const prevTo = subDaysIso(range.from, 1);
+  const prevFrom = subDaysIso(prevTo, lengthDays);
+  return makeRange(prevFrom, prevTo, tz);
+}
+
+function daysBetweenIso(from: string, to: string): number {
+  const a = new Date(`${from}T00:00:00Z`).getTime();
+  const b = new Date(`${to}T00:00:00Z`).getTime();
+  return Math.round((b - a) / 86_400_000);
+}
+
+/**
  * Resolve the lower bound of the local-TZ range from `days` and the optional
  * earliest-activity date. Kept separate so the rolling-window math reads
  * cleanly without the timezone plumbing on top.

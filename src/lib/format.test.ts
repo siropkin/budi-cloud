@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatDuration, repoName } from "./format";
+import { fmtDelta, formatDuration, repoName } from "./format";
 
 describe("formatDuration (#88)", () => {
   it("uses duration_ms when provided", () => {
@@ -46,6 +46,29 @@ describe("formatDuration (#88)", () => {
     expect(
       formatDuration(60_000, "2026-04-29T10:00:00Z", "2026-04-29T11:00:00Z")
     ).toBe("1m");
+  });
+});
+
+describe("fmtDelta (#150 — period-over-period on Overview)", () => {
+  it("returns a signed percentage for non-zero baselines", () => {
+    expect(fmtDelta(110, 100)).toEqual({ label: "+10.0%", direction: "up" });
+    expect(fmtDelta(95, 100)).toEqual({ label: "-5.0%", direction: "down" });
+    expect(fmtDelta(123_456, 100_000)).toEqual({
+      label: "+23.5%",
+      direction: "up",
+    });
+  });
+
+  it("collapses to '—' when the previous window is zero — neither +Inf% nor 0% would be honest", () => {
+    expect(fmtDelta(50, 0)).toEqual({ label: "—", direction: "flat" });
+    expect(fmtDelta(0, 0)).toEqual({ label: "—", direction: "flat" });
+  });
+
+  it("rounds sub-promille changes to 0.0% so a stable baseline reads neutrally", () => {
+    expect(fmtDelta(100.0001, 100)).toEqual({
+      label: "0.0%",
+      direction: "flat",
+    });
   });
 });
 

@@ -77,6 +77,32 @@ export function formatModelName(model: string): string {
   return model.replace(/-\d{8}$/, "");
 }
 
+/**
+ * Period-over-period delta for the Overview headline cards (#150).
+ *
+ * Returns the percentage change of `current` vs `previous` along with a
+ * pre-formatted label. We can't render `+Inf%` when the previous window had
+ * zero baseline, and a literal `0%` would be misleading for a window that
+ * went from nothing to something — both cases collapse to a `—` sentinel
+ * so the card stays informative without inventing a number.
+ */
+export function fmtDelta(
+  current: number,
+  previous: number
+): { label: string; direction: "up" | "down" | "flat" } {
+  if (previous === 0) return { label: "—", direction: "flat" };
+  const ratio = (current - previous) / previous;
+  if (!Number.isFinite(ratio) || Math.abs(ratio) < 0.0005) {
+    return { label: "0.0%", direction: "flat" };
+  }
+  const pct = ratio * 100;
+  const sign = pct > 0 ? "+" : "";
+  return {
+    label: `${sign}${pct.toFixed(1)}%`,
+    direction: pct > 0 ? "up" : "down",
+  };
+}
+
 /** Format a date string for chart labels. */
 export function fmtDate(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
