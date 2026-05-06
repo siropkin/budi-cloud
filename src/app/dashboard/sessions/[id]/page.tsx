@@ -94,11 +94,6 @@ export default async function SessionDetailPage({
                   : "-"
               }
             />
-            <Field label="Repo" value={repoName(session.repo_id)} />
-            <Field
-              label="Branch"
-              value={session.git_branch?.replace(/^refs\/heads\//, "") || "-"}
-            />
             <Field
               label="Duration"
               value={formatDuration(
@@ -106,6 +101,11 @@ export default async function SessionDetailPage({
                 session.started_at,
                 session.ended_at
               )}
+            />
+            <Field label="Repo" value={repoName(session.repo_id)} />
+            <Field
+              label="Branch"
+              value={session.git_branch?.replace(/^refs\/heads\//, "") || "-"}
             />
             <Field label="Messages" value={fmtNum(session.message_count)} />
             <Field label="Tokens" value={fmtNum(totalTokens)} />
