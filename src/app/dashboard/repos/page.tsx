@@ -231,8 +231,22 @@ export default async function ReposPage({
                   <tbody>
                     {branchRows.map((b, i) => (
                       <tr key={i} className="border-b border-white/5">
-                        <td className="py-2 text-zinc-200">{b.project}</td>
-                        <td className="py-2 text-zinc-200">{b.branch}</td>
+                        <td className="py-2 text-zinc-200">
+                          <div
+                            className="max-w-[14rem] truncate"
+                            title={b.project}
+                          >
+                            {b.project}
+                          </div>
+                        </td>
+                        <td className="py-2 text-zinc-200">
+                          <div
+                            className="max-w-[18rem] truncate"
+                            title={b.branch}
+                          >
+                            {b.branch}
+                          </div>
+                        </td>
                         <td className="py-2 text-right tabular-nums text-zinc-400">
                           {fmtNum(b.input_tokens)}
                         </td>
@@ -252,11 +266,14 @@ export default async function ReposPage({
                 <ul className="divide-y divide-white/5 text-sm sm:hidden">
                   {branchRows.map((b, i) => (
                     <li key={i} className="flex flex-col gap-1 py-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-zinc-200">
+                      <div className="flex items-center justify-between gap-3">
+                        <span
+                          className="min-w-0 flex-1 truncate text-zinc-200"
+                          title={`${b.project} / ${b.branch}`}
+                        >
                           {b.project} / {b.branch}
                         </span>
-                        <span className="tabular-nums text-zinc-300">
+                        <span className="shrink-0 tabular-nums text-zinc-300">
                           {fmtValue(
                             b.cost_cents,
                             b.input_tokens + b.output_tokens
