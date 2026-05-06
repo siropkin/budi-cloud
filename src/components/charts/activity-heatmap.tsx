@@ -48,7 +48,7 @@ export function ActivityHeatmap({
 
   return (
     <div className="overflow-x-auto">
-      <div className="inline-grid min-w-full gap-y-1" style={{ minWidth: 600 }}>
+      <div className="grid w-full gap-y-1" style={{ minWidth: 600 }}>
         <div className="grid grid-cols-[2.5rem_repeat(24,minmax(0,1fr))] gap-x-1 pl-0">
           <div />
           {Array.from({ length: 24 }, (_, h) => (
