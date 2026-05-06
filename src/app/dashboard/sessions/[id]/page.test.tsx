@@ -57,6 +57,7 @@ const SESSION = {
   total_input_tokens: 2000,
   total_output_tokens: 800,
   total_cost_cents: 250,
+  main_model: "claude-opus-4-7-20260101",
 };
 
 beforeEach(() => {
@@ -125,6 +126,7 @@ describe("dashboard/sessions/[id] /page", () => {
     // Lock down the summary field labels so a refactor that drops one shows up.
     for (const label of [
       "Provider",
+      "Model",
       "Started",
       "Duration",
       "Repo",
@@ -135,17 +137,37 @@ describe("dashboard/sessions/[id] /page", () => {
     ]) {
       expect(text).toContain(label);
     }
+    // The date suffix on the model id is render-only noise (`-20260101`);
+    // formatModelName strips it. Pin both halves so a regression that drops
+    // the formatter or shows the raw id is caught here (#140).
+    expect(text).toContain("claude-opus-4-7");
+    expect(text).not.toContain("claude-opus-4-7-20260101");
   });
 
-  it("orders summary fields so Repo and Branch sit on the same row (#137)", async () => {
+  it("renders a dash for the Model field when the daemon didn't send one (#140)", async () => {
+    // Older daemons (< 8.3.16) never emit `primary_model`, so `main_model`
+    // lands NULL. The detail page must render a placeholder rather than
+    // collapse the field — pair the field's null-handling with the list.
+    dal.getSessionDetail.mockResolvedValue({ ...SESSION, main_model: null });
+    const node = await render();
+    const text = extractText(node);
+    expect(text).toContain("Model");
+    expect(text).not.toContain("claude-opus-4-7");
+  });
+
+  it("orders summary fields so Provider and Model sit together on the top row (#137, #140)", async () => {
     // The 2-col grid renders fields in document order, left-to-right then
-    // top-to-bottom. The contract: Repo immediately precedes Branch (so they
-    // share a row), and the row pairs are Provider/Started, Repo/Branch,
-    // Duration/Messages, Tokens/Cost.
+    // top-to-bottom. After #140 the top row is Provider/Model — these are the
+    // two "what tool" identifiers and belong adjacent so a manager skimming
+    // the card can read them as a single phrase. Started slides down to row
+    // 2, paired with Repo. The earlier Repo/Branch pairing from #137 gives
+    // way once a 9th field is in the grid; the new pin is the Provider/Model
+    // adjacency.
     const node = await render();
     const text = extractText(node);
     const order = [
       "Provider",
+      "Model",
       "Started",
       "Repo",
       "Branch",

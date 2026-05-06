@@ -2,7 +2,13 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser, getSessionDetail } from "@/lib/dal";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { fmtCost, fmtNum, formatDuration, repoName } from "@/lib/format";
+import {
+  fmtCost,
+  fmtNum,
+  formatDuration,
+  formatModelName,
+  repoName,
+} from "@/lib/format";
 
 /**
  * Session detail page (#99). The id segment is the daemon-emitted
@@ -74,6 +80,12 @@ export default async function SessionDetailPage({
         <CardContent>
           <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
             <Field label="Provider" value={session.provider} />
+            <Field
+              label="Model"
+              value={
+                session.main_model ? formatModelName(session.main_model) : "-"
+              }
+            />
             <Field
               label="Started"
               value={
