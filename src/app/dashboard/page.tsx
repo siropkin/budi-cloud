@@ -69,7 +69,6 @@ export default async function OverviewPage({
     freshness,
     members,
     previousStats,
-    previousActivity,
     topModels,
     topRepos,
     topUsers,
@@ -82,9 +81,6 @@ export default async function OverviewPage({
     previousRange
       ? getOverviewStats(user, previousRange, scope)
       : Promise.resolve(null),
-    previousRange
-      ? getDailyActivity(user, previousRange, scope)
-      : Promise.resolve([]),
     getCostByModel(user, range, scope),
     getCostByRepo(user, range, scope),
     showTopContributor ? getCostByUser(user, range) : Promise.resolve([]),
@@ -238,11 +234,7 @@ export default async function OverviewPage({
           <CardTitle>{`Daily Activity (${unit === "tokens" ? "Tokens" : "Cost"})`}</CardTitle>
         </CardHeader>
         <CardContent>
-          <ActivityChart
-            data={activity}
-            previousData={previousActivity}
-            unit={unit}
-          />
+          <ActivityChart data={activity} unit={unit} />
         </CardContent>
       </Card>
 
