@@ -218,6 +218,44 @@ const RPC_HANDLERS: Record<string, RpcHandler> = {
     }
     return Array.from(byBranch.values());
   },
+  dashboard_activity_heatmap(tables, args) {
+    // Mirrors `dashboard_activity_heatmap` (013_activity_heatmap.sql): bucket
+    // sessions by `(dow, hour)` after applying device + `started_at` filters.
+    // The fake ignores `p_time_zone` and reads dow/hour from the seeded
+    // `started_at` directly — tests that exercise TZ correctness should seed
+    // pre-converted timestamps so the assertion stays focused on aggregation
+    // behavior rather than re-deriving Postgres' `AT TIME ZONE` math here.
+    const deviceIds = new Set(args.p_device_ids as string[]);
+    const from = args.p_started_from as string;
+    const to = args.p_started_to as string;
+    type Cell = {
+      dow: number;
+      hour: number;
+      session_count: number;
+      cost_cents: number;
+    };
+    const cells = new Map<string, Cell>();
+    for (const s of tables.get("session_summaries") ?? []) {
+      const startedAt = s.started_at as string | null | undefined;
+      if (!startedAt) continue;
+      if (!deviceIds.has(s.device_id as string)) continue;
+      if (startedAt < from || startedAt > to) continue;
+      const d = new Date(startedAt);
+      const dow = d.getUTCDay();
+      const hour = d.getUTCHours();
+      const key = `${dow}-${hour}`;
+      const existing = cells.get(key) ?? {
+        dow,
+        hour,
+        session_count: 0,
+        cost_cents: 0,
+      };
+      existing.session_count += 1;
+      existing.cost_cents += Number(s.total_cost_cents ?? 0);
+      cells.set(key, existing);
+    }
+    return Array.from(cells.values());
+  },
   dashboard_cost_by_ticket(tables, args) {
     const rows = rollupsForRange(tables, args);
     const byTicket = new Map<string, number>();

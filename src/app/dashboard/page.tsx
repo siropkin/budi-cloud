@@ -9,6 +9,7 @@ import {
   getCostByModel,
   getCostByRepo,
   getCostByUser,
+  getActivityHeatmap,
   UNASSIGNED_USER_ID,
 } from "@/lib/dal";
 import { dateRangeFromDays, previousDateRange } from "@/lib/date-range";
@@ -28,6 +29,7 @@ import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
 import { ActivityChart } from "@/components/charts/activity-chart";
+import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
 import {
   LinkDaemonBanner,
   FirstSyncInProgressBanner,
@@ -71,6 +73,7 @@ export default async function OverviewPage({
     topModels,
     topRepos,
     topUsers,
+    heatmap,
   ] = await Promise.all([
     getOverviewStats(user, range, scope),
     getDailyActivity(user, range, scope),
@@ -85,6 +88,7 @@ export default async function OverviewPage({
     getCostByModel(user, range, scope),
     getCostByRepo(user, range, scope),
     showTopContributor ? getCostByUser(user, range) : Promise.resolve([]),
+    getActivityHeatmap(user, range, tz, scope),
   ]);
 
   // Caption for the headline-card delta (e.g. "vs previous 7d"). For numeric
@@ -241,6 +245,17 @@ export default async function OverviewPage({
           />
         </CardContent>
       </Card>
+
+      {hasSynced && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{`Activity by Day & Hour (${unit === "tokens" ? "Sessions" : "Cost"})`}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ActivityHeatmap data={heatmap} unit={unit} />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
