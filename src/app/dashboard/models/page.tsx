@@ -49,13 +49,14 @@ export default async function ModelsPage({
   const fmtValue = (cost_cents: number, tokens: number) =>
     isTokens ? fmtNum(tokens) : fmtCost(cost_cents);
 
-  // Bar-chart label folds provider into the model name so each bar is
-  // self-describing, but the companion table promotes provider to its own
-  // column so it can be eyeballed and (eventually) sorted on. `gpt-4o` on
-  // OpenAI and `gpt-4o` on Azure are distinct rows here for the same reason
-  // they're distinct lines on the bar chart.
+  // Chart label matches the table's `Model` column so reading across is
+  // direct. Provider stays available as its own column in the table; the
+  // bar chart de-duplicates by `(provider, model)` server-side, so two rows
+  // with the same `formatModelName` from different providers will appear as
+  // separate bars sharing a label — acceptable since the table next to it
+  // disambiguates them.
   const chartRows = models.map((m) => ({
-    label: `${m.provider} / ${formatModelName(m.model)}`,
+    label: formatModelName(m.model),
     cost_cents: m.cost_cents,
     tokens: m.input_tokens + m.output_tokens,
   }));
@@ -161,7 +162,7 @@ export default async function ModelsPage({
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-zinc-200">
-                          {m.provider} / {formatModelName(m.model)}
+                          {formatModelName(m.model)}
                         </span>
                         <span className="tabular-nums text-zinc-300">
                           {fmtValue(
@@ -171,7 +172,7 @@ export default async function ModelsPage({
                         </span>
                       </div>
                       <div className="text-xs tabular-nums text-zinc-500">
-                        in {fmtNum(m.input_tokens)} · out{" "}
+                        {m.provider} · in {fmtNum(m.input_tokens)} · out{" "}
                         {fmtNum(m.output_tokens)}
                       </div>
                     </li>
