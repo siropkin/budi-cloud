@@ -1,8 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getCurrentUser, getSessionDetail, type VitalState } from "@/lib/dal";
+import { getCurrentUser, getSessionDetail } from "@/lib/dal";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { SessionVitals } from "@/components/session-vitals";
 import { fmtCost, fmtNum, formatDuration, repoName } from "@/lib/format";
 
 /**
@@ -11,8 +10,16 @@ import { fmtCost, fmtNum, formatDuration, repoName } from "@/lib/format";
  * `(device_id, session_id)` is the composite PK on `session_summaries`.
  *
  * Privacy: no prompt / response / file path content is read, written, or
- * rendered here — see ADR-0083 §1 and `006_session_vitals.sql`. The page
- * shows numeric metrics + traffic-light scores only.
+ * rendered here — see ADR-0083 §1. The page shows numeric metrics only.
+ *
+ * The Session Vitals card was removed in #141: the cloud schema and ingest
+ * still accept `vital_*` columns (006_session_vitals.sql), but the daemon
+ * never actually emitted them — `SessionSummaryRecord` in
+ * `siropkin/budi:crates/budi-core/src/cloud_sync.rs` has no vital fields and
+ * no commit in that repo's history has ever populated one. Every viewer
+ * therefore saw a permanently-empty card. The DB columns are left in place
+ * (dormant) so a future daemon release can light the card back up without a
+ * migration.
  */
 export default async function SessionDetailPage({
   params,
@@ -60,76 +67,43 @@ export default async function SessionDetailPage({
         <h1 className="mt-2 text-xl font-bold">Session {sessionId}</h1>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Session Vitals</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SessionVitals
-              contextDrag={{
-                state: toState(session.vital_context_drag_state),
-                metric: toMetric(session.vital_context_drag_metric),
-              }}
-              cacheEfficiency={{
-                state: toState(session.vital_cache_efficiency_state),
-                metric: toMetric(session.vital_cache_efficiency_metric),
-              }}
-              thrashing={{
-                state: toState(session.vital_thrashing_state),
-                metric: toMetric(session.vital_thrashing_metric),
-              }}
-              costAcceleration={{
-                state: toState(session.vital_cost_acceleration_state),
-                metric: toMetric(session.vital_cost_acceleration_metric),
-              }}
-              overall={toState(session.vital_overall_state)}
+      <Card>
+        <CardHeader>
+          <CardTitle>Summary</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+            <Field label="Provider" value={session.provider} />
+            <Field
+              label="Started"
+              value={
+                session.started_at
+                  ? new Date(session.started_at).toLocaleString()
+                  : "-"
+              }
             />
-            <p className="mt-4 text-xs text-zinc-500">
-              Vitals refresh on the next sync tick — the dashboard does not
-              receive live updates.
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-              <Field label="Provider" value={session.provider} />
-              <Field
-                label="Started"
-                value={
-                  session.started_at
-                    ? new Date(session.started_at).toLocaleString()
-                    : "-"
-                }
-              />
-              <Field label="Repo" value={repoName(session.repo_id)} />
-              <Field
-                label="Branch"
-                value={session.git_branch?.replace(/^refs\/heads\//, "") || "-"}
-              />
-              <Field
-                label="Duration"
-                value={formatDuration(
-                  session.duration_ms,
-                  session.started_at,
-                  session.ended_at
-                )}
-              />
-              <Field label="Messages" value={fmtNum(session.message_count)} />
-              <Field label="Tokens" value={fmtNum(totalTokens)} />
-              <Field
-                label="Cost"
-                value={fmtCost(Number(session.total_cost_cents))}
-              />
-            </dl>
-          </CardContent>
-        </Card>
-      </div>
+            <Field label="Repo" value={repoName(session.repo_id)} />
+            <Field
+              label="Branch"
+              value={session.git_branch?.replace(/^refs\/heads\//, "") || "-"}
+            />
+            <Field
+              label="Duration"
+              value={formatDuration(
+                session.duration_ms,
+                session.started_at,
+                session.ended_at
+              )}
+            />
+            <Field label="Messages" value={fmtNum(session.message_count)} />
+            <Field label="Tokens" value={fmtNum(totalTokens)} />
+            <Field
+              label="Cost"
+              value={fmtCost(Number(session.total_cost_cents))}
+            />
+          </dl>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -160,15 +134,4 @@ function buildSessionsBackHref(sp: {
   if (sp.p) qs.set("p", sp.p);
   const s = qs.toString();
   return s ? `/dashboard/sessions?${s}` : "/dashboard/sessions";
-}
-
-function toState(raw: string | null | undefined): VitalState {
-  if (raw === "green" || raw === "yellow" || raw === "red") return raw;
-  return null;
-}
-
-function toMetric(raw: number | string | null | undefined): number | null {
-  if (raw == null) return null;
-  const n = typeof raw === "string" ? Number(raw) : raw;
-  return Number.isFinite(n) ? n : null;
 }
