@@ -427,6 +427,60 @@ interface DeviceActivityRow {
   output_tokens?: number | string;
 }
 
+export interface ModelActivityDay {
+  bucket_day: string;
+  active_models: number;
+  cost_cents: number;
+  input_tokens: number;
+  output_tokens: number;
+}
+
+/**
+ * Daily series of distinct active models + total cost for the Models page
+ * (#147). Active = the `(provider, model)` pair has any rollup row in the
+ * bucket. Manager sees the full org; member sees own devices only
+ * (ADR-0083 §6). When the manager's `UserFilter` is engaged the series is
+ * narrowed to that teammate's devices so it stays consistent with the
+ * per-model bar chart on the same page.
+ *
+ * Days with no rollup activity simply don't appear in the result; the chart
+ * components decide whether to interpolate or render a gap.
+ */
+export async function getModelActivityByDay(
+  user: BudiUser,
+  range: DateRange,
+  options?: ScopeOptions
+): Promise<ModelActivityDay[]> {
+  const admin = createAdminClient();
+  const deviceIds = await getVisibleDeviceIds(admin, user, options);
+  if (deviceIds.length === 0) return [];
+
+  const { data, error } = await admin.rpc("dashboard_model_activity_by_day", {
+    p_device_ids: deviceIds,
+    p_bucket_from: range.bucketFrom,
+    p_bucket_to: range.bucketTo,
+  });
+  if (error) throw error;
+
+  return ((data ?? []) as ModelActivityRow[])
+    .map((r) => ({
+      bucket_day: r.bucket_day,
+      active_models: Number(r.active_models),
+      cost_cents: Number(r.cost_cents),
+      input_tokens: Number(r.input_tokens ?? 0),
+      output_tokens: Number(r.output_tokens ?? 0),
+    }))
+    .sort((a, b) => a.bucket_day.localeCompare(b.bucket_day));
+}
+
+interface ModelActivityRow {
+  bucket_day: string;
+  active_models: number | string;
+  cost_cents: number | string;
+  input_tokens?: number | string;
+  output_tokens?: number | string;
+}
+
 interface UserLookup {
   id: string;
   display_name: string | null;
