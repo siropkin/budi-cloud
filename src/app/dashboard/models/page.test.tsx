@@ -88,8 +88,10 @@ describe("dashboard/models /page", () => {
     expect(text).toContain("Cost by Model");
     // Companion table promotes provider to its own column so the manager can
     // tell `gpt-4o` on OpenAI apart from a hypothetical `gpt-4o` on Azure.
-    expect(text).toContain("claude_code");
-    expect(text).toContain("openai");
+    // Provider keys are mapped to display labels via `formatProvider` (#168)
+    // so the dashboard never exposes the raw snake_case wire value.
+    expect(text).toContain("Claude Code");
+    expect(text).toContain("OpenAI");
     expect(text).toContain("claude-sonnet-4-5");
     expect(text).toContain("gpt-4o");
     // Headline tiles. 2 distinct active models, $1,000 total ⇒ $500 avg.

@@ -260,4 +260,34 @@ describe("dashboard/sessions/[id] /page", () => {
     const node = await render();
     expect(node).toBeNull();
   });
+
+  it("renders the canonical provider key as a display label so users never see the snake_case wire value (#168)", async () => {
+    // Copilot Chat lands on the dashboard via 8.4 (siropkin/budi#665) without a
+    // schema change — the polish ticket is making the raw `copilot_chat`
+    // render as "Copilot Chat" wherever the field is read.
+    dal.getSessionDetail.mockResolvedValue({
+      ...SESSION,
+      provider: "copilot_chat",
+    });
+    const node = await render();
+    const text = extractText(node);
+    expect(text).toContain("Copilot Chat");
+    expect(text).not.toContain("copilot_chat");
+  });
+
+  it("annotates output-only sessions so a `0` input-token count reads as a known May-2026+ Copilot Chat state, not missing data (#168)", async () => {
+    // ADR-0092 §2.3 v3: VS Code Copilot Chat builds drop prompt-token counts
+    // on disk from May 2026 onward. The daemon's output-only fallback emits
+    // rows with `input_tokens = 0` and a non-zero `output_tokens`. The detail
+    // page tags those so the breakdown isn't ambiguous with "we lost the data".
+    dal.getSessionDetail.mockResolvedValue({
+      ...SESSION,
+      provider: "copilot_chat",
+      total_input_tokens: 0,
+      total_output_tokens: 1500,
+    });
+    const node = await render();
+    const text = extractText(node);
+    expect(text).toContain("output-only");
+  });
 });

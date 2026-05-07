@@ -20,6 +20,7 @@ import {
   fmtNum,
   formatDuration,
   formatModelName,
+  formatProvider,
   repoName,
 } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
@@ -178,7 +179,7 @@ export default async function SessionsPage({
                         )}
                         <td className="text-zinc-300">
                           <Link href={href} className="block py-2 pr-3">
-                            {s.provider}
+                            {formatProvider(s.provider)}
                           </Link>
                         </td>
                         <td

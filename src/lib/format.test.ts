@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { fmtDelta, formatDuration, repoName } from "./format";
+import {
+  fmtDelta,
+  formatDuration,
+  formatProvider,
+  repoName,
+} from "./format";
 
 describe("formatDuration (#88)", () => {
   it("uses duration_ms when provided", () => {
@@ -93,5 +98,26 @@ describe("repoName (#121)", () => {
 
   it("shortens hashed sha256 ids", () => {
     expect(repoName("sha256:abcdef0123456789xyz")).toBe("abcdef01...");
+  });
+});
+
+describe("formatProvider (#168)", () => {
+  it("maps the canonical providers to title-cased display labels", () => {
+    expect(formatProvider("claude_code")).toBe("Claude Code");
+    expect(formatProvider("cursor")).toBe("Cursor");
+    expect(formatProvider("codex")).toBe("Codex");
+    expect(formatProvider("copilot_cli")).toBe("Copilot CLI");
+    expect(formatProvider("copilot_chat")).toBe("Copilot Chat");
+    expect(formatProvider("openai")).toBe("OpenAI");
+  });
+
+  it("falls back to the raw key for unknown providers so a future daemon-emitted value still renders", () => {
+    expect(formatProvider("anthropic_api")).toBe("anthropic_api");
+  });
+
+  it("renders an em-dash sentinel for null / empty values", () => {
+    expect(formatProvider(null)).toBe("-");
+    expect(formatProvider(undefined)).toBe("-");
+    expect(formatProvider("")).toBe("-");
   });
 });

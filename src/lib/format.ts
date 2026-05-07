@@ -78,6 +78,30 @@ export function formatModelName(model: string): string {
 }
 
 /**
+ * Display label for a `provider` value (#168).
+ *
+ * The cloud schema treats `provider` as an opaque string so new providers can
+ * land on the dashboard without a migration, but the daemon ships them as
+ * snake_case canonical keys (`claude_code`, `copilot_chat`, …). Render those
+ * with title-cased product names so the Sessions list / detail / Models page
+ * don't expose the wire format. Unknown keys fall back to the raw value so a
+ * future provider still shows up rather than collapsing to "Unknown".
+ */
+const PROVIDER_LABELS: Record<string, string> = {
+  claude_code: "Claude Code",
+  cursor: "Cursor",
+  codex: "Codex",
+  copilot_cli: "Copilot CLI",
+  copilot_chat: "Copilot Chat",
+  openai: "OpenAI",
+};
+
+export function formatProvider(provider: string | null | undefined): string {
+  if (!provider) return "-";
+  return PROVIDER_LABELS[provider] ?? provider;
+}
+
+/**
  * Period-over-period delta for the Overview headline cards (#150).
  *
  * Returns the percentage change of `current` vs `previous` along with a

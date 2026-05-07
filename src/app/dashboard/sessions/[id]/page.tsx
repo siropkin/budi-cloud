@@ -7,6 +7,7 @@ import {
   fmtNum,
   formatDuration,
   formatModelName,
+  formatProvider,
   repoName,
 } from "@/lib/format";
 
@@ -57,8 +58,15 @@ export default async function SessionDetailPage({
   if (!session) notFound();
 
   const isManager = user.role === "manager";
-  const totalTokens =
-    Number(session.total_input_tokens) + Number(session.total_output_tokens);
+  const inputTokens = Number(session.total_input_tokens);
+  const outputTokens = Number(session.total_output_tokens);
+  const totalTokens = inputTokens + outputTokens;
+  // Output-only rows (#168): May-2026+ VS Code Copilot Chat builds drop
+  // prompt-token counts on disk, so the daemon ships rows with
+  // `input_tokens = 0` and a non-zero `output_tokens`. A bare "0" in the
+  // Tokens row would read as missing data; tag the breakdown so a viewer
+  // looking at one of these sessions sees the state honestly.
+  const isOutputOnly = inputTokens === 0 && outputTokens > 0;
 
   const backHref = buildSessionsBackHref(sp);
 
@@ -83,7 +91,7 @@ export default async function SessionDetailPage({
             {isManager && (
               <Field label="Member" value={session.owner_name ?? "-"} />
             )}
-            <Field label="Provider" value={session.provider} />
+            <Field label="Provider" value={formatProvider(session.provider)} />
             <Field
               label="Model"
               value={
@@ -112,7 +120,14 @@ export default async function SessionDetailPage({
               value={session.git_branch?.replace(/^refs\/heads\//, "") || "-"}
             />
             <Field label="Messages" value={fmtNum(session.message_count)} />
-            <Field label="Tokens" value={fmtNum(totalTokens)} />
+            <Field
+              label="Tokens"
+              value={
+                isOutputOnly
+                  ? `${fmtNum(totalTokens)} (output-only)`
+                  : fmtNum(totalTokens)
+              }
+            />
             <Field
               label="Cost"
               value={fmtCost(Number(session.total_cost_cents))}

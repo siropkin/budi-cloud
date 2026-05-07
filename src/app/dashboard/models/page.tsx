@@ -10,7 +10,7 @@ import { dateRangeFromDays } from "@/lib/date-range";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { parseUnit } from "@/lib/units";
-import { fmtCost, fmtNum, formatModelName } from "@/lib/format";
+import { fmtCost, fmtNum, formatModelName, formatProvider } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
@@ -134,7 +134,9 @@ export default async function ModelsPage({
                         key={`${m.provider}/${m.model}/${i}`}
                         className="border-b border-white/5"
                       >
-                        <td className="py-2 text-zinc-200">{m.provider}</td>
+                        <td className="py-2 text-zinc-200">
+                          {formatProvider(m.provider)}
+                        </td>
                         <td className="py-2 text-zinc-200">
                           {formatModelName(m.model)}
                         </td>
@@ -172,8 +174,8 @@ export default async function ModelsPage({
                         </span>
                       </div>
                       <div className="text-xs tabular-nums text-zinc-500">
-                        {m.provider} · in {fmtNum(m.input_tokens)} · out{" "}
-                        {fmtNum(m.output_tokens)}
+                        {formatProvider(m.provider)} · in{" "}
+                        {fmtNum(m.input_tokens)} · out {fmtNum(m.output_tokens)}
                       </div>
                     </li>
                   ))}
