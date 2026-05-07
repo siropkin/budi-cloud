@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  fmtDelta,
-  formatDuration,
-  formatProvider,
-  repoName,
-} from "./format";
+import { fmtDelta, formatDuration, formatProvider, repoName } from "./format";
 
 describe("formatDuration (#88)", () => {
   it("uses duration_ms when provided", () => {
