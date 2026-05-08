@@ -34,6 +34,7 @@ const dal = {
   getCostByUser: vi.fn(),
   getEarliestActivity: vi.fn(),
   getTeamActivityByDay: vi.fn(),
+  getKnownSurfaces: vi.fn(),
   UNASSIGNED_USER_ID: "__unassigned__",
 };
 vi.mock("@/lib/dal", () => dal);
@@ -83,6 +84,7 @@ beforeEach(() => {
       output_tokens: 0,
     },
   ]);
+  dal.getKnownSurfaces.mockReset().mockResolvedValue(["cursor", "vscode"]);
 });
 
 async function render(searchParams: Record<string, string> = {}) {

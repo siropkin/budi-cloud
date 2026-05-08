@@ -5,6 +5,7 @@ import {
   getCostByUser,
   getEarliestActivity,
   getTeamActivityByDay,
+  getKnownSurfaces,
   UNASSIGNED_USER_ID,
 } from "@/lib/dal";
 import { dateRangeFromDays } from "@/lib/date-range";
@@ -14,6 +15,7 @@ import { parseUnit } from "@/lib/units";
 import { fmtCost, fmtNum } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
+import { SurfaceFilter, parseSurfaceParam } from "@/components/surface-filter";
 import { CostBarChart } from "@/components/charts/cost-bar-chart";
 import { TeamCountChart } from "@/components/charts/team-count-chart";
 import { CostPerPersonChart } from "@/components/charts/cost-per-person-chart";
@@ -23,7 +25,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 export default async function TeamPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string; units?: string }>;
+  searchParams: Promise<{ days?: string; units?: string; surface?: string }>;
 }) {
   const params = await searchParams;
   const user = await getCurrentUser();
@@ -34,13 +36,18 @@ export default async function TeamPage({
   if (user.role !== "manager") redirect("/dashboard");
 
   const unit = parseUnit(params.units);
+  const surfaces = parseSurfaceParam(params.surface);
+  const scope = { surfaces };
   const earliestActivity =
-    params.days === ALL_PERIOD_VALUE ? await getEarliestActivity(user) : null;
+    params.days === ALL_PERIOD_VALUE
+      ? await getEarliestActivity(user, scope)
+      : null;
   const tz = await getViewerTimeZone();
   const range = dateRangeFromDays(params.days, earliestActivity, tz);
-  const [userCosts, teamActivity] = await Promise.all([
-    getCostByUser(user, range),
-    getTeamActivityByDay(user, range),
+  const [userCosts, teamActivity, knownSurfaces] = await Promise.all([
+    getCostByUser(user, range, scope),
+    getTeamActivityByDay(user, range, scope),
+    getKnownSurfaces(user),
   ]);
 
   const isTokens = unit === "tokens";
@@ -89,6 +96,7 @@ export default async function TeamPage({
         <h1 className="text-xl font-bold">Team</h1>
         <Suspense>
           <div className="flex flex-wrap items-center gap-3">
+            <SurfaceFilter surfaces={knownSurfaces} />
             <UnitsSelector />
             <PeriodSelector />
           </div>

@@ -3,6 +3,7 @@ import Link from "next/link";
 import {
   getCurrentUser,
   getEarliestActivity,
+  getKnownSurfaces,
   getOrgMembers,
   getSessions,
   SESSIONS_PAGE_SIZE,
@@ -26,6 +27,11 @@ import {
 import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
+import {
+  SurfaceFilter,
+  formatSurface,
+  parseSurfaceParam,
+} from "@/components/surface-filter";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 function formatTimestamp(ts: string | null): string {
@@ -56,6 +62,7 @@ export default async function SessionsPage({
     days?: string;
     user?: string;
     units?: string;
+    surface?: string;
     cursor?: string;
     p?: string;
   }>;
@@ -67,7 +74,8 @@ export default async function SessionsPage({
   const unit = parseUnit(params.units);
   const isTokens = unit === "tokens";
   const isManager = user.role === "manager";
-  const scope = { scopedUserId: params.user || null };
+  const surfaces = parseSurfaceParam(params.surface);
+  const scope = { scopedUserId: params.user || null, surfaces };
   const earliestActivity =
     params.days === ALL_PERIOD_VALUE
       ? await getEarliestActivity(user, scope)
@@ -77,10 +85,12 @@ export default async function SessionsPage({
   const cursor = decodeSessionsCursor(params.cursor);
   const page = parsePage(params.p);
 
-  const [{ rows: sessions, nextCursor }, members] = await Promise.all([
-    getSessions(user, range, scope, { cursor }),
-    isManager ? getOrgMembers(user.org_id) : Promise.resolve([]),
-  ]);
+  const [{ rows: sessions, nextCursor }, members, knownSurfaces] =
+    await Promise.all([
+      getSessions(user, range, scope, { cursor }),
+      isManager ? getOrgMembers(user.org_id) : Promise.resolve([]),
+      getKnownSurfaces(user, { scopedUserId: scope.scopedUserId }),
+    ]);
 
   const startIndex = (page - 1) * SESSIONS_PAGE_SIZE + 1;
   const endIndex = startIndex + sessions.length - 1;
@@ -95,6 +105,24 @@ export default async function SessionsPage({
   if (params.days) baseParams.set("days", params.days);
   if (params.user) baseParams.set("user", params.user);
   if (params.units) baseParams.set("units", params.units);
+  if (params.surface) baseParams.set("surface", params.surface);
+
+  // Hide the Surface column on single-surface orgs — every row would carry
+  // the same value, which is just visual noise. Once a second surface
+  // appears the column starts rendering automatically (acceptance for #187).
+  const showSurfaceColumn = knownSurfaces.length > 1;
+  // Click-to-filter target for a session-row's surface cell. Preserves the
+  // other active filters; resets cursor / page so the filtered list starts
+  // from the first page rather than wherever the user happened to be.
+  function surfaceFilterHref(surface: string): string {
+    const sp = new URLSearchParams();
+    if (params.days) sp.set("days", params.days);
+    if (params.user) sp.set("user", params.user);
+    if (params.units) sp.set("units", params.units);
+    sp.set("surface", surface);
+    const qs = sp.toString();
+    return qs ? `?${qs}` : "?";
+  }
 
   const newerParams = new URLSearchParams(baseParams);
   // "Newer" returns to the first page — drops cursor and `p`. Browser back
@@ -113,6 +141,7 @@ export default async function SessionsPage({
         <Suspense>
           <div className="flex flex-wrap items-center gap-3">
             <UserFilter members={members} role={user.role} />
+            <SurfaceFilter surfaces={knownSurfaces} />
             <UnitsSelector />
             <PeriodSelector />
           </div>
@@ -142,6 +171,9 @@ export default async function SessionsPage({
                     )}
                     <th className="pr-3 pb-2 font-medium">Provider</th>
                     <th className="pr-3 pb-2 font-medium">Model</th>
+                    {showSurfaceColumn && (
+                      <th className="pr-3 pb-2 font-medium">Surface</th>
+                    )}
                     <th className="pr-3 pb-2 font-medium">Started</th>
                     <th className="pr-3 pb-2 font-medium">Duration</th>
                     <th className="pr-3 pb-2 font-medium">Repo</th>
@@ -193,6 +225,20 @@ export default async function SessionsPage({
                             {s.main_model ? formatModelName(s.main_model) : "-"}
                           </Link>
                         </td>
+                        {showSurfaceColumn && (
+                          <td
+                            className="text-zinc-400"
+                            title={`Filter to ${formatSurface(s.surface)}`}
+                          >
+                            <Link
+                              href={surfaceFilterHref(s.surface)}
+                              className="block py-2 pr-3 hover:text-zinc-200"
+                              data-testid="session-surface-cell"
+                            >
+                              {formatSurface(s.surface)}
+                            </Link>
+                          </td>
+                        )}
                         <td className="text-zinc-400">
                           <Link href={href} className="block py-2 pr-3">
                             {formatTimestamp(s.started_at)}

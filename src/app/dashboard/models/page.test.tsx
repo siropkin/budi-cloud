@@ -24,6 +24,7 @@ const dal = {
   getModelActivityByDay: vi.fn(),
   getEarliestActivity: vi.fn(),
   getOrgMembers: vi.fn(),
+  getKnownSurfaces: vi.fn(),
 };
 vi.mock("@/lib/dal", () => dal);
 
@@ -72,6 +73,8 @@ beforeEach(() => {
   ]);
   dal.getEarliestActivity.mockReset().mockResolvedValue("2026-04-01");
   dal.getOrgMembers.mockReset().mockResolvedValue([]);
+  // #187 surface filter chip — populates from known surfaces in the org.
+  dal.getKnownSurfaces.mockReset().mockResolvedValue(["cursor", "vscode"]);
 });
 
 async function render(searchParams: Record<string, string> = {}) {
@@ -134,5 +137,15 @@ describe("dashboard/models /page", () => {
     dal.getCurrentUser.mockResolvedValue({ ...MANAGER, org_id: null });
     const node = await render();
     expect(node).toBeNull();
+  });
+
+  it("surface filter: ?surface=vscode is threaded into getCostByModel and getModelActivityByDay so the per-model bars narrow to one surface (#187)", async () => {
+    await render({ surface: "vscode" });
+    for (const fn of [dal.getCostByModel, dal.getModelActivityByDay]) {
+      const lastCall = fn.mock.calls.at(-1);
+      expect(lastCall).toBeTruthy();
+      const scope = lastCall![lastCall!.length - 1];
+      expect(scope).toMatchObject({ surfaces: ["vscode"] });
+    }
   });
 });

@@ -68,6 +68,7 @@ const SESSION = {
   total_cost_cents: 250,
   main_model: "claude-opus-4-7-20260101",
   owner_name: "Jane Smith",
+  surface: "vscode",
 };
 
 beforeEach(() => {

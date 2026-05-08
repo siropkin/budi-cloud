@@ -10,6 +10,7 @@ import {
   formatProvider,
   repoName,
 } from "@/lib/format";
+import { formatSurface } from "@/components/surface-filter";
 
 /**
  * Session detail page (#99). The id segment is the daemon-emitted
@@ -92,6 +93,7 @@ export default async function SessionDetailPage({
               <Field label="Member" value={session.owner_name ?? "-"} />
             )}
             <Field label="Provider" value={formatProvider(session.provider)} />
+            <Field label="Surface" value={formatSurface(session.surface)} />
             <Field
               label="Model"
               value={

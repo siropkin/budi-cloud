@@ -51,6 +51,29 @@ interface BudiUser {
  */
 export interface ScopeOptions {
   scopedUserId?: string | null;
+  /**
+   * Narrow every aggregation to one or more surfaces (#187), e.g. `['vscode']`
+   * for the JetBrains-vs-VS Code rollout question. `null`, `undefined`, or an
+   * empty array all mean "no filter" — the dashboard's `<SurfaceFilter>` chip
+   * collapses an all-deselected state back to the default rather than zeroing
+   * the page out. The breakdown RPCs treat `NULL p_surfaces` and an empty
+   * array identically (015) so callers don't have to remember which sentinel
+   * to pass.
+   */
+  surfaces?: string[] | null;
+}
+
+/**
+ * Normalize a `ScopeOptions.surfaces` value to the wire shape the RPCs want.
+ * Returns `null` for any "no filter" case; otherwise a deduped, non-empty
+ * array. Centralized so callers can pass a raw URL-derived value without
+ * branching on undefined / [] themselves.
+ */
+function normalizeSurfaces(raw: string[] | null | undefined): string[] | null {
+  if (!raw || raw.length === 0) return null;
+  const trimmed = raw.map((s) => s.trim()).filter((s) => s.length > 0);
+  if (trimmed.length === 0) return null;
+  return Array.from(new Set(trimmed));
 }
 
 /**
@@ -113,6 +136,7 @@ export async function getOverviewStats(
     p_device_ids: deviceIds,
     p_bucket_from: range.bucketFrom,
     p_bucket_to: range.bucketTo,
+    p_surfaces: normalizeSurfaces(options?.surfaces),
   });
   if (error) throw error;
 
@@ -156,6 +180,7 @@ export async function getDailyActivity(
     p_device_ids: deviceIds,
     p_bucket_from: range.bucketFrom,
     p_bucket_to: range.bucketTo,
+    p_surfaces: normalizeSurfaces(options?.surfaces),
   });
   if (error) throw error;
 
@@ -208,6 +233,7 @@ export async function getActivityHeatmap(
     p_started_from: range.startedAtFrom,
     p_started_to: range.startedAtTo,
     p_time_zone: timeZone ?? "UTC",
+    p_surfaces: normalizeSurfaces(options?.surfaces),
   });
   if (error) throw error;
 
@@ -247,10 +273,13 @@ export async function getEarliestActivity(
   const deviceIds = await getVisibleDeviceIds(admin, user, options);
   if (deviceIds.length === 0) return null;
 
-  const { data } = await admin
+  const surfaces = normalizeSurfaces(options?.surfaces);
+  let query = admin
     .from("daily_rollups")
     .select("bucket_day")
-    .in("device_id", deviceIds)
+    .in("device_id", deviceIds);
+  if (surfaces) query = query.in("surface", surfaces);
+  const { data } = await query
     .order("bucket_day", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -276,7 +305,11 @@ export const UNASSIGNED_USER_ID = "__unassigned__";
  * for the same (user, range), fixing the Overview/Team reconciliation gap
  * described in #15.
  */
-export async function getCostByUser(user: BudiUser, range: DateRange) {
+export async function getCostByUser(
+  user: BudiUser,
+  range: DateRange,
+  options?: ScopeOptions
+) {
   const admin = createAdminClient();
 
   // Use the identical device set as `getOverviewStats` so the two pages
@@ -291,6 +324,7 @@ export async function getCostByUser(user: BudiUser, range: DateRange) {
     p_device_ids: deviceIds,
     p_bucket_from: range.bucketFrom,
     p_bucket_to: range.bucketTo,
+    p_surfaces: normalizeSurfaces(options?.surfaces),
   });
   if (error) throw error;
   const deviceCostRows = (rows ?? []) as DeviceCostRow[];
@@ -401,7 +435,8 @@ export interface TeamActivityDay {
  */
 export async function getTeamActivityByDay(
   user: BudiUser,
-  range: DateRange
+  range: DateRange,
+  options?: ScopeOptions
 ): Promise<TeamActivityDay[]> {
   const admin = createAdminClient();
   const deviceIds = await getVisibleDeviceIds(admin, user);
@@ -411,6 +446,7 @@ export async function getTeamActivityByDay(
     p_device_ids: deviceIds,
     p_bucket_from: range.bucketFrom,
     p_bucket_to: range.bucketTo,
+    p_surfaces: normalizeSurfaces(options?.surfaces),
   });
   if (error) throw error;
 
@@ -465,6 +501,7 @@ export async function getDeviceActivityByDay(
     p_device_ids: deviceIds,
     p_bucket_from: range.bucketFrom,
     p_bucket_to: range.bucketTo,
+    p_surfaces: normalizeSurfaces(options?.surfaces),
   });
   if (error) throw error;
 
@@ -519,6 +556,7 @@ export async function getModelActivityByDay(
     p_device_ids: deviceIds,
     p_bucket_from: range.bucketFrom,
     p_bucket_to: range.bucketTo,
+    p_surfaces: normalizeSurfaces(options?.surfaces),
   });
   if (error) throw error;
 
@@ -588,6 +626,7 @@ export async function getCostByDevice(
     p_device_ids: deviceIds,
     p_bucket_from: range.bucketFrom,
     p_bucket_to: range.bucketTo,
+    p_surfaces: normalizeSurfaces(options?.surfaces),
   });
   if (error) throw error;
   const rollups = (rows ?? []) as DeviceCostRow[];
@@ -686,6 +725,7 @@ export async function getCostByModel(
     p_device_ids: deviceIds,
     p_bucket_from: range.bucketFrom,
     p_bucket_to: range.bucketTo,
+    p_surfaces: normalizeSurfaces(options?.surfaces),
   });
   if (error) throw error;
 
@@ -727,6 +767,7 @@ export async function getCostByRepo(
     p_device_ids: deviceIds,
     p_bucket_from: range.bucketFrom,
     p_bucket_to: range.bucketTo,
+    p_surfaces: normalizeSurfaces(options?.surfaces),
   });
   if (error) throw error;
 
@@ -766,6 +807,7 @@ export async function getCostByBranch(
     p_device_ids: deviceIds,
     p_bucket_from: range.bucketFrom,
     p_bucket_to: range.bucketTo,
+    p_surfaces: normalizeSurfaces(options?.surfaces),
   });
   if (error) throw error;
 
@@ -807,6 +849,7 @@ export async function getCostByTicket(
     p_device_ids: deviceIds,
     p_bucket_from: range.bucketFrom,
     p_bucket_to: range.bucketTo,
+    p_surfaces: normalizeSurfaces(options?.surfaces),
   });
   if (error) throw error;
 
@@ -826,6 +869,92 @@ interface TicketCostRow {
   cost_cents: number | string;
   input_tokens?: number | string;
   output_tokens?: number | string;
+}
+
+export interface SurfaceCost {
+  surface: string;
+  cost_cents: number;
+  input_tokens: number;
+  output_tokens: number;
+}
+
+/**
+ * Cost share by surface for the "Spend by Surface" card on the dashboard
+ * (#187 part 2). Manager sees full org; member sees own devices only
+ * (ADR-0083 §6). `options.scopedUserId` further narrows a manager view to a
+ * single teammate; `options.surfaces` (from the chip) further narrows the
+ * surfaces aggregated over — useful for the "show only `vscode` and
+ * `cursor`" comparison.
+ *
+ * Returned rows include `unknown` whenever a device has rollups from a
+ * pre-bump daemon, matching the issue acceptance ("rows from pre-bump
+ * daemons display as `unknown` and remain in the all-surfaces aggregation").
+ * The empty-state for single-surface orgs (one bar, full width) is the
+ * caller's call — we always return whatever is present in the data.
+ */
+export async function getCostBySurface(
+  user: BudiUser,
+  range: DateRange,
+  options?: ScopeOptions
+): Promise<SurfaceCost[]> {
+  const admin = createAdminClient();
+  const deviceIds = await getVisibleDeviceIds(admin, user, options);
+  if (deviceIds.length === 0) return [];
+
+  const { data, error } = await admin.rpc("dashboard_cost_by_surface", {
+    p_device_ids: deviceIds,
+    p_bucket_from: range.bucketFrom,
+    p_bucket_to: range.bucketTo,
+    p_surfaces: normalizeSurfaces(options?.surfaces),
+  });
+  if (error) throw error;
+
+  return ((data ?? []) as SurfaceCostRow[])
+    .map((r) => ({
+      surface: r.surface,
+      cost_cents: Number(r.cost_cents),
+      input_tokens: Number(r.input_tokens ?? 0),
+      output_tokens: Number(r.output_tokens ?? 0),
+    }))
+    .filter((s) => s.cost_cents > 0 || s.input_tokens + s.output_tokens > 0)
+    .sort((a, b) => b.cost_cents - a.cost_cents);
+}
+
+interface SurfaceCostRow {
+  surface: string;
+  cost_cents: number | string;
+  input_tokens?: number | string;
+  output_tokens?: number | string;
+}
+
+/**
+ * Distinct surfaces with at least one rollup row visible to the viewer.
+ * Powers the `<SurfaceFilter>` chip's options (#187 part 1) — drawn from
+ * data so the day a JetBrains daemon first syncs the chip picks up
+ * `jetbrains` automatically; no hardcoded enum to keep in sync with core.
+ *
+ * Deliberately not range-scoped: a surface that appeared in the org's
+ * history but not in the current period still belongs in the chip so the
+ * "filter to JetBrains" path remains usable after the team migrates off it.
+ * `unknown` is included when present so a manager investigating "rows
+ * without a surface tag" can still drill in.
+ */
+export async function getKnownSurfaces(
+  user: BudiUser,
+  options?: ScopeOptions
+): Promise<string[]> {
+  const admin = createAdminClient();
+  const deviceIds = await getVisibleDeviceIds(admin, user, options);
+  if (deviceIds.length === 0) return [];
+
+  const { data, error } = await admin.rpc("dashboard_known_surfaces", {
+    p_device_ids: deviceIds,
+  });
+  if (error) throw error;
+
+  return ((data ?? []) as { surface: string }[])
+    .map((r) => r.surface)
+    .filter((s) => typeof s === "string" && s.length > 0);
 }
 
 /**
@@ -877,6 +1006,7 @@ export async function getSessions(
   const pageSize = pagination?.pageSize ?? SESSIONS_PAGE_SIZE;
   const cursor = pagination?.cursor ?? null;
 
+  const surfaces = normalizeSurfaces(options?.surfaces);
   let query = admin
     .from("session_summaries")
     .select("*")
@@ -889,6 +1019,8 @@ export async function getSessions(
     // requests, causing rows to skip or duplicate as the user paginates.
     .order("session_id", { ascending: false })
     .limit(pageSize + 1);
+
+  if (surfaces) query = query.in("surface", surfaces);
 
   if (cursor) {
     // Composite tuple compare: (started_at, session_id) < cursor.
@@ -989,6 +1121,11 @@ export interface SessionRow {
   // Not a column on `session_summaries` — joined in by the DAL via
   // `attachOwners`.
   owner_name?: string | null;
+  // Surface dimension (#187). Pre-#187 rows backfill to the literal
+  // `'unknown'`, so the Sessions table column never has a null hole — the
+  // dashboard treats `unknown` as its own bucket and filters/displays
+  // accordingly.
+  surface: string;
   // The schema also has `vital_*` columns (006_session_vitals.sql) but the
   // daemon has never populated them, so the dashboard stopped reading them in
   // #141. Reintroduce typed fields here once budi-core ships vitals on the

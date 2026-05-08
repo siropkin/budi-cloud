@@ -20,6 +20,13 @@ export interface IngestDailyRollup {
   cache_creation_tokens: number;
   cache_read_tokens: number;
   cost_cents: number;
+  // Surface dimension (#187): which IDE / CLI drove the daemon for this
+  // rollup — `vscode`, `cursor`, `jetbrains`, `terminal`, … Optional because
+  // older daemons (pre siropkin/budi#701) don't emit it; missing values land
+  // as the literal `'unknown'` so all-surface aggregations still see them
+  // and the dashboard can render them in the unfiltered "where is the team
+  // working?" chart on Overview.
+  surface?: string | null;
 }
 
 /**
@@ -45,6 +52,26 @@ function normalizeVitalState(raw: unknown): VitalState | null {
 function normalizeVitalMetric(raw: unknown): number | null {
   if (typeof raw !== "number") return null;
   return Number.isFinite(raw) ? raw : null;
+}
+
+// Cap on the stored surface tag so a malformed envelope can't store an
+// unbounded string and the dashboard's chip dropdown stays readable. Real
+// daemon-side values are short (`vscode`, `jetbrains`, …); 64 is comfortably
+// above that ceiling.
+const MAX_SURFACE_LENGTH = 64;
+
+/**
+ * Normalize the envelope's `surface` value. The cloud column is `NOT NULL
+ * DEFAULT 'unknown'` (014), so we coalesce missing / invalid / empty inputs
+ * to that literal rather than letting the daemon's omission collapse the
+ * row out of all-surface aggregations. Whitespace is trimmed and length is
+ * capped before storage.
+ */
+function normalizeSurface(raw: unknown): string {
+  if (typeof raw !== "string") return "unknown";
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return "unknown";
+  return trimmed.slice(0, MAX_SURFACE_LENGTH);
 }
 
 export interface IngestSessionSummary {
@@ -77,6 +104,10 @@ export interface IngestSessionSummary {
   vital_cost_acceleration_state?: string | null;
   vital_cost_acceleration_metric?: number | null;
   vital_overall_state?: string | null;
+  // Surface dimension (#187). Same shape and rationale as the rollup field —
+  // missing values fall through to the literal `'unknown'` so the Sessions
+  // table never has a null hole in the column.
+  surface?: string | null;
 }
 
 export function buildRollupRows(
@@ -99,6 +130,7 @@ export function buildRollupRows(
     cache_creation_tokens: r.cache_creation_tokens,
     cache_read_tokens: r.cache_read_tokens,
     cost_cents: r.cost_cents,
+    surface: normalizeSurface(r.surface),
     synced_at: syncedAt,
   }));
 }
@@ -159,6 +191,7 @@ export function buildSessionRows(
       s.vital_cost_acceleration_metric
     ),
     vital_overall_state: normalizeVitalState(s.vital_overall_state),
+    surface: normalizeSurface(s.surface),
     synced_at: syncedAt,
   }));
 }

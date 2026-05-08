@@ -32,6 +32,7 @@ const dal = {
   getEarliestActivity: vi.fn(),
   getOrgMembers: vi.fn(),
   getSessions: vi.fn(),
+  getKnownSurfaces: vi.fn(),
   SESSIONS_PAGE_SIZE: 50,
 };
 vi.mock("@/lib/dal", () => dal);
@@ -76,6 +77,7 @@ beforeEach(() => {
         total_cost_cents: 250,
         main_model: "claude-opus-4-7-20260101",
         owner_name: "Ivan",
+        surface: "vscode",
       },
       {
         // Older daemon (#140): no main_model on the wire, column NULL in the
@@ -96,10 +98,12 @@ beforeEach(() => {
         total_cost_cents: 30,
         main_model: null,
         owner_name: "Jane",
+        surface: "cursor",
       },
     ],
     nextCursor: null,
   });
+  dal.getKnownSurfaces.mockReset().mockResolvedValue(["cursor", "vscode"]);
 });
 
 async function render(searchParams: Record<string, string> = {}) {
@@ -190,5 +194,34 @@ describe("dashboard/sessions /page", () => {
     dal.getCurrentUser.mockResolvedValue({ ...MANAGER, org_id: null });
     const node = await render();
     expect(node).toBeNull();
+  });
+
+  it("surface filter: ?surface=vscode threads the search-param into getSessions so the table narrows to one surface (#187)", async () => {
+    await render({ surface: "vscode" });
+    const lastCall = dal.getSessions.mock.calls.at(-1);
+    expect(lastCall).toBeTruthy();
+    // getSessions(user, range, scope, pagination) — scope is index 2.
+    expect(lastCall![2]).toMatchObject({ surfaces: ["vscode"] });
+  });
+
+  it("surface column: rendered when the org has 2+ surfaces, hidden when only one (#187)", async () => {
+    // Multi-surface org: column header + per-row cells render the formatted
+    // surface label, not the raw daemon id.
+    let node = await render();
+    let text = extractText(node);
+    expect(text).toContain("Surface");
+    expect(text).toContain("VS Code");
+    expect(text).toContain("Cursor");
+
+    // Single-surface org: column collapses out so every row doesn't repeat
+    // the same value.
+    dal.getKnownSurfaces.mockResolvedValue(["vscode"]);
+    node = await render();
+    text = extractText(node);
+    // Surface table-header text is gone (the `Provider` / `Model` / `Started`
+    // headers still render, so a contains-check on them isn't useful here).
+    // Use a regex tied to the cell column-header position to avoid matching
+    // unrelated copy.
+    expect(text).not.toMatch(/Provider.*Model.*Surface/);
   });
 });

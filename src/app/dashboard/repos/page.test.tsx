@@ -25,6 +25,7 @@ const dal = {
   getCostByTicket: vi.fn(),
   getEarliestActivity: vi.fn(),
   getOrgMembers: vi.fn(),
+  getKnownSurfaces: vi.fn(),
 };
 vi.mock("@/lib/dal", () => dal);
 
@@ -66,6 +67,7 @@ beforeEach(() => {
   ]);
   dal.getEarliestActivity.mockReset().mockResolvedValue("2026-04-01");
   dal.getOrgMembers.mockReset().mockResolvedValue([]);
+  dal.getKnownSurfaces.mockReset().mockResolvedValue(["cursor", "vscode"]);
 });
 
 async function render(searchParams: Record<string, string> = {}) {
