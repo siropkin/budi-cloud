@@ -343,11 +343,7 @@ describe("dashboard/sessions /page", () => {
     ]) {
       expect(text).toContain(label);
     }
-    for (const wire of [
-      "claude_code",
-      "copilot_chat",
-      "copilot_cli",
-    ]) {
+    for (const wire of ["claude_code", "copilot_chat", "copilot_cli"]) {
       expect(text).not.toContain(wire);
     }
   });

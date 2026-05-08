@@ -1923,7 +1923,13 @@ describe("getSessions multi-provider visibility (#202)", () => {
     // to a hardcoded "claude_code" label.
     const ids = page.rows.map((r) => r.session_id).sort();
     expect(ids).toEqual(
-      ["sess_cc", "sess_codex", "sess_copilot", "sess_copilot_cli", "sess_cursor"].sort()
+      [
+        "sess_cc",
+        "sess_codex",
+        "sess_copilot",
+        "sess_copilot_cli",
+        "sess_cursor",
+      ].sort()
     );
   });
 
