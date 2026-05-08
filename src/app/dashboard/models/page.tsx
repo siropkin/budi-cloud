@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import {
   getCurrentUser,
   getCostByModel,
+  getCostBySurface,
   getModelActivityByDay,
   getEarliestActivity,
   getOrgMembers,
@@ -16,7 +17,7 @@ import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
 import { SurfaceFilter } from "@/components/surface-filter";
-import { parseSurfaceParam } from "@/lib/surface";
+import { formatSurface, parseSurfaceParam } from "@/lib/surface";
 import { CostBarChart } from "@/components/charts/cost-bar-chart";
 import { ModelCountChart } from "@/components/charts/model-count-chart";
 import { CostPerModelChart } from "@/components/charts/cost-per-model-chart";
@@ -46,12 +47,16 @@ export default async function ModelsPage({
       : null;
   const tz = await getViewerTimeZone();
   const range = dateRangeFromDays(params.days, earliestActivity, tz);
-  const [models, modelActivity, members, knownSurfaces] = await Promise.all([
-    getCostByModel(user, range, scope),
-    getModelActivityByDay(user, range, scope),
-    user.role === "manager" ? getOrgMembers(user.org_id) : Promise.resolve([]),
-    getKnownSurfaces(user, { scopedUserId: scope.scopedUserId }),
-  ]);
+  const [models, modelActivity, members, knownSurfaces, surfaceShare] =
+    await Promise.all([
+      getCostByModel(user, range, scope),
+      getModelActivityByDay(user, range, scope),
+      user.role === "manager"
+        ? getOrgMembers(user.org_id)
+        : Promise.resolve([]),
+      getKnownSurfaces(user, { scopedUserId: scope.scopedUserId }),
+      getCostBySurface(user, range, scope),
+    ]);
 
   const isTokens = unit === "tokens";
   const valueWord = isTokens ? "Tokens" : "Cost";
@@ -194,6 +199,27 @@ export default async function ModelsPage({
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{`${valueWord} by Surface`}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CostBarChart
+            data={surfaceShare.map((s) => ({
+              label: formatSurface(s.surface),
+              cost_cents: s.cost_cents,
+              tokens: s.input_tokens + s.output_tokens,
+            }))}
+            emptyLabel={
+              knownSurfaces.length <= 1
+                ? "Single-surface org — break out per-surface spend after a second IDE / CLI starts syncing."
+                : `No surface ${valueWord.toLowerCase()} data for this period`
+            }
+            unit={unit}
+          />
         </CardContent>
       </Card>
 

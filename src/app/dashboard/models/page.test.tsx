@@ -21,6 +21,7 @@ vi.mock("next/navigation", () => ({
 const dal = {
   getCurrentUser: vi.fn(),
   getCostByModel: vi.fn(),
+  getCostBySurface: vi.fn(),
   getModelActivityByDay: vi.fn(),
   getEarliestActivity: vi.fn(),
   getOrgMembers: vi.fn(),
@@ -75,6 +76,21 @@ beforeEach(() => {
   dal.getOrgMembers.mockReset().mockResolvedValue([]);
   // #187 surface filter chip — populates from known surfaces in the org.
   dal.getKnownSurfaces.mockReset().mockResolvedValue(["cursor", "vscode"]);
+  // #203 Cost-by-Surface card — mirrors the Overview chart on the Models page.
+  dal.getCostBySurface.mockReset().mockResolvedValue([
+    {
+      surface: "vscode",
+      cost_cents: 700_00,
+      input_tokens: 500_000,
+      output_tokens: 150_000,
+    },
+    {
+      surface: "cursor",
+      cost_cents: 300_00,
+      input_tokens: 250_000,
+      output_tokens: 100_000,
+    },
+  ]);
 });
 
 async function render(searchParams: Record<string, string> = {}) {
@@ -147,5 +163,38 @@ describe("dashboard/models /page", () => {
       const scope = lastCall![lastCall!.length - 1];
       expect(scope).toMatchObject({ surfaces: ["vscode"] });
     }
+  });
+
+  it("surface chart: renders the 'Cost by Surface' card and pulls per-surface costs from the DAL (#203)", async () => {
+    const node = await render();
+    const text = extractText(node);
+    expect(text).toContain("Cost by Surface");
+    expect(dal.getCostBySurface).toHaveBeenCalled();
+    // The chart receives bars as a prop array (not visible in extractText) —
+    // the DAL-call assertion above catches a regression that drops the data
+    // pipeline upstream of the chart.
+  });
+
+  it("surface chart: 'tokens' unit relabels the card to 'Tokens by Surface' (#203)", async () => {
+    const node = await render({ units: "tokens" });
+    const text = extractText(node);
+    expect(text).toContain("Tokens by Surface");
+    expect(text).not.toContain("Cost by Surface");
+  });
+
+  it("surface chart: single-surface org renders an empty-state copy that names the next-state condition (#203)", async () => {
+    dal.getKnownSurfaces.mockResolvedValue(["vscode"]);
+    dal.getCostBySurface.mockResolvedValue([
+      {
+        surface: "vscode",
+        cost_cents: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+      },
+    ]);
+    const node = await render();
+    const text = extractText(node);
+    expect(text).toContain("Cost by Surface");
+    expect(text).toContain("Single-surface org");
   });
 });
