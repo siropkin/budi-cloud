@@ -1621,6 +1621,181 @@ describe("getSessionDetail (#99)", () => {
   });
 });
 
+describe("getSessionDetailBySessionId (#202 deep-link)", () => {
+  // The list page sends the device half of the composite PK on every link,
+  // but a session URL pasted from chat / a ticket / a Slack thread typically
+  // carries only `?days=…` (or nothing). The deep-link entry path resolves
+  // by `session_id` alone, scoped to the viewer's visible devices, so the
+  // 404-on-bare-URL footgun the user hit on `app.getbudi.dev` is gone.
+  const manager = {
+    id: "usr_ivan",
+    org_id: "org_team",
+    role: "manager" as const,
+    api_key: "budi_i",
+    display_name: "Ivan",
+    email: "ivan@example.com",
+  };
+  const member = {
+    id: "usr_jane",
+    org_id: "org_team",
+    role: "member" as const,
+    api_key: "budi_j",
+    display_name: "Jane",
+    email: "jane@example.com",
+  };
+  const outsider = {
+    id: "usr_outsider",
+    org_id: "org_other",
+    role: "manager" as const,
+    api_key: "budi_o",
+    display_name: "Outsider",
+    email: "outsider@example.com",
+  };
+
+  function seedDeepLink() {
+    fake.seed("orgs", [
+      { id: "org_team", name: "team" },
+      { id: "org_other", name: "other" },
+    ]);
+    fake.seed("users", [{ ...manager }, { ...member }, { ...outsider }]);
+    fake.seed("devices", [
+      { id: "dev_ivan", user_id: "usr_ivan" },
+      { id: "dev_jane", user_id: "usr_jane" },
+      { id: "dev_outsider", user_id: "usr_outsider" },
+    ]);
+    fake.seed("session_summaries", [
+      {
+        // Place the deep-link session on Jane's device so the member-vs-manager
+        // contract is testable: a manager can see Jane's session via org
+        // scope; another member would not.
+        device_id: "dev_jane",
+        session_id: "35a2ecbc-1144-4ac2-993e-1ca6850280a3",
+        provider: "copilot_chat",
+        started_at: "2026-04-15T10:00:00.000Z",
+        ended_at: null,
+        duration_ms: null,
+        repo_id: "repo_x",
+        git_branch: "refs/heads/main",
+        ticket: null,
+        message_count: 4,
+        total_input_tokens: 100,
+        total_output_tokens: 50,
+        total_cost_cents: 12,
+        surface: "vscode",
+      },
+      {
+        device_id: "dev_outsider",
+        session_id: "sess_foreign",
+        provider: "claude_code",
+        started_at: "2026-04-15T10:00:00.000Z",
+      },
+    ]);
+  }
+
+  it("resolves a non-claude_code session by session_id alone for the manager", async () => {
+    // The exact UUID called out in the #202 reopen — copilot_chat session
+    // visible to the manager via cross-device scope. Pre-fix this returned
+    // null because the page short-circuited on missing `?device=`; the DAL
+    // helper now does the lookup.
+    seedDeepLink();
+    const { getSessionDetailBySessionId } = await loadDal();
+    const detail = await getSessionDetailBySessionId(
+      manager,
+      "35a2ecbc-1144-4ac2-993e-1ca6850280a3"
+    );
+    expect(detail).not.toBeNull();
+    expect(detail?.session_id).toBe(
+      "35a2ecbc-1144-4ac2-993e-1ca6850280a3"
+    );
+    expect(detail?.provider).toBe("copilot_chat");
+    expect(detail?.device_id).toBe("dev_jane");
+  });
+
+  it("collapses foreign-org sessions with not-found rather than leaking existence", async () => {
+    // ADR-0083 §6: a viewer probing a session id from another org must get
+    // the same null response as a non-existent id.
+    seedDeepLink();
+    const { getSessionDetailBySessionId } = await loadDal();
+    const detail = await getSessionDetailBySessionId(manager, "sess_foreign");
+    expect(detail).toBeNull();
+  });
+
+  it("returns null for a member viewing a teammate's session id", async () => {
+    // Seeded session lives on dev_jane; "Bob" is a same-org member on a
+    // different device. Visibility scope must collapse the lookup to null
+    // even though the session id technically exists in the table.
+    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("users", [
+      { ...manager },
+      { ...member },
+      {
+        id: "usr_bob",
+        org_id: "org_team",
+        role: "member",
+        api_key: "budi_b",
+        display_name: "Bob",
+        email: "bob@example.com",
+      },
+    ]);
+    fake.seed("devices", [
+      { id: "dev_jane", user_id: "usr_jane" },
+      { id: "dev_bob", user_id: "usr_bob" },
+    ]);
+    fake.seed("session_summaries", [
+      {
+        device_id: "dev_jane",
+        session_id: "35a2ecbc-1144-4ac2-993e-1ca6850280a3",
+        provider: "copilot_chat",
+        started_at: "2026-04-15T10:00:00.000Z",
+      },
+    ]);
+    const bob = {
+      id: "usr_bob",
+      org_id: "org_team",
+      role: "member" as const,
+      api_key: "budi_b",
+      display_name: "Bob",
+      email: "bob@example.com",
+    };
+    const { getSessionDetailBySessionId } = await loadDal();
+    const detail = await getSessionDetailBySessionId(
+      bob,
+      "35a2ecbc-1144-4ac2-993e-1ca6850280a3"
+    );
+    expect(detail).toBeNull();
+  });
+
+  it("returns null when the same session_id appears on more than one visible device — ambiguous, can't guess", async () => {
+    // UUIDs essentially never collide in practice, but a non-UUID daemon
+    // session_id (older daemon, custom build, …) could land on two devices.
+    // The DAL must collapse that to not-found rather than silently render
+    // whichever row sorted first.
+    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("users", [{ ...manager }]);
+    fake.seed("devices", [
+      { id: "dev_a", user_id: "usr_ivan" },
+      { id: "dev_b", user_id: "usr_ivan" },
+    ]);
+    fake.seed("session_summaries", [
+      {
+        device_id: "dev_a",
+        session_id: "ambiguous",
+        provider: "claude_code",
+        started_at: "2026-04-15T10:00:00.000Z",
+      },
+      {
+        device_id: "dev_b",
+        session_id: "ambiguous",
+        provider: "claude_code",
+        started_at: "2026-04-15T11:00:00.000Z",
+      },
+    ]);
+    const { getSessionDetailBySessionId } = await loadDal();
+    const detail = await getSessionDetailBySessionId(manager, "ambiguous");
+    expect(detail).toBeNull();
+  });
+});
+
 describe("getSessions cursor pagination (#85)", () => {
   // Unbounded range so the per-page cursor is the only thing trimming output.
   const wideRange = utcRange("2026-01-01", "2026-12-31");

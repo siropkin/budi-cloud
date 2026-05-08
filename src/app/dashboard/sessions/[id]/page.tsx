@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getCurrentUser, getSessionDetail } from "@/lib/dal";
+import {
+  getCurrentUser,
+  getSessionDetail,
+  getSessionDetailBySessionId,
+} from "@/lib/dal";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
   fmtCost,
@@ -48,14 +52,14 @@ export default async function SessionDetailPage({
   const { id: sessionId } = await params;
   const sp = await searchParams;
   const { device: deviceId } = sp;
-  if (!deviceId) {
-    // The composite PK requires both halves; without `device` the page can't
-    // disambiguate two daemons that happen to share a session_id. Send the
-    // viewer back to the list rather than guessing.
-    notFound();
-  }
-
-  const session = await getSessionDetail(user, deviceId, sessionId);
+  // Deep-link entry (#202): a session URL pasted from chat / a ticket
+  // typically lacks `?device=`. In that case fall back to a session_id-only
+  // lookup scoped to the viewer's visible devices. The composite PK is
+  // `(device_id, session_id)`, so this can be ambiguous in principle — the
+  // DAL returns null on >1 match to keep the privacy contract intact.
+  const session = deviceId
+    ? await getSessionDetail(user, deviceId, sessionId)
+    : await getSessionDetailBySessionId(user, sessionId);
   if (!session) notFound();
 
   const isManager = user.role === "manager";
