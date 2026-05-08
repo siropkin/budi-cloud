@@ -16,6 +16,18 @@ const CURRENT_SCHEMA_VERSION = 1;
 // 128 chars is comfortably above any sane hostname or user-chosen nickname.
 const MAX_LABEL_LENGTH = 128;
 
+// Per-org cap on auto-registered devices. The daemon ships one device row per
+// machine, and even prolific orgs sit comfortably under this. The cap exists
+// to make device-id squatting (#181) economically uninteresting: an attacker
+// with a valid key can't pre-register an unbounded list of guessed ids.
+const MAX_DEVICES_PER_ORG = 50;
+
+// Accept any RFC-9562 UUID (versions 1–8, including v4/v7 the daemon ships).
+// Rejecting non-UUID ids closes the squatting vector from #181: a caller can
+// no longer auto-register an arbitrary, predictable string under their org.
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 interface SyncEnvelope {
   schema_version: number;
   device_id: string;
@@ -84,6 +96,9 @@ function validateEnvelope(body: SyncEnvelope): string | null {
   }
   if (!body.device_id || typeof body.device_id !== "string") {
     return "Missing or invalid device_id";
+  }
+  if (!UUID_RE.test(body.device_id)) {
+    return "device_id must be a UUID";
   }
   if (!body.org_id || typeof body.org_id !== "string") {
     return "Missing or invalid org_id";
@@ -168,6 +183,27 @@ export async function POST(request: NextRequest) {
   const now = new Date().toISOString();
 
   if (deviceError || !device) {
+    // #181: cap auto-registration per org so a single compromised key can't
+    // bulk-squat device ids. Counting via a join through `users` keeps the
+    // limit at the org level — multiple users in the same org share the cap.
+    const { data: orgUserIds } = await supabase
+      .from("users")
+      .select("id")
+      .eq("org_id", user.org_id);
+    const userIds = (orgUserIds ?? []).map((u) => u.id as string);
+    const { count: orgDeviceCount } = await supabase
+      .from("devices")
+      .select("id", { count: "exact", head: true })
+      .in("user_id", userIds.length > 0 ? userIds : [user.id]);
+    if ((orgDeviceCount ?? 0) >= MAX_DEVICES_PER_ORG) {
+      return Response.json(
+        {
+          error: `Device cap reached: an org may auto-register at most ${MAX_DEVICES_PER_ORG} devices. Contact a manager to release unused ids.`,
+        },
+        { status: 429 }
+      );
+    }
+
     // Auto-register the device if it doesn't exist yet. `label` is persisted
     // here (when sent) so the Devices dashboard shows a recognisable name
     // from the very first sync rather than the truncated id fallback (#60).

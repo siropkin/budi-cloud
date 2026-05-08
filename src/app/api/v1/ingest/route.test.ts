@@ -285,7 +285,7 @@ describe("POST /v1/ingest + dashboard read path (#14)", () => {
 
     const envelope = {
       schema_version: 1,
-      device_id: "dev_test",
+      device_id: "11111111-1111-4111-8111-111111111111",
       org_id: "org_test",
       synced_at: "2026-04-15T12:00:00Z",
       payload: {
@@ -453,7 +453,7 @@ describe("POST /v1/ingest + dashboard read path (#14)", () => {
     };
     const baseEnvelope: Envelope = {
       schema_version: 1,
-      device_id: "dev_test",
+      device_id: "11111111-1111-4111-8111-111111111111",
       org_id: "org_test",
       synced_at: "2026-04-15T12:00:00Z",
       payload: {
@@ -546,7 +546,7 @@ describe("POST /v1/ingest — device label persistence (#60)", () => {
 
   const baseEnvelope = {
     schema_version: 1,
-    device_id: "dev_test",
+    device_id: "11111111-1111-4111-8111-111111111111",
     org_id: "org_test",
     synced_at: "2026-04-15T12:00:00Z",
     payload: { daily_rollups: [], session_summaries: [] },
@@ -580,7 +580,7 @@ describe("POST /v1/ingest — device label persistence (#60)", () => {
     seedUser();
     fake.seed("devices", [
       {
-        id: "dev_test",
+        id: "11111111-1111-4111-8111-111111111111",
         user_id: "usr_test",
         label: "old-name",
         last_seen: "2026-04-14T00:00:00Z",
@@ -604,7 +604,7 @@ describe("POST /v1/ingest — device label persistence (#60)", () => {
     seedUser();
     fake.seed("devices", [
       {
-        id: "dev_test",
+        id: "11111111-1111-4111-8111-111111111111",
         user_id: "usr_test",
         label: "already-set",
         last_seen: "2026-04-14T00:00:00Z",
@@ -623,7 +623,7 @@ describe("POST /v1/ingest — device label persistence (#60)", () => {
     seedUser();
     fake.seed("devices", [
       {
-        id: "dev_test",
+        id: "11111111-1111-4111-8111-111111111111",
         user_id: "usr_test",
         label: "going-away",
         last_seen: "2026-04-14T00:00:00Z",
@@ -656,5 +656,128 @@ describe("POST /v1/ingest — device label persistence (#60)", () => {
 
     const [device] = fake.rows("devices");
     expect((device.label as string).length).toBe(128);
+  });
+});
+
+describe("POST /v1/ingest — device_id squatting protections (#181)", () => {
+  function seedUser() {
+    fake.seed("orgs", [{ id: "org_test", name: "test" }]);
+    fake.seed("users", [
+      {
+        id: "usr_test",
+        org_id: "org_test",
+        role: "manager",
+        api_key: "budi_testkey",
+        display_name: "Test",
+        email: "t@example.com",
+      },
+    ]);
+  }
+
+  function mkReq(body: Record<string, unknown>): Request {
+    return new Request("http://localhost/v1/ingest", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer budi_testkey",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  const baseEnvelope = {
+    schema_version: 1,
+    device_id: "11111111-1111-4111-8111-111111111111",
+    org_id: "org_test",
+    synced_at: "2026-04-15T12:00:00Z",
+    payload: { daily_rollups: [], session_summaries: [] },
+  };
+
+  it("rejects non-UUID device_ids with 422 so callers can't squat predictable ids", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    const res = await POST(
+      mkReq({
+        ...baseEnvelope,
+        device_id: "victim-org-laptop",
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/device_id must be a UUID/i);
+    // No row was inserted on the way out.
+    expect(fake.rows("devices")).toHaveLength(0);
+  });
+
+  it("accepts a well-formed UUID device_id and auto-registers it", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    const res = await POST(
+      mkReq(baseEnvelope) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(200);
+    expect(fake.rows("devices")).toHaveLength(1);
+  });
+
+  it("returns 429 once the org hits the auto-register cap", async () => {
+    seedUser();
+    // Pre-seed 50 devices already owned by this org's user — the cap is
+    // exclusive, so the 51st auto-register attempt must be rejected.
+    const seed = Array.from({ length: 50 }, (_, i) => ({
+      id: `aaaaaaaa-aaaa-4aaa-8aaa-${String(i).padStart(12, "0")}`,
+      user_id: "usr_test",
+      label: null,
+      first_seen: "2026-04-14T00:00:00Z",
+      last_seen: "2026-04-14T00:00:00Z",
+    }));
+    fake.seed("devices", seed);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      mkReq({
+        ...baseEnvelope,
+        device_id: "22222222-2222-4222-8222-222222222222",
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(429);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/device cap/i);
+    // 51st row was not inserted.
+    expect(fake.rows("devices")).toHaveLength(50);
+  });
+
+  it("does not apply the cap to ingest against an existing device row", async () => {
+    seedUser();
+    // 50 devices already, but one of them is the device the daemon is now
+    // syncing against — this is the "existing device" branch, which must not
+    // be blocked by the auto-register cap.
+    const existingId = "11111111-1111-4111-8111-111111111111";
+    const seed = Array.from({ length: 49 }, (_, i) => ({
+      id: `aaaaaaaa-aaaa-4aaa-8aaa-${String(i).padStart(12, "0")}`,
+      user_id: "usr_test",
+      label: null,
+      first_seen: "2026-04-14T00:00:00Z",
+      last_seen: "2026-04-14T00:00:00Z",
+    }));
+    seed.push({
+      id: existingId,
+      user_id: "usr_test",
+      label: null,
+      first_seen: "2026-04-14T00:00:00Z",
+      last_seen: "2026-04-14T00:00:00Z",
+    });
+    fake.seed("devices", seed);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      mkReq(baseEnvelope) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(200);
   });
 });
