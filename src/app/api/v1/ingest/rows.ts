@@ -54,6 +54,102 @@ function normalizeVitalMetric(raw: unknown): number | null {
   return Number.isFinite(raw) ? raw : null;
 }
 
+/**
+ * Per-field upper bounds for the headline metric columns (#178).
+ *
+ * Token columns are BIGINT (`001_ingest_schema.sql`) but a single rollup row
+ * representing more than 10 billion tokens is almost certainly a bug — real
+ * heavy-user rollups land in the millions. Capping silently here prevents a
+ * single corrupt envelope from poisoning the auto-ranged dashboard charts for
+ * the full 90-day retention window, while a strict validator (see
+ * `validateIngestMetrics`) rejects obviously malformed inputs (NaN/-Inf) with
+ * 422 so the daemon backs off instead of looping.
+ *
+ * `cost_cents` is `NUMERIC(12,4)` (max ≈ 1e8 before overflow), so its cap is
+ * tighter than the suggested 1e9 in #178 — a single rollup row at $1M of cost
+ * is already well past the bug horizon.
+ */
+export const METRIC_CAPS = {
+  message_count: 1e7,
+  input_tokens: 1e10,
+  output_tokens: 1e10,
+  cache_creation_tokens: 1e10,
+  cache_read_tokens: 1e10,
+  cost_cents: 1e8,
+  total_input_tokens: 1e10,
+  total_output_tokens: 1e10,
+  total_cost_cents: 1e8,
+} as const;
+
+/**
+ * Returns true iff `raw` is a finite, non-negative `number`. Used to gate
+ * the headline metric columns at the envelope-validation layer (#178) so a
+ * NaN/-Infinity/negative value triggers a 422 — that's the daemon-pause
+ * signal documented in ADR-0083 §7 — rather than landing as a silent zero.
+ */
+export function isValidNonNegativeNumber(raw: unknown): raw is number {
+  return typeof raw === "number" && Number.isFinite(raw) && raw >= 0;
+}
+
+/**
+ * Coerce a numeric metric to `[0, max]`. Defense-in-depth alongside
+ * `validateIngestMetrics`: if the validator misses a path or a future
+ * non-validated field is added, this still floors the value into a sane
+ * range before it reaches the database.
+ */
+function safeNonNegativeNumber(raw: unknown, max: number): number {
+  if (!isValidNonNegativeNumber(raw)) return 0;
+  return Math.min(raw, max);
+}
+
+const ROLLUP_METRIC_FIELDS = [
+  "message_count",
+  "input_tokens",
+  "output_tokens",
+  "cache_creation_tokens",
+  "cache_read_tokens",
+  "cost_cents",
+] as const satisfies ReadonlyArray<keyof IngestDailyRollup>;
+
+const SESSION_METRIC_FIELDS = [
+  "message_count",
+  "total_input_tokens",
+  "total_output_tokens",
+  "total_cost_cents",
+] as const satisfies ReadonlyArray<keyof IngestSessionSummary>;
+
+/**
+ * Walks the envelope's rollups and session summaries, returning a 422-style
+ * error message on the first non-finite or negative numeric metric.
+ *
+ * Per #178: cost and token counts drive every dashboard card and are summed
+ * across the 90-day retention window. A single bad row (NaN, -1, Infinity)
+ * silently corrupts every aggregate that touches it. Reject loudly so the
+ * daemon pauses (ADR-0083 §7) instead of spraying garbage on retry.
+ */
+export function validateIngestMetrics(
+  rollups: IngestDailyRollup[],
+  sessions: IngestSessionSummary[]
+): string | null {
+  for (let i = 0; i < rollups.length; i++) {
+    const r = rollups[i];
+    for (const f of ROLLUP_METRIC_FIELDS) {
+      if (!isValidNonNegativeNumber(r[f])) {
+        return `daily_rollups[${i}].${f} must be a finite, non-negative number`;
+      }
+    }
+  }
+  for (let i = 0; i < sessions.length; i++) {
+    const s = sessions[i];
+    for (const f of SESSION_METRIC_FIELDS) {
+      if (!isValidNonNegativeNumber(s[f])) {
+        return `session_summaries[${i}].${f} must be a finite, non-negative number`;
+      }
+    }
+  }
+  return null;
+}
+
 // Cap on the stored surface tag so a malformed envelope can't store an
 // unbounded string and the dashboard's chip dropdown stays readable. Real
 // daemon-side values are short (`vscode`, `jetbrains`, …); 64 is comfortably
@@ -124,12 +220,32 @@ export function buildRollupRows(
     repo_id: r.repo_id,
     git_branch: r.git_branch,
     ticket: r.ticket ?? null,
-    message_count: r.message_count,
-    input_tokens: r.input_tokens,
-    output_tokens: r.output_tokens,
-    cache_creation_tokens: r.cache_creation_tokens,
-    cache_read_tokens: r.cache_read_tokens,
-    cost_cents: r.cost_cents,
+    // #178: every numeric metric is coerced to a finite, non-negative value
+    // capped per `METRIC_CAPS` before storage. The route's
+    // `validateIngestMetrics` already rejects bad inputs with 422; the
+    // coercion here is defense-in-depth so a future ingest path that forgets
+    // to validate still can't corrupt the dashboard's auto-ranging.
+    message_count: safeNonNegativeNumber(
+      r.message_count,
+      METRIC_CAPS.message_count
+    ),
+    input_tokens: safeNonNegativeNumber(
+      r.input_tokens,
+      METRIC_CAPS.input_tokens
+    ),
+    output_tokens: safeNonNegativeNumber(
+      r.output_tokens,
+      METRIC_CAPS.output_tokens
+    ),
+    cache_creation_tokens: safeNonNegativeNumber(
+      r.cache_creation_tokens,
+      METRIC_CAPS.cache_creation_tokens
+    ),
+    cache_read_tokens: safeNonNegativeNumber(
+      r.cache_read_tokens,
+      METRIC_CAPS.cache_read_tokens
+    ),
+    cost_cents: safeNonNegativeNumber(r.cost_cents, METRIC_CAPS.cost_cents),
     surface: normalizeSurface(r.surface),
     synced_at: syncedAt,
   }));
@@ -163,10 +279,25 @@ export function buildSessionRows(
     repo_id: s.repo_id ?? null,
     git_branch: s.git_branch ?? null,
     ticket: s.ticket ?? null,
-    message_count: s.message_count,
-    total_input_tokens: s.total_input_tokens,
-    total_output_tokens: s.total_output_tokens,
-    total_cost_cents: s.total_cost_cents,
+    // #178: see the matching note in `buildRollupRows` — coerce + cap the
+    // headline session metrics so a malformed value can't poison the
+    // dashboard's session-level aggregates.
+    message_count: safeNonNegativeNumber(
+      s.message_count,
+      METRIC_CAPS.message_count
+    ),
+    total_input_tokens: safeNonNegativeNumber(
+      s.total_input_tokens,
+      METRIC_CAPS.total_input_tokens
+    ),
+    total_output_tokens: safeNonNegativeNumber(
+      s.total_output_tokens,
+      METRIC_CAPS.total_output_tokens
+    ),
+    total_cost_cents: safeNonNegativeNumber(
+      s.total_cost_cents,
+      METRIC_CAPS.total_cost_cents
+    ),
     main_model: s.primary_model ?? null,
     // Vitals (#99). Each field is normalized independently so a daemon that
     // emits e.g. only the overall state (or only some vitals) still lands the

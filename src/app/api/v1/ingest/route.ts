@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   buildRollupRows,
   buildSessionRows,
+  validateIngestMetrics,
   type IngestDailyRollup,
   type IngestSessionSummary,
 } from "@/app/api/v1/ingest/rows";
@@ -112,6 +113,14 @@ function validateEnvelope(body: SyncEnvelope): string | null {
   if (!Array.isArray(body.payload.session_summaries)) {
     return "payload.session_summaries must be an array";
   }
+  // #178: reject the whole envelope on non-finite or negative numeric metrics
+  // so a misbehaving daemon pauses (ADR-0083 §7) instead of silently
+  // poisoning every aggregate that touches the row for the 90-day window.
+  const metricError = validateIngestMetrics(
+    body.payload.daily_rollups,
+    body.payload.session_summaries
+  );
+  if (metricError) return metricError;
   return null;
 }
 
