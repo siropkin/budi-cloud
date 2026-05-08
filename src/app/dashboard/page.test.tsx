@@ -284,8 +284,10 @@ describe("dashboard /page (Overview)", () => {
       dal.getCostBySurface,
     ]) {
       const lastCall = fn.mock.calls.at(-1);
-      expect(lastCall, `${fn.getMockName?.() ?? "dal fn"} was not called`)
-        .toBeTruthy();
+      expect(
+        lastCall,
+        `${fn.getMockName?.() ?? "dal fn"} was not called`
+      ).toBeTruthy();
       const scope = lastCall![lastCall!.length - 1];
       expect(scope).toMatchObject({ surfaces: ["vscode"] });
     }
