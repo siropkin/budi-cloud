@@ -16,6 +16,20 @@ const dal = vi.hoisted(() => ({
 
 vi.mock("@/lib/dal", () => dal);
 
+// #179: route now consults the limiter — bypass it in this suite, which
+// tests the auth/freshness contract, not rate-limit behavior (covered in
+// src/lib/rate-limit.test.ts).
+vi.mock("@/lib/rate-limit", () => ({
+  rateLimit: async () => ({ success: true, retryAfterSeconds: 0 }),
+  rateLimitResponse: () => new Response(null, { status: 429 }),
+  clientIp: () => "127.0.0.1",
+  hashKey: (k: string) => k,
+}));
+
+function makeRequest() {
+  return new Request("http://localhost/api/freshness");
+}
+
 beforeEach(() => {
   dal.getCurrentUser.mockReset();
   dal.getSyncFreshness.mockReset();
@@ -32,7 +46,9 @@ describe("GET /api/freshness (#133)", () => {
     });
 
     const { GET } = await import("./route");
-    const res = await GET();
+    const res = await GET(
+      makeRequest() as unknown as Parameters<typeof GET>[0]
+    );
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(await res.json()).toEqual({
@@ -47,7 +63,9 @@ describe("GET /api/freshness (#133)", () => {
     dal.getCurrentUser.mockResolvedValue(null);
 
     const { GET } = await import("./route");
-    const res = await GET();
+    const res = await GET(
+      makeRequest() as unknown as Parameters<typeof GET>[0]
+    );
     expect(res.status).toBe(401);
     expect(dal.getSyncFreshness).not.toHaveBeenCalled();
   });

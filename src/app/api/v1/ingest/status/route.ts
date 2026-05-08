@@ -1,5 +1,15 @@
 import { type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  clientIp,
+  hashKey,
+  rateLimit,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
+
+// #179: status endpoint runs three Supabase queries per call and echoes
+// `last_seen` / record counts, so cap polling well below the ingest rate.
+const RATE_LIMIT = { limit: 30, windowSeconds: 60 } as const;
 
 /**
  * GET /v1/ingest/status
@@ -11,6 +21,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export async function GET(request: NextRequest) {
   const supabase = createAdminClient();
 
+  // --- Pre-auth IP rate limit (#179) ---
+  const ipLimit = await rateLimit(
+    `ingest_status:ip:${clientIp(request)}`,
+    RATE_LIMIT
+  );
+  if (!ipLimit.success) return rateLimitResponse(ipLimit.retryAfterSeconds);
+
   // --- Auth ---
   const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
@@ -21,6 +38,13 @@ export async function GET(request: NextRequest) {
   if (!apiKey.startsWith("budi_")) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // --- Per-key rate limit (#179) ---
+  const keyLimit = await rateLimit(
+    `ingest_status:key:${hashKey(apiKey)}`,
+    RATE_LIMIT
+  );
+  if (!keyLimit.success) return rateLimitResponse(keyLimit.retryAfterSeconds);
 
   const { data: user, error: userError } = await supabase
     .from("users")

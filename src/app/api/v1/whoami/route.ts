@@ -1,5 +1,16 @@
 import { type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  clientIp,
+  hashKey,
+  rateLimit,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
+
+// #179: whoami is the auto-bootstrap endpoint for `budi cloud init` — one
+// hit per CLI invocation. 20/min/key is well above any legitimate usage and
+// chokes off a brute-force scan against the api_key column.
+const RATE_LIMIT = { limit: 20, windowSeconds: 60 } as const;
 
 /**
  * Authenticate the request via Bearer token.
@@ -41,14 +52,26 @@ async function authenticateApiKey(
  * No request body; all identity data derives from the key.
  */
 export async function GET(request: NextRequest) {
-  const supabase = createAdminClient();
-  const user = await authenticateApiKey(
-    supabase,
-    request.headers.get("authorization")
+  // --- Pre-auth IP rate limit (#179) ---
+  const ipLimit = await rateLimit(
+    `whoami:ip:${clientIp(request)}`,
+    RATE_LIMIT
   );
+  if (!ipLimit.success) return rateLimitResponse(ipLimit.retryAfterSeconds);
+
+  const supabase = createAdminClient();
+  const authHeader = request.headers.get("authorization");
+  const user = await authenticateApiKey(supabase, authHeader);
   if (!user) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // --- Per-key rate limit (#179) ---
+  const keyLimit = await rateLimit(
+    `whoami:key:${hashKey(authHeader!.slice(7))}`,
+    RATE_LIMIT
+  );
+  if (!keyLimit.success) return rateLimitResponse(keyLimit.retryAfterSeconds);
 
   return Response.json({ org_id: user.org_id });
 }

@@ -1,6 +1,12 @@
 import { type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  clientIp,
+  hashKey,
+  rateLimit,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
+import {
   buildRollupRows,
   buildSessionRows,
   validateIngestMetrics,
@@ -10,6 +16,12 @@ import {
 
 // ADR-0083 §7: Max body size 1 MiB
 const MAX_BODY_BYTES = 1024 * 1024;
+
+// #179: per-key/per-IP rate limit. Daemon ships hourly by default
+// (ADR-0083 §7) plus retries, so 60/min comfortably covers a healthy fleet
+// while still catching a runaway loop. Bumping this requires re-checking
+// the daily_rollups insert pressure, not just a one-line edit.
+const RATE_LIMIT = { limit: 60, windowSeconds: 60 } as const;
 
 const CURRENT_SCHEMA_VERSION = 1;
 
@@ -142,15 +154,29 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // --- Pre-auth IP rate limit (#179) ---
+  // Apply before the API-key lookup so a brute-force scan against `users.api_key`
+  // can't spend our DB budget. A legitimate daemon hits this from a single IP
+  // and stays well under the cap.
+  const ipLimit = await rateLimit(`ingest:ip:${clientIp(request)}`, RATE_LIMIT);
+  if (!ipLimit.success) return rateLimitResponse(ipLimit.retryAfterSeconds);
+
   // --- Auth ---
   const supabase = createAdminClient();
-  const user = await authenticateApiKey(
-    supabase,
-    request.headers.get("authorization")
-  );
+  const authHeader = request.headers.get("authorization");
+  const user = await authenticateApiKey(supabase, authHeader);
   if (!user) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // --- Per-key rate limit (#179) ---
+  // Authoritative limit for the authenticated path. Bucketed on a hash of the
+  // key so the raw secret never lands in `rate_limits` rows.
+  const keyLimit = await rateLimit(
+    `ingest:key:${hashKey(authHeader!.slice(7))}`,
+    RATE_LIMIT
+  );
+  if (!keyLimit.success) return rateLimitResponse(keyLimit.retryAfterSeconds);
 
   // --- Parse body ---
   let body: SyncEnvelope;
