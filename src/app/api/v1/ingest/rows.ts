@@ -157,6 +157,41 @@ export function validateIngestMetrics(
 const MAX_SURFACE_LENGTH = 64;
 
 /**
+ * Per-field upper bounds for the user-controlled string columns ingest writes
+ * (#177). The label cap on `devices.label` (128) lives in `route.ts` and
+ * documents the same intent: a malformed or compromised envelope must not
+ * land hundreds of KiB on a single column, slowing every dashboard query
+ * for the 90-day retention window and overflowing the rendered table cells.
+ *
+ * The numbers track the worst plausible real-world value, not the worst
+ * theoretical one — branch names occasionally embed long ticket slugs but
+ * never approach 256 chars; session ids are typically UUIDs or short
+ * tool-emitted strings well under 128. Migration 018 mirrors these caps as
+ * column-level CHECK constraints so a future ingest path that forgets to
+ * call the row-builder still can't bypass them.
+ */
+export const STRING_CAPS = {
+  session_id: 128,
+  provider: 64,
+  model: 128,
+  role: 32,
+  repo_id: 128,
+  git_branch: 256,
+  ticket: 64,
+} as const;
+
+/**
+ * Truncate a string to `max` chars. Non-string inputs (null, undefined,
+ * numbers, …) pass through unchanged so the existing NOT NULL / type
+ * mismatch error paths still trip — this cap is purely defense-in-depth
+ * against unbounded length, not a coercion layer.
+ */
+function capString<T>(raw: T, max: number): T {
+  if (typeof raw === "string") return raw.slice(0, max) as T;
+  return raw;
+}
+
+/**
  * Normalize the envelope's `surface` value. The cloud column is `NOT NULL
  * DEFAULT 'unknown'` (014), so we coalesce missing / invalid / empty inputs
  * to that literal rather than letting the daemon's omission collapse the
@@ -214,12 +249,14 @@ export function buildRollupRows(
   return rollups.map((r) => ({
     device_id: deviceId,
     bucket_day: r.bucket_day,
-    role: r.role,
-    provider: r.provider,
-    model: r.model,
-    repo_id: r.repo_id,
-    git_branch: r.git_branch,
-    ticket: r.ticket ?? null,
+    // #177: cap every user-controlled string column so a malformed daemon
+    // (or a leaked API key) can't land hundreds of KiB on a single field.
+    role: capString(r.role, STRING_CAPS.role),
+    provider: capString(r.provider, STRING_CAPS.provider),
+    model: capString(r.model, STRING_CAPS.model),
+    repo_id: capString(r.repo_id, STRING_CAPS.repo_id),
+    git_branch: capString(r.git_branch, STRING_CAPS.git_branch),
+    ticket: capString(r.ticket ?? null, STRING_CAPS.ticket),
     // #178: every numeric metric is coerced to a finite, non-negative value
     // capped per `METRIC_CAPS` before storage. The route's
     // `validateIngestMetrics` already rejects bad inputs with 422; the
@@ -271,14 +308,16 @@ export function buildSessionRows(
 ) {
   return sessions.map((s) => ({
     device_id: deviceId,
-    session_id: s.session_id,
-    provider: s.provider,
+    // #177: matches `buildRollupRows` — every user-controlled string is
+    // length-capped before storage. See STRING_CAPS for the per-field bounds.
+    session_id: capString(s.session_id, STRING_CAPS.session_id),
+    provider: capString(s.provider, STRING_CAPS.provider),
     started_at: s.started_at ?? s.ended_at ?? syncedAt,
     ended_at: s.ended_at ?? null,
     duration_ms: s.duration_ms ?? null,
-    repo_id: s.repo_id ?? null,
-    git_branch: s.git_branch ?? null,
-    ticket: s.ticket ?? null,
+    repo_id: capString(s.repo_id ?? null, STRING_CAPS.repo_id),
+    git_branch: capString(s.git_branch ?? null, STRING_CAPS.git_branch),
+    ticket: capString(s.ticket ?? null, STRING_CAPS.ticket),
     // #178: see the matching note in `buildRollupRows` — coerce + cap the
     // headline session metrics so a malformed value can't poison the
     // dashboard's session-level aggregates.
@@ -298,7 +337,7 @@ export function buildSessionRows(
       s.total_cost_cents,
       METRIC_CAPS.total_cost_cents
     ),
-    main_model: s.primary_model ?? null,
+    main_model: capString(s.primary_model ?? null, STRING_CAPS.model),
     // Vitals (#99). Each field is normalized independently so a daemon that
     // emits e.g. only the overall state (or only some vitals) still lands the
     // partial signal — the dashboard already renders missing slots as a

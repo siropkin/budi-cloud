@@ -979,6 +979,123 @@ describe("POST /v1/ingest — numeric metric range guards (#178)", () => {
     expect(sessionRows[0].total_cost_cents).toBe(0);
   });
 
+  it("truncates over-long string fields on rollups (#177)", async () => {
+    const { buildRollupRows, STRING_CAPS } = await import("./rows");
+
+    const huge = "A".repeat(50_000);
+    const rows = buildRollupRows("dev_x", "2026-04-15T12:00:00Z", [
+      {
+        ...baseRollup,
+        role: huge,
+        provider: huge,
+        model: huge,
+        repo_id: huge,
+        git_branch: huge,
+        ticket: huge,
+      },
+    ]);
+
+    expect(rows[0].role.length).toBe(STRING_CAPS.role);
+    expect(rows[0].provider.length).toBe(STRING_CAPS.provider);
+    expect(rows[0].model.length).toBe(STRING_CAPS.model);
+    expect(rows[0].repo_id.length).toBe(STRING_CAPS.repo_id);
+    expect(rows[0].git_branch.length).toBe(STRING_CAPS.git_branch);
+    expect((rows[0].ticket as string).length).toBe(STRING_CAPS.ticket);
+  });
+
+  it("truncates over-long string fields on session summaries (#177)", async () => {
+    const { buildSessionRows, STRING_CAPS } = await import("./rows");
+
+    const huge = "B".repeat(50_000);
+    const rows = buildSessionRows("dev_x", "2026-04-15T12:00:00Z", [
+      {
+        session_id: huge,
+        provider: huge,
+        repo_id: huge,
+        git_branch: huge,
+        ticket: huge,
+        primary_model: huge,
+        message_count: 1,
+        total_input_tokens: 1,
+        total_output_tokens: 1,
+        total_cost_cents: 1,
+      },
+    ]);
+
+    expect(rows[0].session_id.length).toBe(STRING_CAPS.session_id);
+    expect(rows[0].provider.length).toBe(STRING_CAPS.provider);
+    expect((rows[0].repo_id as string).length).toBe(STRING_CAPS.repo_id);
+    expect((rows[0].git_branch as string).length).toBe(STRING_CAPS.git_branch);
+    expect((rows[0].ticket as string).length).toBe(STRING_CAPS.ticket);
+    expect((rows[0].main_model as string).length).toBe(STRING_CAPS.model);
+  });
+
+  it("preserves null on nullable string columns when the envelope omits them (#177)", async () => {
+    const { buildRollupRows, buildSessionRows } = await import("./rows");
+
+    const rollup = buildRollupRows("dev_x", "2026-04-15T12:00:00Z", [
+      { ...baseRollup, ticket: null },
+    ]);
+    expect(rollup[0].ticket).toBeNull();
+
+    const session = buildSessionRows("dev_x", "2026-04-15T12:00:00Z", [
+      {
+        session_id: "s1",
+        provider: "cursor",
+        message_count: 0,
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        total_cost_cents: 0,
+      },
+    ]);
+    expect(session[0].repo_id).toBeNull();
+    expect(session[0].git_branch).toBeNull();
+    expect(session[0].ticket).toBeNull();
+    expect(session[0].main_model).toBeNull();
+  });
+
+  it("end-to-end: 50 KiB strings on every session field land truncated (#177)", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+    const { STRING_CAPS } = await import("./rows");
+
+    const huge = "X".repeat(50_000);
+    const res = await POST(
+      mkReq({
+        ...baseEnvelope,
+        payload: {
+          daily_rollups: [],
+          session_summaries: [
+            {
+              session_id: huge,
+              provider: huge,
+              started_at: "2026-04-14T10:00:00Z",
+              ended_at: "2026-04-14T11:00:00Z",
+              duration_ms: 1,
+              repo_id: huge,
+              git_branch: huge,
+              ticket: huge,
+              message_count: 1,
+              total_input_tokens: 1,
+              total_output_tokens: 1,
+              total_cost_cents: 1,
+              primary_model: huge,
+            },
+          ],
+        },
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(200);
+    const [stored] = fake.rows("session_summaries");
+    expect((stored.session_id as string).length).toBe(STRING_CAPS.session_id);
+    expect((stored.provider as string).length).toBe(STRING_CAPS.provider);
+    expect((stored.repo_id as string).length).toBe(STRING_CAPS.repo_id);
+    expect((stored.git_branch as string).length).toBe(STRING_CAPS.git_branch);
+    expect((stored.ticket as string).length).toBe(STRING_CAPS.ticket);
+    expect((stored.main_model as string).length).toBe(STRING_CAPS.model);
+  });
+
   it("accepts valid metrics at the upper plausible end", async () => {
     seedUser();
     const { POST } = await import("./route");
