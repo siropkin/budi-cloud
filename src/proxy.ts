@@ -1,14 +1,38 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import {
+  buildCsp,
+  generateNonce,
+  isReportOnly,
+  reportToHeaderValue,
+} from "@/lib/csp";
 
 /**
  * Next.js 16 Proxy (formerly Middleware).
  *
- * Refreshes the Supabase auth session on every navigation and
- * protects /dashboard/* routes from unauthenticated users.
+ * Refreshes the Supabase auth session on every navigation, protects
+ * /dashboard/* routes from unauthenticated users, and stamps a per-request
+ * Content-Security-Policy with a nonce (#180).
  */
 export async function proxy(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+  // CSP nonce is generated per request so 'strict-dynamic' can pin script
+  // trust to scripts we render. The nonce travels via request headers so the
+  // App Router picks it up and applies it to its own injected scripts.
+  const nonce = generateNonce();
+  const csp = buildCsp(nonce);
+  const cspHeaderName = isReportOnly()
+    ? "Content-Security-Policy-Report-Only"
+    : "Content-Security-Policy";
+
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
+  // Forwarding the policy on the request lets Next strip it from inline
+  // scripts where we cannot annotate them, per the App Router CSP guide.
+  requestHeaders.set("content-security-policy", csp);
+
+  let supabaseResponse = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,7 +46,9 @@ export async function proxy(request: NextRequest) {
           for (const { name, value } of cookiesToSet) {
             request.cookies.set(name, value);
           }
-          supabaseResponse = NextResponse.next({ request });
+          supabaseResponse = NextResponse.next({
+            request: { headers: requestHeaders },
+          });
           for (const { name, value, options } of cookiesToSet) {
             supabaseResponse.cookies.set(name, value, options);
           }
@@ -38,6 +64,12 @@ export async function proxy(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
 
+  const stampSecurityHeaders = (res: NextResponse) => {
+    res.headers.set(cspHeaderName, csp);
+    res.headers.set("Report-To", reportToHeaderValue());
+    return res;
+  };
+
   // Protect dashboard routes
   if (path.startsWith("/dashboard") && !user) {
     const url = request.nextUrl.clone();
@@ -47,7 +79,7 @@ export async function proxy(request: NextRequest) {
     supabaseResponse.cookies.getAll().forEach((cookie) => {
       redirect.cookies.set(cookie.name, cookie.value);
     });
-    return redirect;
+    return stampSecurityHeaders(redirect);
   }
 
   // Redirect authenticated users away from login
@@ -60,10 +92,10 @@ export async function proxy(request: NextRequest) {
     supabaseResponse.cookies.getAll().forEach((cookie) => {
       redirect.cookies.set(cookie.name, cookie.value);
     });
-    return redirect;
+    return stampSecurityHeaders(redirect);
   }
 
-  return supabaseResponse;
+  return stampSecurityHeaders(supabaseResponse);
 }
 
 export const config = {
