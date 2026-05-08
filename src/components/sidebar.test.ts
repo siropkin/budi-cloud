@@ -16,9 +16,9 @@ describe("buildPreservedSearch", () => {
   });
 
   it("preserves the manager teammate filter alongside the period", () => {
-    expect(
-      buildPreservedSearch(reader({ days: "30", user: "abc-123" }))
-    ).toBe("?days=30&user=abc-123");
+    expect(buildPreservedSearch(reader({ days: "30", user: "abc-123" }))).toBe(
+      "?days=30&user=abc-123"
+    );
   });
 
   it("drops page-scoped params (cursor, sort, …)", () => {
