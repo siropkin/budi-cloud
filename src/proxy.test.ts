@@ -38,7 +38,9 @@ describe("proxy — CSP wiring (#180)", () => {
 
     const reportOnly = res.headers.get("content-security-policy-report-only");
     expect(reportOnly).toBeTruthy();
-    expect(reportOnly).toMatch(/script-src 'self' 'nonce-[^']+' 'strict-dynamic'/);
+    expect(reportOnly).toMatch(
+      /script-src 'self' 'nonce-[^']+' 'strict-dynamic'/
+    );
     expect(reportOnly).toContain("frame-ancestors 'none'");
     expect(reportOnly).not.toContain("unsafe-eval");
     expect(res.headers.get("report-to")).toContain("csp-endpoint");
