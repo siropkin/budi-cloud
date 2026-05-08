@@ -327,4 +327,50 @@ describe("dashboard /page (Overview)", () => {
     expect(text).toContain("Spend by Surface");
     expect(text).toContain("Single-surface org");
   });
+
+  it("surface chart: all-unknown period falls back to the empty-state with the daemon-version unlock copy, not a single self-tautological bar (#210)", async () => {
+    dal.getKnownSurfaces.mockResolvedValue(["unknown"]);
+    dal.getCostBySurface.mockResolvedValue([
+      {
+        surface: "unknown",
+        cost_cents: 193_776,
+        input_tokens: 100_000,
+        output_tokens: 5_000_000,
+      },
+    ]);
+    const node = await render();
+    const text = extractText(node);
+    expect(text).toContain("Spend by Surface");
+    expect(text).toContain("every row in this window is tagged Unknown");
+    expect(text).toContain("v8.4.2");
+    // The single-surface copy is for "one *named* surface" — must not fire
+    // here, otherwise a viewer is told to wait for a second IDE when the
+    // real unlock is a daemon upgrade.
+    expect(text).not.toContain("Single-surface org");
+  });
+
+  it("surface chart: mixed window with a small unknown slice keeps the unknown bar visible alongside named surfaces (#210)", async () => {
+    dal.getKnownSurfaces.mockResolvedValue(["vscode", "unknown"]);
+    dal.getCostBySurface.mockResolvedValue([
+      {
+        surface: "vscode",
+        cost_cents: 80_000,
+        input_tokens: 3000,
+        output_tokens: 1500,
+      },
+      {
+        surface: "unknown",
+        cost_cents: 5_000,
+        input_tokens: 100,
+        output_tokens: 50,
+      },
+    ]);
+    const node = await render();
+    const text = extractText(node);
+    expect(text).toContain("Spend by Surface");
+    // Mixed window must NOT trigger the all-unknown empty-state copy —
+    // managers want to see how much spend is untagged in absolute terms.
+    expect(text).not.toContain("every row in this window is tagged Unknown");
+    expect(text).not.toContain("Single-surface org");
+  });
 });

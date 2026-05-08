@@ -19,6 +19,23 @@ export function parseSurfaceParam(raw: string | null | undefined): string[] {
 }
 
 /**
+ * True when every row in `surfaceShare` is the schema-default `unknown` —
+ * i.e. nothing in the period was tagged by a daemon that emits `surface`.
+ * Used by the Overview / Models "Spend by Surface" cards to fall back to
+ * an empty-state explanation rather than a single self-tautological
+ * `Unknown — $TOTAL` bar that just duplicates the headline total (#210).
+ *
+ * `[]` is *not* all-unknown — that case is "no data at all" and is owned
+ * by the existing single-surface / no-activity copy.
+ */
+export function isAllUnknownSurface(
+  rows: { surface: string | null | undefined }[]
+): boolean {
+  if (rows.length === 0) return false;
+  return rows.every((r) => !r.surface || r.surface === "unknown");
+}
+
+/**
  * Friendly display label for a surface id. Falls back to the raw id
  * (title-cased) so a never-before-seen surface still renders.
  */
