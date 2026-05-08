@@ -91,8 +91,8 @@ export default async function SessionsPage({
 
   const startIndex = (page - 1) * SESSIONS_PAGE_SIZE + 1;
   const endIndex = startIndex + sessions.length - 1;
-  const hasOlder = nextCursor !== null;
-  const hasNewer = page > 1;
+  const hasNext = nextCursor !== null;
+  const hasFirst = page > 1;
 
   // Preserve the period, unit, and user-filter params across page boundaries
   // (#85 acceptance: "Period selector + user filter both preserved across
@@ -121,14 +121,19 @@ export default async function SessionsPage({
     return qs ? `?${qs}` : "?";
   }
 
-  const newerParams = new URLSearchParams(baseParams);
-  // "Newer" returns to the first page — drops cursor and `p`. Browser back
-  // remains the way to walk one page at a time, per the cursor scheme in #85.
+  const firstParams = new URLSearchParams(baseParams);
+  // "First" jumps back to page 1 — drops cursor and `p`. The forward-only
+  // cursor scheme (#85) can't cheaply step back one page, so we expose only
+  // the affordances that actually work: « First and Next ›. The absence of
+  // a per-page Prev is signalled by the labels themselves (#197) — earlier
+  // copy ("← Newest") read as "previous page" and surprised users who had
+  // paged forward several times. Browser back still walks one page at a
+  // time for users who need it.
 
-  const olderParams = new URLSearchParams(baseParams);
+  const nextParams = new URLSearchParams(baseParams);
   if (nextCursor) {
-    olderParams.set("cursor", encodeSessionsCursor(nextCursor));
-    olderParams.set("p", String(page + 1));
+    nextParams.set("cursor", encodeSessionsCursor(nextCursor));
+    nextParams.set("p", String(page + 1));
   }
 
   return (
@@ -150,7 +155,7 @@ export default async function SessionsPage({
           <CardTitle>
             {sessions.length === 0
               ? "Recent Sessions"
-              : `Recent Sessions (showing ${startIndex.toLocaleString()}–${endIndex.toLocaleString()}${hasOlder ? "+" : ""})`}
+              : `Recent Sessions (showing ${startIndex.toLocaleString()}–${endIndex.toLocaleString()}${hasNext ? "+" : ""})`}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -283,30 +288,32 @@ export default async function SessionsPage({
             </div>
           )}
 
-          {(hasOlder || hasNewer) && (
+          {(hasNext || hasFirst) && (
             <nav
               aria-label="Sessions pagination"
               className="mt-4 flex items-center justify-between gap-3 border-t border-white/5 pt-3 text-sm"
             >
               <div>
-                {hasNewer ? (
+                {hasFirst ? (
                   <Link
-                    href={buildHref(newerParams)}
+                    href={buildHref(firstParams)}
+                    aria-label="Jump to first page"
                     className="rounded-md px-3 py-1.5 font-medium text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
                   >
-                    ← Newest
+                    « First
                   </Link>
                 ) : (
                   <span aria-hidden="true" />
                 )}
               </div>
               <div>
-                {hasOlder && (
+                {hasNext && (
                   <Link
-                    href={buildHref(olderParams)}
+                    href={buildHref(nextParams)}
+                    aria-label="Next page"
                     className="rounded-md px-3 py-1.5 font-medium text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
                   >
-                    Older →
+                    Next ›
                   </Link>
                 )}
               </div>
