@@ -781,3 +781,217 @@ describe("POST /v1/ingest — device_id squatting protections (#181)", () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe("POST /v1/ingest — numeric metric range guards (#178)", () => {
+  function seedUser() {
+    fake.seed("orgs", [{ id: "org_test", name: "test" }]);
+    fake.seed("users", [
+      {
+        id: "usr_test",
+        org_id: "org_test",
+        role: "manager",
+        api_key: "budi_testkey",
+        display_name: "Test",
+        email: "t@example.com",
+      },
+    ]);
+  }
+
+  function mkReq(body: Record<string, unknown>): Request {
+    return new Request("http://localhost/v1/ingest", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer budi_testkey",
+        "content-type": "application/json",
+      },
+      // JSON.stringify drops NaN / Infinity to `null`, which our validator
+      // catches anyway — but to exercise the *runtime* guard (not just the
+      // wire-format guard) we also test via the row-builder unit cases below.
+      body: JSON.stringify(body),
+    });
+  }
+
+  const baseRollup = {
+    bucket_day: "2026-04-14",
+    role: "assistant",
+    provider: "claude_code",
+    model: "claude-sonnet-4-5",
+    repo_id: "repo_x",
+    git_branch: "refs/heads/main",
+    ticket: null,
+    message_count: 1,
+    input_tokens: 1,
+    output_tokens: 1,
+    cache_creation_tokens: 0,
+    cache_read_tokens: 0,
+    cost_cents: 1,
+  };
+
+  const baseEnvelope = {
+    schema_version: 1,
+    device_id: "11111111-1111-4111-8111-111111111111",
+    org_id: "org_test",
+    synced_at: "2026-04-15T12:00:00Z",
+    payload: {
+      daily_rollups: [baseRollup],
+      session_summaries: [],
+    },
+  };
+
+  it("rejects a rollup with negative cost_cents with 422", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    const res = await POST(
+      mkReq({
+        ...baseEnvelope,
+        payload: {
+          daily_rollups: [{ ...baseRollup, cost_cents: -1 }],
+          session_summaries: [],
+        },
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/daily_rollups\[0\]\.cost_cents/);
+    // No row landed in either table — the envelope was rejected outright.
+    expect(fake.rows("daily_rollups")).toHaveLength(0);
+  });
+
+  it("rejects a rollup with non-finite token counts (Infinity)", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    // JSON can't carry Infinity literally; build the body string manually so
+    // JSON.parse sees the bare token and the validator runs against the
+    // resulting `Infinity` numeric value.
+    const raw = JSON.stringify({
+      ...baseEnvelope,
+      payload: {
+        daily_rollups: [{ ...baseRollup, input_tokens: 0 }],
+        session_summaries: [],
+      },
+    }).replace('"input_tokens":0', '"input_tokens":1e999');
+
+    const req = new Request("http://localhost/v1/ingest", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer budi_testkey",
+        "content-type": "application/json",
+      },
+      body: raw,
+    });
+
+    const res = await POST(req as unknown as Parameters<typeof POST>[0]);
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/input_tokens/);
+    expect(fake.rows("daily_rollups")).toHaveLength(0);
+  });
+
+  it("rejects a session summary with a negative total_cost_cents", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    const res = await POST(
+      mkReq({
+        ...baseEnvelope,
+        payload: {
+          daily_rollups: [],
+          session_summaries: [
+            {
+              session_id: "s1",
+              provider: "cursor",
+              started_at: "2026-04-14T10:00:00Z",
+              ended_at: "2026-04-14T11:00:00Z",
+              duration_ms: 1,
+              repo_id: null,
+              git_branch: null,
+              ticket: null,
+              message_count: 1,
+              total_input_tokens: 1,
+              total_output_tokens: 1,
+              total_cost_cents: -50,
+            },
+          ],
+        },
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/session_summaries\[0\]\.total_cost_cents/);
+    expect(fake.rows("session_summaries")).toHaveLength(0);
+  });
+
+  it("caps over-large token counts in stored rollups (defense-in-depth)", async () => {
+    // Direct unit test against the row-builder rather than the route, so we
+    // don't have to fight the route's envelope validator (which would 422
+    // anything implausible). This proves the cap runs even if a future caller
+    // ever skips validation — the database never sees > METRIC_CAPS values.
+    const { buildRollupRows, METRIC_CAPS } = await import("./rows");
+
+    const huge = Number.MAX_SAFE_INTEGER;
+    const rows = buildRollupRows("dev_x", "2026-04-15T12:00:00Z", [
+      { ...baseRollup, input_tokens: huge, cost_cents: huge },
+    ]);
+    expect(rows[0].input_tokens).toBe(METRIC_CAPS.input_tokens);
+    expect(rows[0].cost_cents).toBe(METRIC_CAPS.cost_cents);
+  });
+
+  it("coerces NaN / negative metrics to 0 in the row-builder", async () => {
+    const { buildRollupRows, buildSessionRows } = await import("./rows");
+
+    const rollupRows = buildRollupRows("dev_x", "2026-04-15T12:00:00Z", [
+      {
+        ...baseRollup,
+        message_count: Number.NaN,
+        input_tokens: -1,
+        output_tokens: -Infinity,
+      },
+    ]);
+    expect(rollupRows[0].message_count).toBe(0);
+    expect(rollupRows[0].input_tokens).toBe(0);
+    expect(rollupRows[0].output_tokens).toBe(0);
+
+    const sessionRows = buildSessionRows("dev_x", "2026-04-15T12:00:00Z", [
+      {
+        session_id: "s1",
+        provider: "cursor",
+        message_count: Number.NaN,
+        total_input_tokens: -1,
+        total_output_tokens: 0,
+        total_cost_cents: Number.NaN,
+      },
+    ]);
+    expect(sessionRows[0].message_count).toBe(0);
+    expect(sessionRows[0].total_input_tokens).toBe(0);
+    expect(sessionRows[0].total_cost_cents).toBe(0);
+  });
+
+  it("accepts valid metrics at the upper plausible end", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    const res = await POST(
+      mkReq({
+        ...baseEnvelope,
+        payload: {
+          daily_rollups: [
+            {
+              ...baseRollup,
+              input_tokens: 1_000_000,
+              output_tokens: 500_000,
+              cost_cents: 12_345,
+            },
+          ],
+          session_summaries: [],
+        },
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(200);
+    expect(fake.rows("daily_rollups")).toHaveLength(1);
+  });
+});
