@@ -1026,8 +1026,16 @@ export async function getSessions(
     // Composite tuple compare: (started_at, session_id) < cursor.
     // PostgREST has no native row-constructor compare, so we expand to the
     // logically-equivalent disjunction.
+    //
+    // Both values are wrapped in PostgREST's quoted-literal syntax — without
+    // the quoting, a `session_id` containing filter-tree metacharacters (`,`,
+    // `(`, `)`) would inject extra top-level conditions into the disjunction,
+    // breaking the cursor invariant. Decoding already rejects those shapes
+    // (#176), but we quote here too so a direct DAL caller can't bypass it.
+    const startedAt = postgrestQuoteLiteral(cursor.startedAt);
+    const sessionId = postgrestQuoteLiteral(cursor.sessionId);
     query = query.or(
-      `started_at.lt.${cursor.startedAt},and(started_at.eq.${cursor.startedAt},session_id.lt.${cursor.sessionId})`
+      `started_at.lt.${startedAt},and(started_at.eq.${startedAt},session_id.lt.${sessionId})`
     );
   }
 
@@ -1273,6 +1281,18 @@ export async function getOrgMembers(orgId: string) {
 }
 
 // --- Helpers ---
+
+/**
+ * Wrap a value in PostgREST's quoted-literal syntax (`"..."`). Escapes
+ * embedded `\` and `"` per PostgREST's docs so the filter tree always parses
+ * as a single leaf — never as a stray delimiter that opens a new branch in
+ * the parent expression. Used by `getSessions` when expanding a composite
+ * `(started_at, session_id) < cursor` compare into a `.or()` disjunction.
+ */
+function postgrestQuoteLiteral(value: string): string {
+  const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
 
 /**
  * Get device IDs visible to the current user.
