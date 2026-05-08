@@ -125,34 +125,39 @@ function findSessionsBackHref(node: unknown): string | null {
 }
 
 describe("dashboard/sessions/[id] /page", () => {
-  it("smoke: renders the back link and Summary fields, with no Session Vitals card (#141)", async () => {
+  it("smoke: renders the back link and the two-section detail (Context + Activity), with no Session Vitals card (#141)", async () => {
     const node = await render();
     expect(node).toBeTruthy();
     const text = extractText(node);
     expect(text).toContain("← Sessions");
-    expect(text).toContain("Summary");
+    // The single Summary card was split into Context (who/what/where) +
+    // Activity (when/how-much) so each thread reads in one place. Pin both
+    // section titles so a refactor that drops a section is loud.
+    expect(text).toContain("Context");
+    expect(text).toContain("Activity");
     // The vitals card was removed in #141 because the daemon never sent the
     // numbers to populate it. Pin its absence here so a future revert that
     // brings the empty card back is loud rather than silent.
     expect(text).not.toContain("Session Vitals");
     expect(text).not.toContain("Vitals unavailable");
-    // Lock down the summary field labels so a refactor that drops one shows up.
+    // Lock down every detail-field label so a refactor that drops one shows up.
     for (const label of [
       "Member",
       "Provider",
+      "Surface",
       "Model",
-      "Started",
-      "Duration",
       "Repo",
       "Branch",
+      "Started",
+      "Duration",
       "Messages",
       "Tokens",
       "Cost",
     ]) {
       expect(text).toContain(label);
     }
-    // Manager-attribution (#138): the resolved owner label renders next to
-    // the Provider field so a manager can tell whose session this is without
+    // Manager-attribution (#138): the resolved owner label renders in the
+    // Context section so a manager can tell whose session this is without
     // pivoting back to the device list.
     expect(text).toContain("Jane Smith");
     // The date suffix on the model id is render-only noise (`-20260101`);
@@ -169,9 +174,10 @@ describe("dashboard/sessions/[id] /page", () => {
     const node = await render();
     const text = extractText(node);
     expect(text).not.toContain("Member");
-    // The rest of the summary surface still renders.
+    // The rest of the detail surface still renders.
     expect(text).toContain("Provider");
-    expect(text).toContain("Summary");
+    expect(text).toContain("Context");
+    expect(text).toContain("Activity");
   });
 
   it("renders a dash for the Model field when the daemon didn't send one (#140)", async () => {
@@ -185,28 +191,31 @@ describe("dashboard/sessions/[id] /page", () => {
     expect(text).not.toContain("claude-opus-4-7");
   });
 
-  it("groups summary fields so each pair on a row reads as a phrase (#137, #140)", async () => {
-    // The 2-col grid renders fields in document order, left-to-right then
-    // top-to-bottom. The pin is the *pair groupings* a viewer reads as a
-    // single phrase, not just monotonic order:
-    //   Row 1: Provider / Model     (what tool)
-    //   Row 2: Started  / Duration  (when, how long)
-    //   Row 3: Repo     / Branch    (where in the codebase)
-    //   Row 4: Messages / Tokens    (volume)
-    //   Row 5: Cost                 (the dollar takeaway)
-    // Earlier rounds (#137, #140) walked through Provider/Started and
-    // Provider/Model adjacency; this is the next iteration once Duration is
-    // promoted next to Started so the temporal pair sits together.
+  it("groups detail fields so each section's pair on a row reads as a phrase (#137, #140, #203 follow-up)", async () => {
+    // The page splits into two sections; each is a 2-col grid that renders
+    // fields in document order. Pin the order so the pair groupings a
+    // viewer reads as a single phrase don't silently drift:
+    //   Context:
+    //     Row 1: Member   / Provider  (manager attribution + tool)
+    //     Row 2: Surface  / Model     (where it ran + which model)
+    //     Row 3: Repo     / Branch    (where in the codebase)
+    //   Activity:
+    //     Row 1: Started  / Duration  (when, how long)
+    //     Row 2: Messages / Tokens    (volume)
+    //     Row 3: Cost                 (the dollar takeaway)
     const node = await render();
     const text = extractText(node);
     const order = [
+      "Context",
       "Member",
       "Provider",
+      "Surface",
       "Model",
-      "Started",
-      "Duration",
       "Repo",
       "Branch",
+      "Activity",
+      "Started",
+      "Duration",
       "Messages",
       "Tokens",
       "Cost",
@@ -225,7 +234,8 @@ describe("dashboard/sessions/[id] /page", () => {
     // forwarding a session URL to a teammate doesn't dead-end on a 404.
     const node = await render("sess_v", {});
     const text = extractText(node);
-    expect(text).toContain("Summary");
+    expect(text).toContain("Context");
+    expect(text).toContain("Activity");
     expect(dal.getSessionDetailBySessionId).toHaveBeenCalledWith(
       MANAGER,
       "sess_v"
