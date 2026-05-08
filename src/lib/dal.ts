@@ -1172,6 +1172,47 @@ export async function getSessionDetail(
 }
 
 /**
+ * Fetch a single session by `session_id` alone, scoped to the viewer's
+ * visible devices. Powers the deep-link entry point at
+ * `/dashboard/sessions/<id>` without `?device=` (#202): a manager pasting a
+ * session URL from chat / a ticket should land on the page even though the
+ * URL doesn't carry the device half of the composite PK.
+ *
+ * Returns `null` when no row matches OR when more than one device in the
+ * viewer's scope happens to share the same `session_id` (extraordinarily
+ * rare for UUID daemons, but the ambiguous case must collapse with
+ * not-found rather than guess and silently render the wrong row).
+ *
+ * Existence is collapsed with visibility — same privacy contract as
+ * `getSessionDetail`: a foreign-org session never reveals its existence
+ * via response shape or timing differences. Callers should `notFound()`
+ * on a `null` return.
+ */
+export async function getSessionDetailBySessionId(
+  user: BudiUser,
+  sessionId: string
+): Promise<SessionRow | null> {
+  const admin = createAdminClient();
+  const visibleDeviceIds = await getVisibleDeviceIds(admin, user);
+  if (visibleDeviceIds.length === 0) return null;
+
+  const { data } = await admin
+    .from("session_summaries")
+    .select("*")
+    .in("device_id", visibleDeviceIds)
+    .eq("session_id", sessionId)
+    // Cap at 2 so the ambiguous-match branch can short-circuit without
+    // pulling an unbounded result set when the daemon-emitted session_id
+    // happens to be a non-UUID string that appears across many devices.
+    .limit(2);
+
+  const rows = (data ?? []) as SessionRow[];
+  if (rows.length !== 1) return null;
+  const [enriched] = await attachOwners(admin, user, rows);
+  return enriched ?? rows[0]!;
+}
+
+/**
  * Sync freshness snapshot for the viewer.
  *
  * Used by the dashboard header to render a "Last synced X ago" indicator and

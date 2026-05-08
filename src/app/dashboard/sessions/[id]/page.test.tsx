@@ -31,6 +31,7 @@ vi.mock("next/navigation", () => ({
 const dal = {
   getCurrentUser: vi.fn(),
   getSessionDetail: vi.fn(),
+  getSessionDetailBySessionId: vi.fn(),
 };
 vi.mock("@/lib/dal", () => dal);
 
@@ -75,6 +76,7 @@ beforeEach(() => {
   notFoundMock.mockClear();
   dal.getCurrentUser.mockReset().mockResolvedValue(MANAGER);
   dal.getSessionDetail.mockReset().mockResolvedValue(SESSION);
+  dal.getSessionDetailBySessionId.mockReset().mockResolvedValue(SESSION);
 });
 
 async function render(
@@ -216,12 +218,30 @@ describe("dashboard/sessions/[id] /page", () => {
     }
   });
 
-  it("empty: 404s when the `device` query param is missing — composite PK can't be resolved", async () => {
+  it("renders the session via session_id-only lookup when `?device=` is missing (#202 deep-link)", async () => {
+    // Deep-linked session URLs pasted from chat / a ticket typically lack
+    // the `?device=` half of the composite PK. The page must still resolve
+    // the row by walking the viewer's visible devices, so a manager
+    // forwarding a session URL to a teammate doesn't dead-end on a 404.
+    const node = await render("sess_v", {});
+    const text = extractText(node);
+    expect(text).toContain("Summary");
+    expect(dal.getSessionDetailBySessionId).toHaveBeenCalledWith(
+      MANAGER,
+      "sess_v"
+    );
+    // The composite-PK fast path is only used when `?device=` is provided —
+    // skipping it here keeps the deep-link path off the device-scoped query.
+    expect(dal.getSessionDetail).not.toHaveBeenCalled();
+  });
+
+  it("404s on deep-link when the session_id resolves to nothing in the viewer's scope (#202)", async () => {
+    // A session that doesn't exist OR isn't visible to the viewer collapses
+    // into the same not-found shape so the URL parameter can't be used to
+    // probe foreign-org session existence (ADR-0083 §6).
+    dal.getSessionDetailBySessionId.mockResolvedValue(null);
     await expect(render("sess_v", {})).rejects.toThrow("__NOT_FOUND__");
     expect(notFoundMock).toHaveBeenCalled();
-    // Must not have called the DAL at all — bail before any visibility probe
-    // so we don't leak existence of a session via timing/error shape.
-    expect(dal.getSessionDetail).not.toHaveBeenCalled();
   });
 
   it("empty: 404s for a session not visible to the viewer (DAL returns null)", async () => {
