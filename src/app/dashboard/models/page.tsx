@@ -17,7 +17,11 @@ import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
 import { SurfaceFilter } from "@/components/surface-filter";
-import { formatSurface, parseSurfaceParam } from "@/lib/surface";
+import {
+  formatSurface,
+  isAllUnknownSurface,
+  parseSurfaceParam,
+} from "@/lib/surface";
 import { CostBarChart } from "@/components/charts/cost-bar-chart";
 import { ModelCountChart } from "@/components/charts/model-count-chart";
 import { CostPerModelChart } from "@/components/charts/cost-per-model-chart";
@@ -208,15 +212,21 @@ export default async function ModelsPage({
         </CardHeader>
         <CardContent>
           <CostBarChart
-            data={surfaceShare.map((s) => ({
-              label: formatSurface(s.surface),
-              cost_cents: s.cost_cents,
-              tokens: s.input_tokens + s.output_tokens,
-            }))}
+            data={
+              isAllUnknownSurface(surfaceShare)
+                ? []
+                : surfaceShare.map((s) => ({
+                    label: formatSurface(s.surface),
+                    cost_cents: s.cost_cents,
+                    tokens: s.input_tokens + s.output_tokens,
+                  }))
+            }
             emptyLabel={
-              knownSurfaces.length <= 1
-                ? "Single-surface org — break out per-surface spend after a second IDE / CLI starts syncing."
-                : `No surface ${valueWord.toLowerCase()} data for this period`
+              isAllUnknownSurface(surfaceShare)
+                ? "Per-surface breakdown not available — every row in this window is tagged Unknown. Update local Budi to v8.4.2+ to start emitting surface tags."
+                : knownSurfaces.length <= 1
+                  ? "Single-surface org — break out per-surface spend after a second IDE / CLI starts syncing."
+                  : `No surface ${valueWord.toLowerCase()} data for this period`
             }
             unit={unit}
           />
