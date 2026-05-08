@@ -204,7 +204,10 @@ describe("dashboard/sessions /page", () => {
           surface: "vscode",
         },
       ],
-      nextCursor: { startedAt: "2026-04-15T10:00:00.000Z", sessionId: "sess_a" },
+      nextCursor: {
+        startedAt: "2026-04-15T10:00:00.000Z",
+        sessionId: "sess_a",
+      },
     });
     let text = extractText(await render());
     expect(text).toContain("Next");
