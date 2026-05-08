@@ -2,24 +2,10 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { formatSurface, parseSurfaceParam } from "@/lib/surface";
+
 const ALL_SURFACE_VALUE = "";
 const ALL_SURFACE_LABEL = "All surfaces";
-
-/**
- * Parse the URL-shaped `?surface=` value into the canonical CSV list. Mirrors
- * the wire shape from siropkin/budi#702: `?surface=vscode,cursor` →
- * `["vscode", "cursor"]`. Empty / missing → `[]` (the all-surfaces default).
- *
- * Exported so server-side page code can use the same parser without dragging
- * the `"use client"` chip into a server component.
- */
-export function parseSurfaceParam(raw: string | null | undefined): string[] {
-  if (!raw) return [];
-  return raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-}
 
 /**
  * Header chip that scopes the rest of the dashboard to a single surface
@@ -29,13 +15,10 @@ export function parseSurfaceParam(raw: string | null | undefined): string[] {
  *
  * The DAL filter accepts a CSV (`?surface=vscode,cursor`) so future
  * multi-select UIs can ship without a wire-shape change. For v1 the chip
- * surfaces a single-select dropdown — that covers the "filter to one
- * surface" use case and matches the existing `<UserFilter />` ergonomics; a
- * multi-select expansion is a follow-up if the data tells us users want it.
+ * surfaces a single-select dropdown.
  *
  * Hidden when `surfaces` has 0 or 1 entries — a chip that can only filter
- * to "everything" or "the only thing" adds noise. Once a second surface
- * appears in the org's data the chip starts rendering automatically.
+ * to "everything" or "the only thing" adds noise.
  */
 export function SurfaceFilter({ surfaces }: { surfaces: string[] }) {
   const router = useRouter();
@@ -44,9 +27,6 @@ export function SurfaceFilter({ surfaces }: { surfaces: string[] }) {
   if (surfaces.length < 2) return null;
 
   const raw = searchParams.get("surface");
-  // The CSV may carry multiple ids from a future multi-select UI; for the v1
-  // single-select chip we display the first match and treat anything else as
-  // "All surfaces" so the dropdown's selection stays in sync with the URL.
   const parsed = parseSurfaceParam(raw);
   const current =
     parsed.length === 1 && surfaces.includes(parsed[0])
@@ -84,33 +64,4 @@ export function SurfaceFilter({ surfaces }: { surfaces: string[] }) {
       </select>
     </label>
   );
-}
-
-/**
- * Friendly display label for a surface id. Matches what the daemon sends on
- * the wire (`vscode`, `jetbrains`, …) but title-cased for the chip. Falls
- * back to the raw id for surfaces we don't have a hand-tuned label for so
- * a never-before-seen surface still renders rather than a blank entry.
- */
-export function formatSurface(surface: string | null | undefined): string {
-  // Tolerate the null/undefined seam: pre-#187 daemons didn't emit a surface
-  // and every other code path that consumes a session/rollup has its own
-  // null-fallback. Centralizing the coalesce here means callers never have
-  // to remember to coerce before passing through (and matches the
-  // dashboard's "missing surface displays as Unknown" rule).
-  if (!surface) return "Unknown";
-  switch (surface) {
-    case "vscode":
-      return "VS Code";
-    case "cursor":
-      return "Cursor";
-    case "jetbrains":
-      return "JetBrains";
-    case "terminal":
-      return "Terminal";
-    case "unknown":
-      return "Unknown";
-    default:
-      return surface.charAt(0).toUpperCase() + surface.slice(1);
-  }
 }

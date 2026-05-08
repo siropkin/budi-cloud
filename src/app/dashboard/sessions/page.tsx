@@ -27,11 +27,8 @@ import {
 import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
-import {
-  SurfaceFilter,
-  formatSurface,
-  parseSurfaceParam,
-} from "@/components/surface-filter";
+import { SurfaceFilter } from "@/components/surface-filter";
+import { formatSurface, parseSurfaceParam } from "@/lib/surface";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 function formatTimestamp(ts: string | null): string {

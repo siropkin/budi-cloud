@@ -30,11 +30,8 @@ import { TopBreakdownCard } from "@/components/top-breakdown-card";
 import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
-import {
-  SurfaceFilter,
-  formatSurface,
-  parseSurfaceParam,
-} from "@/components/surface-filter";
+import { SurfaceFilter } from "@/components/surface-filter";
+import { formatSurface, parseSurfaceParam } from "@/lib/surface";
 import { ActivityChart } from "@/components/charts/activity-chart";
 import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
 import { CostBarChart } from "@/components/charts/cost-bar-chart";
