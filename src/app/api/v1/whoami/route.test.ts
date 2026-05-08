@@ -22,6 +22,18 @@ class FakeSupabase {
     void _table;
     return new FakeQuery(this.rows);
   }
+
+  // #179: route handler now consults `rate_limit_check` before/after auth.
+  // Tests don't exercise the limiter — return "allowed" so the rest of the
+  // handler can run.
+  async rpc(_name: string, _args: unknown) {
+    void _name;
+    void _args;
+    return {
+      data: [{ allowed: true, current_count: 1, retry_after_seconds: 60 }],
+      error: null,
+    };
+  }
 }
 
 class FakeQuery {

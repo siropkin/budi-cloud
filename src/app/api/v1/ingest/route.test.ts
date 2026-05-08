@@ -37,6 +37,15 @@ class FakeSupabase {
    * — extend if a future ingest test calls another breakdown.
    */
   rpc(name: string, args: Record<string, unknown>) {
+    // #179: route now calls rate_limit_check on every request — return a
+    // permissive stub so existing assertions keep exercising the handler
+    // body rather than the 429 short-circuit.
+    if (name === "rate_limit_check") {
+      return Promise.resolve({
+        data: [{ allowed: true, current_count: 1, retry_after_seconds: 60 }],
+        error: null,
+      });
+    }
     if (name !== "dashboard_overview_stats") {
       return Promise.resolve({
         data: null,

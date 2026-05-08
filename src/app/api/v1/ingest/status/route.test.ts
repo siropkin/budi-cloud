@@ -19,6 +19,18 @@ class FakeSupabase {
     if (!this.tables.has(table)) this.tables.set(table, []);
     return new FakeQuery(this.tables.get(table)!);
   }
+
+  // #179: route handler hits `rate_limit_check` before/after auth. Return
+  // permissive results — these tests cover the 401-vs-404 distinction, not
+  // the limiter, which is exercised in src/lib/rate-limit.test.ts.
+  async rpc(_name: string, _args: unknown) {
+    void _name;
+    void _args;
+    return {
+      data: [{ allowed: true, current_count: 1, retry_after_seconds: 60 }],
+      error: null,
+    };
+  }
 }
 
 class FakeQuery {
