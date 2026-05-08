@@ -17,14 +17,18 @@ const ALL_SURFACE_LABEL = "All surfaces";
  * multi-select UIs can ship without a wire-shape change. For v1 the chip
  * surfaces a single-select dropdown.
  *
- * Hidden when `surfaces` has 0 or 1 entries — a chip that can only filter
- * to "everything" or "the only thing" adds noise.
+ * Hidden only when `surfaces` is empty — i.e. the org has no rollups yet,
+ * so a dropdown that would only offer "All surfaces" carries zero signal.
+ * Once any surface is known (even just `unknown` from pre-bump daemons)
+ * the chip renders so the dimension is discoverable: #203 explicitly asks
+ * the filter to land alongside Teammate / time-range / $/Tokens
+ * regardless of the number of distinct surfaces in the data.
  */
 export function SurfaceFilter({ surfaces }: { surfaces: string[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  if (surfaces.length < 2) return null;
+  if (surfaces.length === 0) return null;
 
   const raw = searchParams.get("surface");
   const parsed = parseSurfaceParam(raw);
