@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { clsx } from "clsx";
 import type { MouseEventHandler } from "react";
 import {
@@ -17,6 +17,28 @@ import {
   Users,
   X,
 } from "lucide-react";
+
+// Filter params that scope every dashboard page (period switcher, manager
+// teammate filter). The sidebar carries them across navigations so users
+// don't have to re-pick `30d` / `All team` on each page (#172).
+const PRESERVED_PARAMS = ["days", "user"] as const;
+
+/**
+ * Build the `?days=…&user=…` suffix to graft onto every sidebar link, dropping
+ * any other params (cursors, sorts, …) that are scoped to a single page.
+ * Exported for unit testing — production callers use {@link usePreservedSearch}.
+ */
+export function buildPreservedSearch(
+  read: (key: string) => string | null
+): string {
+  const params = new URLSearchParams();
+  for (const key of PRESERVED_PARAMS) {
+    const value = read(key);
+    if (value) params.set(key, value);
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
 
 // `managerOnly: true` means the link is rendered only for `role === "manager"`.
 // `/dashboard/team` is scoped to the viewer's own devices (ADR-0083 §6), so for
@@ -43,10 +65,11 @@ function visibleNavItems(role: string) {
  * there so the 224px rail doesn't eat >50% of a 390px viewport.
  */
 export function Sidebar({ role }: { role: string }) {
+  const search = usePreservedSearch();
   return (
     <nav className="hidden w-56 flex-col border-r border-white/10 bg-[#0a0a0a] px-3 py-4 md:flex">
-      <BrandLink />
-      <NavList items={visibleNavItems(role)} />
+      <BrandLink search={search} />
+      <NavList items={visibleNavItems(role)} search={search} />
     </nav>
   );
 }
@@ -58,6 +81,7 @@ export function Sidebar({ role }: { role: string }) {
 export function MobileSidebar({ role }: { role: string }) {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
+  const search = usePreservedSearch();
 
   // ESC closes the drawer, matching the Danger-zone confirm dialog behavior.
   useEffect(() => {
@@ -96,7 +120,7 @@ export function MobileSidebar({ role }: { role: string }) {
           />
           <nav className="relative flex h-full w-64 max-w-[80vw] flex-col border-r border-white/10 bg-[#0a0a0a] px-3 py-4">
             <div className="mb-2 flex items-center justify-between pr-1">
-              <BrandLink onNavigate={close} />
+              <BrandLink onNavigate={close} search={search} />
               <button
                 type="button"
                 onClick={close}
@@ -108,7 +132,11 @@ export function MobileSidebar({ role }: { role: string }) {
             </div>
             {/* onNavigate fires before the router commits the new pathname, so
                 the drawer closes as the destination page mounts. */}
-            <NavList items={visibleNavItems(role)} onNavigate={close} />
+            <NavList
+              items={visibleNavItems(role)}
+              onNavigate={close}
+              search={search}
+            />
           </nav>
         </div>
       )}
@@ -116,10 +144,16 @@ export function MobileSidebar({ role }: { role: string }) {
   );
 }
 
-function BrandLink({ onNavigate }: { onNavigate?: MouseEventHandler }) {
+function BrandLink({
+  onNavigate,
+  search,
+}: {
+  onNavigate?: MouseEventHandler;
+  search: string;
+}) {
   return (
     <Link
-      href="/dashboard"
+      href={`/dashboard${search}`}
       onClick={onNavigate}
       className="mb-6 flex items-center gap-2 px-3 text-lg font-bold text-white"
     >
@@ -132,9 +166,11 @@ function BrandLink({ onNavigate }: { onNavigate?: MouseEventHandler }) {
 function NavList({
   items,
   onNavigate,
+  search,
 }: {
   items: ReadonlyArray<(typeof NAV_ITEMS)[number]>;
   onNavigate?: MouseEventHandler;
+  search: string;
 }) {
   const pathname = usePathname();
   return (
@@ -148,7 +184,7 @@ function NavList({
         return (
           <li key={item.href}>
             <Link
-              href={item.href}
+              href={`${item.href}${search}`}
               onClick={onNavigate}
               className={clsx(
                 "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
@@ -164,5 +200,13 @@ function NavList({
         );
       })}
     </ul>
+  );
+}
+
+function usePreservedSearch(): string {
+  const searchParams = useSearchParams();
+  return useMemo(
+    () => buildPreservedSearch((key) => searchParams.get(key)),
+    [searchParams]
   );
 }
