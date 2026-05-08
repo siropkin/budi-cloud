@@ -177,14 +177,14 @@ export default async function SessionsPage({
                       <th className="pr-3 pb-2 font-medium whitespace-nowrap">
                         Provider
                       </th>
-                      <th className="pr-3 pb-2 font-medium whitespace-nowrap">
-                        Model
-                      </th>
                       {showSurfaceColumn && (
                         <th className="pr-3 pb-2 font-medium whitespace-nowrap">
                           Surface
                         </th>
                       )}
+                      <th className="pr-3 pb-2 font-medium whitespace-nowrap">
+                        Model
+                      </th>
                       <th className="pr-3 pb-2 font-medium whitespace-nowrap">
                         Started
                       </th>
@@ -236,19 +236,6 @@ export default async function SessionsPage({
                               {formatProvider(s.provider)}
                             </Link>
                           </td>
-                          <td
-                            className="text-zinc-400"
-                            title={s.main_model ?? undefined}
-                          >
-                            <Link
-                              href={href}
-                              className="block max-w-[16ch] truncate py-2 pr-3"
-                            >
-                              {s.main_model
-                                ? formatModelName(s.main_model)
-                                : "-"}
-                            </Link>
-                          </td>
                           {showSurfaceColumn && (
                             <td
                               className="text-zinc-400"
@@ -263,6 +250,19 @@ export default async function SessionsPage({
                               </Link>
                             </td>
                           )}
+                          <td
+                            className="text-zinc-400"
+                            title={s.main_model ?? undefined}
+                          >
+                            <Link
+                              href={href}
+                              className="block max-w-[16ch] truncate py-2 pr-3"
+                            >
+                              {s.main_model
+                                ? formatModelName(s.main_model)
+                                : "-"}
+                            </Link>
+                          </td>
                           <td className="text-zinc-400">
                             <Link href={href} className="block py-2 pr-3">
                               {formatTimestamp(s.started_at)}
