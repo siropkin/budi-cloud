@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { clsx } from "clsx";
 import { addDays, differenceInDays, format, startOfWeek } from "date-fns";
 import { fmtCost, fmtNum } from "@/lib/format";
@@ -63,6 +64,45 @@ export function ActivityHeatmap(props: Props) {
 // ────────────────────────────────────────────────────────────────────────────
 
 function HourlyHeatmap({ data, unit }: { data: HourlyDatum[]; unit: Unit }) {
+  // Materialize a 7×24 grid keyed by `${dow}-${hour}`. Empty cells stay zero
+  // — the SQL only emits non-empty buckets, so the client decides the shape.
+  const cells = new Map<string, HourlyDatum>();
+  for (const d of data) cells.set(`${d.dow}-${d.hour}`, d);
+  const valueOf = (d: HourlyDatum | undefined): number =>
+    d ? (unit === "tokens" ? d.session_count : d.cost_cents) : 0;
+
+  // Default-scroll narrow viewports to the busiest hour so users on phones
+  // don't see only midnight–noon by accident (#173). Computed across the full
+  // 7×24 grid so a quiet evening doesn't pull focus away from a loud morning.
+  const busiestHour = (() => {
+    const totals = new Array<number>(24).fill(0);
+    for (const d of data) totals[d.hour] += valueOf(d);
+    let bestHour = 0;
+    let bestTotal = -1;
+    for (let h = 0; h < 24; h++) {
+      if (totals[h] > bestTotal) {
+        bestTotal = totals[h];
+        bestHour = h;
+      }
+    }
+    return bestTotal > 0 ? bestHour : null;
+  })();
+
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    if (el.scrollWidth <= el.clientWidth) return;
+    const target = busiestHour ?? new Date().getHours();
+    // Center the chosen hour in the visible window. The grid has a 2.5rem day
+    // label column followed by 24 equal-width hour cells, so position is
+    // proportional to (target / 24) of the post-label width.
+    const labelWidth = 40;
+    const hourArea = el.scrollWidth - labelWidth;
+    const center = labelWidth + (hourArea * (target + 0.5)) / 24;
+    el.scrollLeft = Math.max(0, center - el.clientWidth / 2);
+  }, [busiestHour]);
+
   if (data.length === 0) {
     return (
       <div
@@ -74,12 +114,6 @@ function HourlyHeatmap({ data, unit }: { data: HourlyDatum[]; unit: Unit }) {
     );
   }
 
-  // Materialize a 7×24 grid keyed by `${dow}-${hour}`. Empty cells stay zero
-  // — the SQL only emits non-empty buckets, so the client decides the shape.
-  const cells = new Map<string, HourlyDatum>();
-  for (const d of data) cells.set(`${d.dow}-${d.hour}`, d);
-  const valueOf = (d: HourlyDatum | undefined): number =>
-    d ? (unit === "tokens" ? d.session_count : d.cost_cents) : 0;
   // Color is opacity-on-blue scaled by cell value vs the period's max cell.
   // Without a per-period max the scale would compress every empty week into
   // a single dim cell as soon as one busy week showed up in history.
@@ -89,11 +123,12 @@ function HourlyHeatmap({ data, unit }: { data: HourlyDatum[]; unit: Unit }) {
   );
 
   return (
-    <div className="overflow-x-auto">
-      <div
-        className="flex flex-col"
-        style={{ minWidth: 600, height: HEATMAP_HEIGHT }}
-      >
+    <div className="relative">
+      <div ref={scrollerRef} className="overflow-x-auto">
+        <div
+          className="flex flex-col"
+          style={{ minWidth: 600, height: HEATMAP_HEIGHT }}
+        >
         <div className="grid flex-none grid-cols-[2.5rem_repeat(24,minmax(0,1fr))] gap-x-1">
           <div />
           {Array.from({ length: 24 }, (_, h) => (
@@ -150,7 +185,16 @@ function HourlyHeatmap({ data, unit }: { data: HourlyDatum[]; unit: Unit }) {
           ))}
         </div>
         <Legend />
+        </div>
       </div>
+      {/* Right-edge fade hints at horizontal scroll on narrow viewports
+          (#173). Only shown below the grid's 600px minWidth — at wider
+          viewports the chart fits and the fade would be misleading. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute top-0 right-0 w-8 bg-gradient-to-l from-[#0a0a0a] to-transparent md:hidden"
+        style={{ height: HEATMAP_HEIGHT }}
+      />
     </div>
   );
 }
