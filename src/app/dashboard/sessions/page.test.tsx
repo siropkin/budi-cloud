@@ -348,7 +348,7 @@ describe("dashboard/sessions /page", () => {
     }
   });
 
-  it("surface column: rendered when the org has 2+ surfaces, hidden when only one (#187)", async () => {
+  it("surface column: always rendered, regardless of distinct-surface count (#203)", async () => {
     // Multi-surface org: column header + per-row cells render the formatted
     // surface label, not the raw daemon id.
     let node = await render();
@@ -357,15 +357,49 @@ describe("dashboard/sessions /page", () => {
     expect(text).toContain("VS Code");
     expect(text).toContain("Cursor");
 
-    // Single-surface org: column collapses out so every row doesn't repeat
-    // the same value.
+    // Single-surface org (#203): column still renders so the dimension is
+    // discoverable. Pre-#203 this collapsed out — which masked #204 in
+    // production by leaving the user no signal that the column existed at
+    // all once every row landed as `unknown`.
     dal.getKnownSurfaces.mockResolvedValue(["vscode"]);
     node = await render();
     text = extractText(node);
-    // Surface table-header text is gone (the `Provider` / `Model` / `Started`
-    // headers still render, so a contains-check on them isn't useful here).
-    // Use a regex tied to the cell column-header position to avoid matching
-    // unrelated copy.
-    expect(text).not.toMatch(/Provider.*Model.*Surface/);
+    expect(text).toMatch(/Provider.*Surface.*Model/);
+  });
+
+  it("surface column: still renders when the org's only known surface is `unknown` (#203 + #204)", async () => {
+    // Production state during the #204 ingest bug: every row lands as
+    // `surface = 'unknown'`. The column must still appear (with `Unknown`
+    // cells) so the user has a visible anchor for the dimension; once the
+    // daemon-side fix ships, the same column starts showing real values
+    // without any further dashboard change.
+    dal.getKnownSurfaces.mockResolvedValue(["unknown"]);
+    dal.getSessions.mockResolvedValue({
+      rows: [
+        {
+          device_id: "dev_ivan",
+          session_id: "sess_unk",
+          provider: "claude_code",
+          started_at: "2026-04-15T10:00:00.000Z",
+          ended_at: null,
+          duration_ms: null,
+          repo_id: "repo_x",
+          git_branch: "refs/heads/main",
+          ticket: null,
+          message_count: 1,
+          total_input_tokens: 0,
+          total_output_tokens: 0,
+          total_cost_cents: 0,
+          main_model: null,
+          owner_name: "Ivan",
+          surface: "unknown",
+        },
+      ],
+      nextCursor: null,
+    });
+    const node = await render();
+    const text = extractText(node);
+    expect(text).toMatch(/Provider.*Surface.*Model/);
+    expect(text).toContain("Unknown");
   });
 });

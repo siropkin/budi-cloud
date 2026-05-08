@@ -104,10 +104,15 @@ export default async function SessionsPage({
   if (params.units) baseParams.set("units", params.units);
   if (params.surface) baseParams.set("surface", params.surface);
 
-  // Hide the Surface column on single-surface orgs — every row would carry
-  // the same value, which is just visual noise. Once a second surface
-  // appears the column starts rendering automatically (acceptance for #187).
-  const showSurfaceColumn = knownSurfaces.length > 1;
+  // Always render the Surface column (#203). Earlier (#187) the column
+  // hid on single-surface orgs to avoid a redundant cell, but that gate
+  // also collapsed the column on orgs whose daemon hasn't yet started
+  // emitting `surface` — leaving the user with no signal that the
+  // dimension exists. The header reads as "Surface" with `Unknown` cells
+  // until daemons upload a real value, which is the documented #203
+  // acceptance ("the column structure should still land — it'll fill in
+  // the moment #204's ingest fix ships").
+  const showSurfaceColumn = true;
   // Click-to-filter target for a session-row's surface cell. Preserves the
   // other active filters; resets cursor / page so the filtered list starts
   // from the first page rather than wherever the user happened to be.
