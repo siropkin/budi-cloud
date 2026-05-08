@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import type { ReactElement } from "react";
-import { Bar, BarChart, LabelList } from "recharts";
+import { Bar, BarChart, LabelList, YAxis } from "recharts";
 import { fmtCost, fmtNum } from "@/lib/format";
 
 // CostBarChart now calls `useMediaQuery` to shrink the y-axis column on
@@ -147,6 +147,79 @@ describe("CostBarChart", () => {
         "haiku-4-5",
         "opus-4-7",
       ]);
+    } finally {
+      isCompact = false;
+    }
+  });
+
+  it("omits the redundant <title> when the visible label already shows the full name (#205)", () => {
+    // The y-axis tick used to always render <title>{original} alongside the
+    // visible label. When original === visible, accessibility-tree / page-text
+    // scrapes concatenated both and produced duplicates like "UnknownUnknown".
+    const tree = CostBarChart({
+      data: [{ label: "Unknown", cost_cents: 185983, tokens: 0 }],
+      emptyLabel: "unused",
+    });
+    const nodes = Array.from(walk(tree));
+    const yAxis = nodes.find((n) => n.type === YAxis);
+    expect(yAxis).toBeDefined();
+    const tick = (
+      yAxis!.props as {
+        tick: (args: {
+          x: number;
+          y: number;
+          payload: { value: string };
+          index: number;
+        }) => ReactElement;
+      }
+    ).tick;
+    const rendered = tick({
+      x: 0,
+      y: 0,
+      payload: { value: "Unknown" },
+      index: 0,
+    });
+    const tickNodes = Array.from(walk(rendered));
+    // No <title> child means the label can't be doubled by the a11y tree.
+    expect(tickNodes.find((n) => n.type === "title")).toBeUndefined();
+
+    // Truncated rows still need <title> to expose the full original name.
+    isCompact = true;
+    try {
+      const truncTree = CostBarChart({
+        data: [
+          {
+            label: "really-long-surface-name-that-will-truncate",
+            cost_cents: 100,
+            tokens: 0,
+          },
+        ],
+        emptyLabel: "unused",
+      });
+      const truncNodes = Array.from(walk(truncTree));
+      const truncYAxis = truncNodes.find((n) => n.type === YAxis);
+      const truncTick = (
+        truncYAxis!.props as {
+          tick: (args: {
+            x: number;
+            y: number;
+            payload: { value: string };
+            index: number;
+          }) => ReactElement;
+        }
+      ).tick;
+      const truncRendered = truncTick({
+        x: 0,
+        y: 0,
+        payload: { value: "really-long-surface-name-that-will-truncate" },
+        index: 0,
+      });
+      const truncTickNodes = Array.from(walk(truncRendered));
+      const titleNode = truncTickNodes.find((n) => n.type === "title");
+      expect(titleNode).toBeDefined();
+      expect(
+        (titleNode!.props as { children: string }).children
+      ).toBe("really-long-surface-name-that-will-truncate");
     } finally {
       isCompact = false;
     }

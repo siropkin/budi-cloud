@@ -141,6 +141,12 @@ export function CostBarChart({
           interval={0}
           tick={({ x, y, payload, index }) => {
             const original = rows[index]?.label ?? payload.value;
+            const visible = truncateLabel(payload.value, labelMaxLen);
+            // Only attach a <title> when it carries info beyond the visible
+            // label — otherwise SVG accessibility-tree readers concatenate
+            // the two and labels render duplicated (e.g. "UnknownUnknown") in
+            // page-text scrapes (#205).
+            const needsTitle = visible !== original;
             return (
               <g transform={`translate(${x},${y})`}>
                 <text
@@ -151,8 +157,8 @@ export function CostBarChart({
                   fill="#71717a"
                   fontSize={12}
                 >
-                  <title>{original}</title>
-                  {truncateLabel(payload.value, labelMaxLen)}
+                  {needsTitle ? <title>{original}</title> : null}
+                  {visible}
                 </text>
               </g>
             );
