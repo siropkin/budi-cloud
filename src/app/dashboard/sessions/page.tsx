@@ -171,7 +171,9 @@ export default async function SessionsPage({
                     {isManager && (
                       <th className="pr-3 pb-2 font-medium">Member</th>
                     )}
-                    <th className="pr-3 pb-2 font-medium">Provider</th>
+                    <th className="pr-3 pb-2 font-medium whitespace-nowrap">
+                      Provider
+                    </th>
                     <th className="pr-3 pb-2 font-medium">Model</th>
                     {showSurfaceColumn && (
                       <th className="pr-3 pb-2 font-medium">Surface</th>
@@ -212,7 +214,10 @@ export default async function SessionsPage({
                           </td>
                         )}
                         <td className="text-zinc-300">
-                          <Link href={href} className="block py-2 pr-3">
+                          <Link
+                            href={href}
+                            className="block py-2 pr-3 whitespace-nowrap"
+                          >
                             {formatProvider(s.provider)}
                           </Link>
                         </td>
