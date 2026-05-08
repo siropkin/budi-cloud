@@ -42,6 +42,12 @@ export async function GET(request: NextRequest) {
   }
 
   // --- Verify device belongs to user's org ---
+  // Collapse "doesn't exist" and "belongs to another org" into the same 404
+  // so a valid API key can't probe the global devices table for existence
+  // across the org boundary (mirrors the getSessionDetail precedent in dal.ts).
+  const notFound = () =>
+    Response.json({ error: "Device not found" }, { status: 404 });
+
   const { data: device } = await supabase
     .from("devices")
     .select("id, user_id, last_seen")
@@ -49,7 +55,7 @@ export async function GET(request: NextRequest) {
     .single();
 
   if (!device) {
-    return Response.json({ error: "Device not found" }, { status: 404 });
+    return notFound();
   }
 
   const { data: deviceOwner } = await supabase
@@ -59,10 +65,7 @@ export async function GET(request: NextRequest) {
     .single();
 
   if (!deviceOwner || deviceOwner.org_id !== user.org_id) {
-    return Response.json(
-      { error: "Device does not belong to your org" },
-      { status: 401 }
-    );
+    return notFound();
   }
 
   // --- Compute watermark: latest bucket_day for this device ---
