@@ -129,62 +129,62 @@ function HourlyHeatmap({ data, unit }: { data: HourlyDatum[]; unit: Unit }) {
           className="flex flex-col"
           style={{ minWidth: 600, height: HEATMAP_HEIGHT }}
         >
-        <div className="grid flex-none grid-cols-[2.5rem_repeat(24,minmax(0,1fr))] gap-x-1">
-          <div />
-          {Array.from({ length: 24 }, (_, h) => (
-            <div
-              key={h}
-              className="text-center text-[10px] text-zinc-500"
-              aria-hidden="true"
-            >
-              {h % 3 === 0 ? h : ""}
-            </div>
-          ))}
-        </div>
-        <div className="mt-1 flex flex-1 flex-col gap-y-1">
-          {DAY_ROW_TO_PG_DOW.map((dow, rowIdx) => (
-            <div
-              key={dow}
-              className="grid flex-1 grid-cols-[2.5rem_repeat(24,minmax(0,1fr))] gap-x-1"
-            >
-              <div className="flex items-center text-xs text-zinc-500">
-                {DAY_LABELS[rowIdx]}
+          <div className="grid flex-none grid-cols-[2.5rem_repeat(24,minmax(0,1fr))] gap-x-1">
+            <div />
+            {Array.from({ length: 24 }, (_, h) => (
+              <div
+                key={h}
+                className="text-center text-[10px] text-zinc-500"
+                aria-hidden="true"
+              >
+                {h % 3 === 0 ? h : ""}
               </div>
-              {Array.from({ length: 24 }, (_, hour) => {
-                const cell = cells.get(`${dow}-${hour}`);
-                const value = valueOf(cell);
-                const intensity =
-                  value === 0 ? 0 : Math.max(0.08, value / maxValue);
-                const sessions = cell?.session_count ?? 0;
-                const cost = cell?.cost_cents ?? 0;
-                const dayLabel = DAY_LABELS[rowIdx];
-                const hourLabel = `${String(hour).padStart(2, "0")}:00`;
-                const valueLabel =
-                  unit === "tokens"
-                    ? `${fmtNum(sessions)} session${sessions === 1 ? "" : "s"}`
-                    : `${fmtCost(cost)} • ${fmtNum(sessions)} session${sessions === 1 ? "" : "s"}`;
-                return (
-                  <div
-                    key={hour}
-                    className={clsx(
-                      "h-full rounded-sm",
-                      value === 0 && "bg-white/[0.03]"
-                    )}
-                    style={
-                      value > 0
-                        ? {
-                            backgroundColor: `rgba(59, 130, 246, ${intensity})`,
-                          }
-                        : undefined
-                    }
-                    title={`${dayLabel} ${hourLabel} — ${valueLabel}`}
-                  />
-                );
-              })}
-            </div>
-          ))}
-        </div>
-        <Legend />
+            ))}
+          </div>
+          <div className="mt-1 flex flex-1 flex-col gap-y-1">
+            {DAY_ROW_TO_PG_DOW.map((dow, rowIdx) => (
+              <div
+                key={dow}
+                className="grid flex-1 grid-cols-[2.5rem_repeat(24,minmax(0,1fr))] gap-x-1"
+              >
+                <div className="flex items-center text-xs text-zinc-500">
+                  {DAY_LABELS[rowIdx]}
+                </div>
+                {Array.from({ length: 24 }, (_, hour) => {
+                  const cell = cells.get(`${dow}-${hour}`);
+                  const value = valueOf(cell);
+                  const intensity =
+                    value === 0 ? 0 : Math.max(0.08, value / maxValue);
+                  const sessions = cell?.session_count ?? 0;
+                  const cost = cell?.cost_cents ?? 0;
+                  const dayLabel = DAY_LABELS[rowIdx];
+                  const hourLabel = `${String(hour).padStart(2, "0")}:00`;
+                  const valueLabel =
+                    unit === "tokens"
+                      ? `${fmtNum(sessions)} session${sessions === 1 ? "" : "s"}`
+                      : `${fmtCost(cost)} • ${fmtNum(sessions)} session${sessions === 1 ? "" : "s"}`;
+                  return (
+                    <div
+                      key={hour}
+                      className={clsx(
+                        "h-full rounded-sm",
+                        value === 0 && "bg-white/[0.03]"
+                      )}
+                      style={
+                        value > 0
+                          ? {
+                              backgroundColor: `rgba(59, 130, 246, ${intensity})`,
+                            }
+                          : undefined
+                      }
+                      title={`${dayLabel} ${hourLabel} — ${valueLabel}`}
+                    />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          <Legend />
         </div>
       </div>
       {/* Right-edge fade hints at horizontal scroll on narrow viewports
