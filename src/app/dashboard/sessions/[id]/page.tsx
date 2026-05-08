@@ -10,7 +10,7 @@ import {
   formatProvider,
   repoName,
 } from "@/lib/format";
-import { formatSurface } from "@/components/surface-filter";
+import { formatSurface } from "@/lib/surface";
 
 /**
  * Session detail page (#99). The id segment is the daemon-emitted
