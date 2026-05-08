@@ -131,16 +131,18 @@ export default async function ReposPage({
             />
           ) : (
             <div className="grid gap-6 sm:grid-cols-2">
-              <CostBarChart
-                data={repoRows.map((r) => ({
-                  label: r.label,
-                  cost_cents: r.cost_cents,
-                  tokens: r.input_tokens + r.output_tokens,
-                }))}
-                emptyLabel="No project data for this period"
-                unit={unit}
-              />
-              <div>
+              <div className="min-w-0">
+                <CostBarChart
+                  data={repoRows.map((r) => ({
+                    label: r.label,
+                    cost_cents: r.cost_cents,
+                    tokens: r.input_tokens + r.output_tokens,
+                  }))}
+                  emptyLabel="No project data for this period"
+                  unit={unit}
+                />
+              </div>
+              <div className="min-w-0">
                 <table className="hidden w-full text-sm sm:table">
                   <thead>
                     <tr className="border-b border-white/10 text-left text-zinc-400">
@@ -175,9 +177,14 @@ export default async function ReposPage({
                 <ul className="divide-y divide-white/5 text-sm sm:hidden">
                   {repoRows.map((r, i) => (
                     <li key={i} className="flex flex-col gap-1 py-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-zinc-200">{r.label}</span>
-                        <span className="tabular-nums text-zinc-300">
+                      <div className="flex items-center justify-between gap-3">
+                        <span
+                          className="min-w-0 flex-1 truncate text-zinc-200"
+                          title={r.label}
+                        >
+                          {r.label}
+                        </span>
+                        <span className="shrink-0 tabular-nums text-zinc-300">
                           {fmtValue(
                             r.cost_cents,
                             r.input_tokens + r.output_tokens
@@ -225,16 +232,18 @@ export default async function ReposPage({
             />
           ) : (
             <div className="grid gap-6 sm:grid-cols-2">
-              <CostBarChart
-                data={branchRows.map((b) => ({
-                  label: `${b.project} / ${b.branch}`,
-                  cost_cents: b.cost_cents,
-                  tokens: b.input_tokens + b.output_tokens,
-                }))}
-                emptyLabel="No branch data for this period"
-                unit={unit}
-              />
-              <div>
+              <div className="min-w-0">
+                <CostBarChart
+                  data={branchRows.map((b) => ({
+                    label: `${b.project} / ${b.branch}`,
+                    cost_cents: b.cost_cents,
+                    tokens: b.input_tokens + b.output_tokens,
+                  }))}
+                  emptyLabel="No branch data for this period"
+                  unit={unit}
+                />
+              </div>
+              <div className="min-w-0">
                 <table className="hidden w-full text-sm sm:table">
                   <thead>
                     <tr className="border-b border-white/10 text-left text-zinc-400">
@@ -325,16 +334,18 @@ export default async function ReposPage({
             />
           ) : (
             <div className="grid gap-6 sm:grid-cols-2">
-              <CostBarChart
-                data={ticketRows.map((t) => ({
-                  label: t.ticket,
-                  cost_cents: t.cost_cents,
-                  tokens: t.input_tokens + t.output_tokens,
-                }))}
-                emptyLabel="No ticket data for this period"
-                unit={unit}
-              />
-              <div>
+              <div className="min-w-0">
+                <CostBarChart
+                  data={ticketRows.map((t) => ({
+                    label: t.ticket,
+                    cost_cents: t.cost_cents,
+                    tokens: t.input_tokens + t.output_tokens,
+                  }))}
+                  emptyLabel="No ticket data for this period"
+                  unit={unit}
+                />
+              </div>
+              <div className="min-w-0">
                 <table className="hidden w-full text-sm sm:table">
                   <thead>
                     <tr className="border-b border-white/10 text-left text-zinc-400">
@@ -369,9 +380,14 @@ export default async function ReposPage({
                 <ul className="divide-y divide-white/5 text-sm sm:hidden">
                   {ticketRows.map((t, i) => (
                     <li key={i} className="flex flex-col gap-1 py-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-zinc-200">{t.ticket}</span>
-                        <span className="tabular-nums text-zinc-300">
+                      <div className="flex items-center justify-between gap-3">
+                        <span
+                          className="min-w-0 flex-1 truncate text-zinc-200"
+                          title={t.ticket}
+                        >
+                          {t.ticket}
+                        </span>
+                        <span className="shrink-0 tabular-nums text-zinc-300">
                           {fmtValue(
                             t.cost_cents,
                             t.input_tokens + t.output_tokens
