@@ -260,8 +260,12 @@ export async function POST(request: NextRequest) {
     const { error: rollupError, count } = await supabase
       .from("daily_rollups")
       .upsert(rollupRows, {
+        // Surface added to the PK in migration 014 so two surfaces on the
+        // same (device, day, role, provider, model, repo, branch) combo
+        // don't UPSERT-collide; the conflict target must mirror the new PK
+        // shape exactly or PostgREST 400s with `no unique constraint`.
         onConflict:
-          "device_id,bucket_day,role,provider,model,repo_id,git_branch",
+          "device_id,bucket_day,role,provider,model,repo_id,git_branch,surface",
         count: "exact",
       });
 

@@ -9,6 +9,8 @@ import {
   getCostByModel,
   getCostByRepo,
   getCostByUser,
+  getCostBySurface,
+  getKnownSurfaces,
   getActivityHeatmap,
   UNASSIGNED_USER_ID,
 } from "@/lib/dal";
@@ -28,8 +30,14 @@ import { TopBreakdownCard } from "@/components/top-breakdown-card";
 import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
+import {
+  SurfaceFilter,
+  formatSurface,
+  parseSurfaceParam,
+} from "@/components/surface-filter";
 import { ActivityChart } from "@/components/charts/activity-chart";
 import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
+import { CostBarChart } from "@/components/charts/cost-bar-chart";
 import {
   LinkDaemonBanner,
   FirstSyncInProgressBanner,
@@ -39,7 +47,12 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 export default async function OverviewPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string; user?: string; units?: string }>;
+  searchParams: Promise<{
+    days?: string;
+    user?: string;
+    units?: string;
+    surface?: string;
+  }>;
 }) {
   const params = await searchParams;
   const user = await getCurrentUser();
@@ -47,7 +60,8 @@ export default async function OverviewPage({
 
   const unit = parseUnit(params.units);
   const scopedUserId = params.user || null;
-  const scope = { scopedUserId };
+  const surfaces = parseSurfaceParam(params.surface);
+  const scope = { scopedUserId, surfaces };
   const earliestActivity =
     params.days === ALL_PERIOD_VALUE
       ? await getEarliestActivity(user, scope)
@@ -80,6 +94,8 @@ export default async function OverviewPage({
     topRepos,
     topUsers,
     heatmap,
+    knownSurfaces,
+    surfaceShare,
   ] = await Promise.all([
     getOverviewStats(user, range, scope),
     getDailyActivity(user, range, scope),
@@ -90,10 +106,18 @@ export default async function OverviewPage({
       : Promise.resolve(null),
     getCostByModel(user, range, scope),
     getCostByRepo(user, range, scope),
-    showTopContributor ? getCostByUser(user, range) : Promise.resolve([]),
+    showTopContributor
+      ? getCostByUser(user, range, scope)
+      : Promise.resolve([]),
     heatmapMode === "hourly"
       ? getActivityHeatmap(user, range, tz, scope)
       : Promise.resolve([]),
+    // The chip's option list is derived from data, not a hardcoded enum
+    // (#187 part 1 — let JetBrains show up the day the first row arrives).
+    // Intentionally not narrowed by the active `?surface=` so the chip can
+    // still let the user widen out from a single-surface state.
+    getKnownSurfaces(user, { scopedUserId }),
+    getCostBySurface(user, range, scope),
   ]);
 
   // Caption for the headline-card delta (e.g. "vs previous 7d"). For numeric
@@ -129,6 +153,7 @@ export default async function OverviewPage({
     days: params.days,
     user: params.user,
     units: params.units,
+    surface: params.surface,
   });
   const totalCostCents = stats.totalCostCents;
   const topModelLeader = topModels[0] ?? null;
@@ -148,6 +173,7 @@ export default async function OverviewPage({
         <Suspense>
           <div className="flex flex-wrap items-center gap-3">
             <UserFilter members={members} role={user.role} />
+            <SurfaceFilter surfaces={knownSurfaces} />
             <UnitsSelector />
             <PeriodSelector />
           </div>
@@ -250,6 +276,29 @@ export default async function OverviewPage({
       {hasSynced && (
         <Card>
           <CardHeader>
+            <CardTitle>{`Spend by Surface (${unit === "tokens" ? "Tokens" : "Cost"})`}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CostBarChart
+              data={surfaceShare.map((s) => ({
+                label: formatSurface(s.surface),
+                cost_cents: s.cost_cents,
+                tokens: s.input_tokens + s.output_tokens,
+              }))}
+              emptyLabel={
+                knownSurfaces.length <= 1
+                  ? "Single-surface org — break out per-surface spend after a second IDE / CLI starts syncing."
+                  : "No surface activity for this period"
+              }
+              unit={unit}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {hasSynced && (
+        <Card>
+          <CardHeader>
             <CardTitle>{heatmapTitle(heatmapMode, unit)}</CardTitle>
           </CardHeader>
           <CardContent>
@@ -308,11 +357,13 @@ function buildSearchParams(params: {
   days?: string;
   user?: string;
   units?: string;
+  surface?: string;
 }): string {
   const sp = new URLSearchParams();
   if (params.days) sp.set("days", params.days);
   if (params.user) sp.set("user", params.user);
   if (params.units) sp.set("units", params.units);
+  if (params.surface) sp.set("surface", params.surface);
   const q = sp.toString();
   return q ? `?${q}` : "";
 }

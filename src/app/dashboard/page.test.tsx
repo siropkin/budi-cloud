@@ -42,6 +42,8 @@ const dal = {
   getCostByModel: vi.fn(),
   getCostByRepo: vi.fn(),
   getCostByUser: vi.fn(),
+  getCostBySurface: vi.fn(),
+  getKnownSurfaces: vi.fn(),
   getActivityHeatmap: vi.fn(),
 };
 vi.mock("@/lib/dal", () => ({
@@ -113,6 +115,24 @@ beforeEach(() => {
   ]);
   dal.getActivityHeatmap.mockResolvedValue([
     { dow: 2, hour: 14, session_count: 3, cost_cents: 50_000 },
+  ]);
+  // #187 surface dimension. Default fixture: a multi-surface org so the
+  // chip renders and the "Spend by Surface" card has non-zero data;
+  // single-surface coverage is in the dedicated test.
+  dal.getKnownSurfaces.mockResolvedValue(["cursor", "vscode"]);
+  dal.getCostBySurface.mockResolvedValue([
+    {
+      surface: "vscode",
+      cost_cents: 80_000,
+      input_tokens: 3000,
+      output_tokens: 1500,
+    },
+    {
+      surface: "cursor",
+      cost_cents: 40_000,
+      input_tokens: 1000,
+      output_tokens: 500,
+    },
   ]);
 });
 
@@ -247,5 +267,62 @@ describe("dashboard /page (Overview)", () => {
     expect(text).toContain("Top model");
     expect(text).toContain("Top repo");
     expect(text).not.toContain("Top contributor");
+  });
+
+  it("surface filter: ?surface=vscode threads through to every breakdown DAL call so every chart on the page narrows to one surface (#187)", async () => {
+    await render({ surface: "vscode" });
+    // Every breakdown helper that takes scope should see the surface
+    // narrowed to ["vscode"]. The chip carries the URL into the DAL via
+    // `parseSurfaceParam`, so a regression that drops the wiring on a
+    // single helper would surface here.
+    for (const fn of [
+      dal.getOverviewStats,
+      dal.getDailyActivity,
+      dal.getCostByModel,
+      dal.getCostByRepo,
+      dal.getCostByUser,
+      dal.getCostBySurface,
+    ]) {
+      const lastCall = fn.mock.calls.at(-1);
+      expect(lastCall, `${fn.getMockName?.() ?? "dal fn"} was not called`)
+        .toBeTruthy();
+      const scope = lastCall![lastCall!.length - 1];
+      expect(scope).toMatchObject({ surfaces: ["vscode"] });
+    }
+  });
+
+  it("surface filter: CSV `?surface=vscode,cursor` is parsed into a multi-value scope (#187 acceptance)", async () => {
+    await render({ surface: "vscode,cursor" });
+    const overviewCall = dal.getOverviewStats.mock.calls.at(-1);
+    expect(overviewCall).toBeTruthy();
+    const scope = overviewCall![overviewCall!.length - 1];
+    expect(scope).toMatchObject({ surfaces: ["vscode", "cursor"] });
+  });
+
+  it("surface chart: renders the 'Spend by Surface' card and pulls per-surface costs from the DAL (#187)", async () => {
+    const node = await render();
+    const text = extractText(node);
+    expect(text).toContain("Spend by Surface");
+    expect(dal.getCostBySurface).toHaveBeenCalled();
+    // The chart receives bars as a prop array (not visible in extractText),
+    // so the user-facing assertion lives on the card title — the DAL-call
+    // assertion above is what catches a regression that drops the data
+    // pipeline upstream of the chart.
+  });
+
+  it("surface chart: single-surface org renders an empty-state copy that names the next-state condition (#187)", async () => {
+    dal.getKnownSurfaces.mockResolvedValue(["vscode"]);
+    dal.getCostBySurface.mockResolvedValue([
+      {
+        surface: "vscode",
+        cost_cents: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+      },
+    ]);
+    const node = await render();
+    const text = extractText(node);
+    expect(text).toContain("Spend by Surface");
+    expect(text).toContain("Single-surface org");
   });
 });

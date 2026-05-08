@@ -19,9 +19,10 @@ import {
 } from "lucide-react";
 
 // Filter params that scope every dashboard page (period switcher, manager
-// teammate filter). The sidebar carries them across navigations so users
-// don't have to re-pick `30d` / `All team` on each page (#172).
-const PRESERVED_PARAMS = ["days", "user"] as const;
+// teammate filter, surface chip from #187). The sidebar carries them across
+// navigations so users don't have to re-pick `30d` / `All team` /
+// `?surface=vscode` on each page (#172).
+const PRESERVED_PARAMS = ["days", "user", "surface"] as const;
 
 /**
  * Build the `?days=…&user=…` suffix to graft onto every sidebar link, dropping

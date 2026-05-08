@@ -6,6 +6,7 @@ import {
   getCostByTicket,
   getEarliestActivity,
   getOrgMembers,
+  getKnownSurfaces,
 } from "@/lib/dal";
 import { dateRangeFromDays } from "@/lib/date-range";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
@@ -15,6 +16,7 @@ import { fmtCost, fmtNum, repoName } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
+import { SurfaceFilter, parseSurfaceParam } from "@/components/surface-filter";
 import { CostBarChart } from "@/components/charts/cost-bar-chart";
 import { COST_BAR_CHART_MAX_ITEMS } from "@/components/charts/cost-bar-chart-config";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -22,25 +24,32 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 export default async function ReposPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string; user?: string; units?: string }>;
+  searchParams: Promise<{
+    days?: string;
+    user?: string;
+    units?: string;
+    surface?: string;
+  }>;
 }) {
   const params = await searchParams;
   const user = await getCurrentUser();
   if (!user?.org_id) return null;
 
   const unit = parseUnit(params.units);
-  const scope = { scopedUserId: params.user || null };
+  const surfaces = parseSurfaceParam(params.surface);
+  const scope = { scopedUserId: params.user || null, surfaces };
   const earliestActivity =
     params.days === ALL_PERIOD_VALUE
       ? await getEarliestActivity(user, scope)
       : null;
   const tz = await getViewerTimeZone();
   const range = dateRangeFromDays(params.days, earliestActivity, tz);
-  const [repos, branches, tickets, members] = await Promise.all([
+  const [repos, branches, tickets, members, knownSurfaces] = await Promise.all([
     getCostByRepo(user, range, scope),
     getCostByBranch(user, range, scope),
     getCostByTicket(user, range, scope),
     user.role === "manager" ? getOrgMembers(user.org_id) : Promise.resolve([]),
+    getKnownSurfaces(user, { scopedUserId: scope.scopedUserId }),
   ]);
 
   const isTokens = unit === "tokens";
@@ -112,6 +121,7 @@ export default async function ReposPage({
         <Suspense>
           <div className="flex flex-wrap items-center gap-3">
             <UserFilter members={members} role={user.role} />
+            <SurfaceFilter surfaces={knownSurfaces} />
             <UnitsSelector />
             <PeriodSelector />
           </div>
