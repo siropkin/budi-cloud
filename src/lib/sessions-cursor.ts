@@ -15,6 +15,26 @@ export function encodeSessionsCursor(cursor: SessionsCursor): string {
   return base64UrlEncode(json);
 }
 
+/**
+ * Defense-in-depth caps for #176. The cursor value flows into a PostgREST
+ * `.or()` filter that historically built the expression via string
+ * interpolation (`getSessions`). Even though the DAL now quotes/escapes
+ * cursor values before interpolation, decoding still validates here so a
+ * crafted URL falls back cleanly to "first page" instead of producing a 500
+ * deeper in the query path.
+ *
+ * - `startedAt` must round-trip through `Date` and reproduce the same string,
+ *   pinning it to a real ISO-8601 instant (e.g. `2026-04-15T10:00:00.000Z`).
+ *   This rejects free-form strings the cursor was never meant to carry.
+ * - `sessionId` must not contain `,` `(` `)` — the PostgREST filter-tree
+ *   delimiters that drove the original injection report. Real daemons emit
+ *   opaque token-shaped ids; these characters never legitimately appear.
+ * - Both are length-capped so a megabyte-long cursor can't blow up the
+ *   downstream `.or()` string.
+ */
+const MAX_CURSOR_FIELD_LEN = 256;
+const SESSION_ID_DISALLOWED = /[,()]/;
+
 export function decodeSessionsCursor(
   raw: string | null | undefined
 ): SessionsCursor | null {
@@ -23,15 +43,34 @@ export function decodeSessionsCursor(
     const json = base64UrlDecode(raw);
     const parsed = JSON.parse(json) as Partial<SessionsCursor>;
     if (
-      typeof parsed.startedAt === "string" &&
-      typeof parsed.sessionId === "string"
+      typeof parsed.startedAt !== "string" ||
+      typeof parsed.sessionId !== "string"
     ) {
-      return { startedAt: parsed.startedAt, sessionId: parsed.sessionId };
+      return null;
     }
-    return null;
+    if (
+      parsed.startedAt.length > MAX_CURSOR_FIELD_LEN ||
+      parsed.sessionId.length > MAX_CURSOR_FIELD_LEN
+    ) {
+      return null;
+    }
+    if (!isIsoInstant(parsed.startedAt)) return null;
+    if (SESSION_ID_DISALLOWED.test(parsed.sessionId)) return null;
+    return { startedAt: parsed.startedAt, sessionId: parsed.sessionId };
   } catch {
     return null;
   }
+}
+
+/**
+ * `Date.parse` happily accepts plenty of strings the cursor should not carry
+ * (`"2026"`, `"April 15"`, …). Round-tripping through `toISOString()` is the
+ * cheapest way to require an actual UTC instant the daemon would emit.
+ */
+function isIsoInstant(value: string): boolean {
+  const ms = Date.parse(value);
+  if (Number.isNaN(ms)) return false;
+  return new Date(ms).toISOString() === value;
 }
 
 function base64UrlEncode(s: string): string {
