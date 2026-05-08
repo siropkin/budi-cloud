@@ -28,7 +28,7 @@ import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
 import { SurfaceFilter } from "@/components/surface-filter";
-import { formatSurface, parseSurfaceParam } from "@/lib/surface";
+import { parseSurfaceParam } from "@/lib/surface";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 function formatTimestamp(ts: string | null): string {
@@ -104,28 +104,6 @@ export default async function SessionsPage({
   if (params.units) baseParams.set("units", params.units);
   if (params.surface) baseParams.set("surface", params.surface);
 
-  // Always render the Surface column (#203). Earlier (#187) the column
-  // hid on single-surface orgs to avoid a redundant cell, but that gate
-  // also collapsed the column on orgs whose daemon hasn't yet started
-  // emitting `surface` — leaving the user with no signal that the
-  // dimension exists. The header reads as "Surface" with `Unknown` cells
-  // until daemons upload a real value, which is the documented #203
-  // acceptance ("the column structure should still land — it'll fill in
-  // the moment #204's ingest fix ships").
-  const showSurfaceColumn = true;
-  // Click-to-filter target for a session-row's surface cell. Preserves the
-  // other active filters; resets cursor / page so the filtered list starts
-  // from the first page rather than wherever the user happened to be.
-  function surfaceFilterHref(surface: string): string {
-    const sp = new URLSearchParams();
-    if (params.days) sp.set("days", params.days);
-    if (params.user) sp.set("user", params.user);
-    if (params.units) sp.set("units", params.units);
-    sp.set("surface", surface);
-    const qs = sp.toString();
-    return qs ? `?${qs}` : "?";
-  }
-
   const firstParams = new URLSearchParams(baseParams);
   // "First" jumps back to page 1 — drops cursor and `p`. The forward-only
   // cursor scheme (#85) can't cheaply step back one page, so we expose only
@@ -182,11 +160,6 @@ export default async function SessionsPage({
                       <th className="pr-3 pb-2 font-medium whitespace-nowrap">
                         Provider
                       </th>
-                      {showSurfaceColumn && (
-                        <th className="pr-3 pb-2 font-medium whitespace-nowrap">
-                          Surface
-                        </th>
-                      )}
                       <th className="pr-3 pb-2 font-medium whitespace-nowrap">
                         Model
                       </th>
@@ -227,54 +200,56 @@ export default async function SessionsPage({
                             >
                               <Link
                                 href={href}
-                                className="block max-w-[20ch] truncate py-2 pr-3"
+                                className="block max-w-[20ch] truncate py-2 pr-3 whitespace-nowrap"
                               >
                                 {s.owner_name ?? "-"}
                               </Link>
                             </td>
                           )}
-                          <td className="text-zinc-300">
+                          <td
+                            className="text-zinc-300"
+                            title={formatProvider(s.provider)}
+                          >
                             <Link
                               href={href}
-                              className="block py-2 pr-3 whitespace-nowrap"
+                              className="block max-w-[16ch] truncate py-2 pr-3 whitespace-nowrap"
                             >
                               {formatProvider(s.provider)}
                             </Link>
                           </td>
-                          {showSurfaceColumn && (
-                            <td
-                              className="text-zinc-400"
-                              title={`Filter to ${formatSurface(s.surface)}`}
-                            >
-                              <Link
-                                href={surfaceFilterHref(s.surface)}
-                                className="block py-2 pr-3 hover:text-zinc-200"
-                                data-testid="session-surface-cell"
-                              >
-                                {formatSurface(s.surface)}
-                              </Link>
-                            </td>
-                          )}
                           <td
                             className="text-zinc-400"
                             title={s.main_model ?? undefined}
                           >
                             <Link
                               href={href}
-                              className="block max-w-[16ch] truncate py-2 pr-3"
+                              className="block max-w-[16ch] truncate py-2 pr-3 whitespace-nowrap"
                             >
                               {s.main_model
                                 ? formatModelName(s.main_model)
                                 : "-"}
                             </Link>
                           </td>
-                          <td className="text-zinc-400">
-                            <Link href={href} className="block py-2 pr-3">
+                          <td
+                            className="text-zinc-400"
+                            title={
+                              s.started_at
+                                ? new Date(s.started_at).toLocaleString()
+                                : undefined
+                            }
+                          >
+                            <Link
+                              href={href}
+                              className="block max-w-[14ch] truncate py-2 pr-3 whitespace-nowrap"
+                            >
                               {formatTimestamp(s.started_at)}
                             </Link>
                           </td>
                           <td className="text-zinc-400">
-                            <Link href={href} className="block py-2 pr-3">
+                            <Link
+                              href={href}
+                              className="block max-w-[10ch] truncate py-2 pr-3 whitespace-nowrap"
+                            >
                               {formatDuration(
                                 s.duration_ms,
                                 s.started_at,
@@ -282,24 +257,45 @@ export default async function SessionsPage({
                               )}
                             </Link>
                           </td>
-                          <td className="text-zinc-400">
-                            <Link href={href} className="block py-2 pr-3">
+                          <td
+                            className="text-zinc-400"
+                            title={repoName(s.repo_id) || undefined}
+                          >
+                            <Link
+                              href={href}
+                              className="block max-w-[16ch] truncate py-2 pr-3 whitespace-nowrap"
+                            >
                               {repoName(s.repo_id)}
                             </Link>
                           </td>
-                          <td className="text-zinc-400">
-                            <Link href={href} className="block py-2 pr-3">
+                          <td
+                            className="text-zinc-400"
+                            title={
+                              s.git_branch?.replace(/^refs\/heads\//, "") ||
+                              undefined
+                            }
+                          >
+                            <Link
+                              href={href}
+                              className="block max-w-[16ch] truncate py-2 pr-3 whitespace-nowrap"
+                            >
                               {s.git_branch?.replace(/^refs\/heads\//, "") ||
                                 "-"}
                             </Link>
                           </td>
                           <td className="text-right tabular-nums text-zinc-300">
-                            <Link href={href} className="block py-2 pr-3">
+                            <Link
+                              href={href}
+                              className="block py-2 pr-3 whitespace-nowrap"
+                            >
                               {fmtNum(s.message_count)}
                             </Link>
                           </td>
                           <td className="text-right tabular-nums text-zinc-200">
-                            <Link href={href} className="block py-2">
+                            <Link
+                              href={href}
+                              className="block py-2 whitespace-nowrap"
+                            >
                               {isTokens
                                 ? fmtNum(
                                     Number(s.total_input_tokens) +

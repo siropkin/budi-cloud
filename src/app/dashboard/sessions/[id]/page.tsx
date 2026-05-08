@@ -84,72 +84,112 @@ export default async function SessionDetailPage({
         >
           ← Sessions
         </Link>
-        <h1 className="mt-2 text-xl font-bold">Session {sessionId}</h1>
+        {/* Session id is a long opaque string; truncate so the header stays
+            scannable on narrow widths and surface the full id via the title
+            attribute for copy-paste. */}
+        <h1
+          className="mt-2 truncate text-xl font-bold"
+          title={`Session ${sessionId}`}
+        >
+          Session{" "}
+          <span className="font-mono text-base font-medium text-zinc-300">
+            {sessionId}
+          </span>
+        </h1>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Summary</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-            {isManager && (
-              <Field label="Member" value={session.owner_name ?? "-"} />
-            )}
-            <Field label="Provider" value={formatProvider(session.provider)} />
-            <Field label="Surface" value={formatSurface(session.surface)} />
-            <Field
-              label="Model"
-              value={
-                session.main_model ? formatModelName(session.main_model) : "-"
-              }
-            />
-            <Field
-              label="Started"
-              value={
-                session.started_at
-                  ? new Date(session.started_at).toLocaleString()
-                  : "-"
-              }
-            />
-            <Field
-              label="Duration"
-              value={formatDuration(
-                session.duration_ms,
-                session.started_at,
-                session.ended_at
+      {/*
+        Two-section row (#203 follow-up). The original single-card Summary
+        crammed identity (who / what / where) and activity (when / how
+        much) into one undifferentiated dl-grid, which left a viewer
+        pivoting between unrelated rows. Splitting into a Context card +
+        an Activity card means a manager scanning "is this an expensive
+        Cursor session on the auth-rewrite branch?" reads each thread in
+        one place. Stacks at sm; sits side-by-side at lg+.
+      */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Context</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+              {isManager && (
+                <Field label="Member" value={session.owner_name ?? "-"} />
               )}
-            />
-            <Field label="Repo" value={repoName(session.repo_id)} />
-            <Field
-              label="Branch"
-              value={session.git_branch?.replace(/^refs\/heads\//, "") || "-"}
-            />
-            <Field label="Messages" value={fmtNum(session.message_count)} />
-            <Field
-              label="Tokens"
-              value={
-                isOutputOnly
-                  ? `${fmtNum(totalTokens)} (output-only)`
-                  : fmtNum(totalTokens)
-              }
-            />
-            <Field
-              label="Cost"
-              value={fmtCost(Number(session.total_cost_cents))}
-            />
-          </dl>
-        </CardContent>
-      </Card>
+              <Field
+                label="Provider"
+                value={formatProvider(session.provider)}
+              />
+              <Field label="Surface" value={formatSurface(session.surface)} />
+              <Field
+                label="Model"
+                value={
+                  session.main_model ? formatModelName(session.main_model) : "-"
+                }
+              />
+              <Field label="Repo" value={repoName(session.repo_id)} />
+              <Field
+                label="Branch"
+                value={session.git_branch?.replace(/^refs\/heads\//, "") || "-"}
+              />
+            </dl>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Activity</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+              <Field
+                label="Started"
+                value={
+                  session.started_at
+                    ? new Date(session.started_at).toLocaleString()
+                    : "-"
+                }
+              />
+              <Field
+                label="Duration"
+                value={formatDuration(
+                  session.duration_ms,
+                  session.started_at,
+                  session.ended_at
+                )}
+              />
+              <Field label="Messages" value={fmtNum(session.message_count)} />
+              <Field
+                label="Tokens"
+                value={
+                  isOutputOnly
+                    ? `${fmtNum(totalTokens)} (output-only)`
+                    : fmtNum(totalTokens)
+                }
+              />
+              <Field
+                label="Cost"
+                value={fmtCost(Number(session.total_cost_cents))}
+              />
+            </dl>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
 
 function Field({ label, value }: { label: string; value: string | number }) {
   return (
-    <div>
+    <div className="min-w-0">
       <dt className="text-xs uppercase tracking-wide text-zinc-500">{label}</dt>
-      <dd className="mt-0.5 text-zinc-200">{value}</dd>
+      <dd
+        className="mt-0.5 truncate whitespace-nowrap text-zinc-200"
+        title={typeof value === "string" ? value : String(value)}
+      >
+        {value}
+      </dd>
     </div>
   );
 }
