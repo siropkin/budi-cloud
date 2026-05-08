@@ -36,10 +36,7 @@ export async function GET(request: NextRequest) {
   // --- Per-user rate limit (#179) ---
   // Once the Supabase session is resolved, switch to a per-user bucket so two
   // tabs from the same NAT don't share a single IP cap.
-  const userLimit = await rateLimit(
-    `freshness:user:${user.id}`,
-    RATE_LIMIT
-  );
+  const userLimit = await rateLimit(`freshness:user:${user.id}`, RATE_LIMIT);
   if (!userLimit.success) {
     return rateLimitResponse(userLimit.retryAfterSeconds);
   }

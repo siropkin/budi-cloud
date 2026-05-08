@@ -75,5 +75,14 @@ END;
 $$;
 
 -- Only the service role calls the RPC (admin client). Lock everyone else out.
+-- The CI dry-run runs on vanilla Postgres without the Supabase-provisioned
+-- `service_role` (mirrors the `auth.uid()` shim above), so guard the GRANT
+-- so we still validate syntax on every PR.
 REVOKE ALL ON FUNCTION rate_limit_check(TEXT, INTEGER, INTEGER) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION rate_limit_check(TEXT, INTEGER, INTEGER) TO service_role;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+        EXECUTE 'GRANT EXECUTE ON FUNCTION rate_limit_check(TEXT, INTEGER, INTEGER) TO service_role';
+    END IF;
+END
+$$;

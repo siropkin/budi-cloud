@@ -53,10 +53,7 @@ async function authenticateApiKey(
  */
 export async function GET(request: NextRequest) {
   // --- Pre-auth IP rate limit (#179) ---
-  const ipLimit = await rateLimit(
-    `whoami:ip:${clientIp(request)}`,
-    RATE_LIMIT
-  );
+  const ipLimit = await rateLimit(`whoami:ip:${clientIp(request)}`, RATE_LIMIT);
   if (!ipLimit.success) return rateLimitResponse(ipLimit.retryAfterSeconds);
 
   const supabase = createAdminClient();
