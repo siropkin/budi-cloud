@@ -13,6 +13,10 @@ type Row = Record<string, unknown>;
 
 class FakeSupabase {
   private rows: Row[] = [];
+  // Per-bucket counters for the `check_rate_limit` RPC fake (#179).
+  // The route hits this exactly once per request, after auth.
+  rateLimitCounts = new Map<string, number>();
+  rateLimitOverride: { allowed: boolean } | null = null;
 
   seed(rows: Row[]) {
     this.rows = [...rows];
@@ -21,6 +25,41 @@ class FakeSupabase {
   from(_table: string) {
     void _table;
     return new FakeQuery(this.rows);
+  }
+
+  rpc(name: string, args: Record<string, unknown>) {
+    if (name !== "check_rate_limit") {
+      return Promise.resolve({
+        data: null,
+        error: { message: `unsupported rpc: ${name}` },
+      });
+    }
+    if (this.rateLimitOverride) {
+      return Promise.resolve({
+        data: [
+          {
+            allowed: this.rateLimitOverride.allowed,
+            remaining: this.rateLimitOverride.allowed ? 1 : 0,
+            reset_at: new Date(Date.now() + 60_000).toISOString(),
+          },
+        ],
+        error: null,
+      });
+    }
+    const key = String(args.p_bucket_key);
+    const limit = Number(args.p_limit);
+    const next = (this.rateLimitCounts.get(key) ?? 0) + 1;
+    this.rateLimitCounts.set(key, next);
+    return Promise.resolve({
+      data: [
+        {
+          allowed: next <= limit,
+          remaining: Math.max(0, limit - next),
+          reset_at: new Date(Date.now() + 60_000).toISOString(),
+        },
+      ],
+      error: null,
+    });
   }
 }
 
@@ -56,6 +95,8 @@ vi.mock("@/lib/supabase/admin", () => ({
 
 beforeEach(() => {
   fake.seed([]);
+  fake.rateLimitCounts.clear();
+  fake.rateLimitOverride = null;
 });
 
 describe("GET /v1/whoami (#541)", () => {
@@ -146,5 +187,60 @@ describe("GET /v1/whoami (#541)", () => {
     expect(res.status).toBe(200);
     expect(text).not.toContain("budi_testkey");
     expect(text).not.toContain("api_key");
+  });
+});
+
+describe("GET /v1/whoami — rate limiting (#179)", () => {
+  it("returns 429 with Retry-After when the bucket is exhausted", async () => {
+    fake.seed([
+      { id: "usr_test", org_id: "org_xEvtA", api_key: "budi_testkey" },
+    ]);
+    // Force the RPC fake to report blocked regardless of count.
+    fake.rateLimitOverride = { allowed: false };
+
+    const { GET } = await import("./route");
+    const req = new Request("http://localhost/v1/whoami", {
+      headers: { authorization: "Bearer budi_testkey" },
+    });
+    const res = await GET(req as unknown as Parameters<typeof GET>[0]);
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBeTruthy();
+    expect(res.headers.get("X-RateLimit-Limit")).toBe("20");
+  });
+
+  it("emits rate-limit headers on a successful response", async () => {
+    fake.seed([
+      { id: "usr_test", org_id: "org_xEvtA", api_key: "budi_testkey" },
+    ]);
+
+    const { GET } = await import("./route");
+    const req = new Request("http://localhost/v1/whoami", {
+      headers: { authorization: "Bearer budi_testkey" },
+    });
+    const res = await GET(req as unknown as Parameters<typeof GET>[0]);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("X-RateLimit-Limit")).toBe("20");
+    expect(res.headers.get("X-RateLimit-Remaining")).toBe("19");
+  });
+
+  it("blocks the 21st request within the window", async () => {
+    fake.seed([
+      { id: "usr_test", org_id: "org_xEvtA", api_key: "budi_testkey" },
+    ]);
+
+    const { GET } = await import("./route");
+    const mkReq = () =>
+      new Request("http://localhost/v1/whoami", {
+        headers: { authorization: "Bearer budi_testkey" },
+      });
+
+    for (let i = 0; i < 20; i += 1) {
+      const ok = await GET(mkReq() as unknown as Parameters<typeof GET>[0]);
+      expect(ok.status).toBe(200);
+    }
+    const blocked = await GET(mkReq() as unknown as Parameters<typeof GET>[0]);
+    expect(blocked.status).toBe(429);
   });
 });

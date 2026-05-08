@@ -10,6 +10,10 @@ type Row = Record<string, unknown>;
 
 class FakeSupabase {
   tables = new Map<string, Row[]>();
+  // Rate-limit RPC fake (#179). The route hits this once per request,
+  // after auth. Tests can flip `rateLimitOverride` to force a 429.
+  rateLimitCounts = new Map<string, number>();
+  rateLimitOverride: { allowed: boolean } | null = null;
 
   seed(table: string, rows: Row[]) {
     this.tables.set(table, [...rows]);
@@ -18,6 +22,41 @@ class FakeSupabase {
   from(table: string) {
     if (!this.tables.has(table)) this.tables.set(table, []);
     return new FakeQuery(this.tables.get(table)!);
+  }
+
+  rpc(name: string, args: Record<string, unknown>) {
+    if (name !== "check_rate_limit") {
+      return Promise.resolve({
+        data: null,
+        error: { message: `unsupported rpc: ${name}` },
+      });
+    }
+    if (this.rateLimitOverride) {
+      return Promise.resolve({
+        data: [
+          {
+            allowed: this.rateLimitOverride.allowed,
+            remaining: this.rateLimitOverride.allowed ? 1 : 0,
+            reset_at: new Date(Date.now() + 60_000).toISOString(),
+          },
+        ],
+        error: null,
+      });
+    }
+    const key = String(args.p_bucket_key);
+    const limit = Number(args.p_limit);
+    const next = (this.rateLimitCounts.get(key) ?? 0) + 1;
+    this.rateLimitCounts.set(key, next);
+    return Promise.resolve({
+      data: [
+        {
+          allowed: next <= limit,
+          remaining: Math.max(0, limit - next),
+          reset_at: new Date(Date.now() + 60_000).toISOString(),
+        },
+      ],
+      error: null,
+    });
   }
 }
 
@@ -92,6 +131,8 @@ vi.mock("@/lib/supabase/admin", () => ({
 
 beforeEach(() => {
   fake.tables.clear();
+  fake.rateLimitCounts.clear();
+  fake.rateLimitOverride = null;
 });
 
 const callerKey = "budi_caller";
@@ -195,5 +236,44 @@ describe("GET /v1/ingest/status (#182)", () => {
     const unknownBody = await unknownRes.json();
     const foreignBody = await foreignRes.json();
     expect(unknownBody).toEqual(foreignBody);
+  });
+});
+
+describe("GET /v1/ingest/status — rate limiting (#179)", () => {
+  it("returns 429 with Retry-After when the per-key bucket is exhausted", async () => {
+    seedCaller();
+    fake.seed("devices", [
+      {
+        id: "dev_mine",
+        user_id: callerUserId,
+        last_seen: "2026-05-01T00:00:00Z",
+      },
+    ]);
+    fake.rateLimitOverride = { allowed: false };
+
+    const res = await callStatus("dev_mine");
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBeTruthy();
+    expect(res.headers.get("X-RateLimit-Limit")).toBe("30");
+  });
+
+  it("emits rate-limit headers on a successful status response", async () => {
+    seedCaller();
+    fake.seed("devices", [
+      {
+        id: "dev_mine",
+        user_id: callerUserId,
+        last_seen: "2026-05-01T00:00:00Z",
+      },
+    ]);
+    fake.seed("daily_rollups", [
+      { device_id: "dev_mine", bucket_day: "2026-05-01" },
+    ]);
+    fake.seed("session_summaries", []);
+
+    const res = await callStatus("dev_mine");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("X-RateLimit-Limit")).toBe("30");
+    expect(res.headers.get("X-RateLimit-Remaining")).toBe("29");
   });
 });

@@ -1,5 +1,10 @@
 import { type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  enforceRateLimit,
+  RATE_LIMITS,
+  withRateLimitHeaders,
+} from "@/lib/rate-limit";
 
 /**
  * Authenticate the request via Bearer token.
@@ -50,5 +55,17 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  return Response.json({ org_id: user.org_id });
+  // #179: rate-limit per API key. The CLI calls /whoami once per
+  // `budi cloud init`; legitimate humans never hit 20/min.
+  const { blocked, result } = await enforceRateLimit({
+    namespace: "whoami",
+    identifier: user.id as string,
+    ...RATE_LIMITS.whoami,
+  });
+  if (blocked) return blocked;
+
+  return withRateLimitHeaders(
+    Response.json({ org_id: user.org_id }),
+    result
+  );
 }

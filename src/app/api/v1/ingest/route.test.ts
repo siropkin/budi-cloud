@@ -36,7 +36,40 @@ class FakeSupabase {
    * exercises the overview path on the read side, so we keep the shim minimal
    * — extend if a future ingest test calls another breakdown.
    */
+  // Rate-limit RPC fake (#179): the route hits this once per request,
+  // after auth. Tests can flip `rateLimitOverride` to force a 429.
+  rateLimitCounts = new Map<string, number>();
+  rateLimitOverride: { allowed: boolean } | null = null;
+
   rpc(name: string, args: Record<string, unknown>) {
+    if (name === "check_rate_limit") {
+      if (this.rateLimitOverride) {
+        return Promise.resolve({
+          data: [
+            {
+              allowed: this.rateLimitOverride.allowed,
+              remaining: this.rateLimitOverride.allowed ? 1 : 0,
+              reset_at: new Date(Date.now() + 60_000).toISOString(),
+            },
+          ],
+          error: null,
+        });
+      }
+      const key = String(args.p_bucket_key);
+      const limit = Number(args.p_limit);
+      const next = (this.rateLimitCounts.get(key) ?? 0) + 1;
+      this.rateLimitCounts.set(key, next);
+      return Promise.resolve({
+        data: [
+          {
+            allowed: next <= limit,
+            remaining: Math.max(0, limit - next),
+            reset_at: new Date(Date.now() + 60_000).toISOString(),
+          },
+        ],
+        error: null,
+      });
+    }
     if (name !== "dashboard_overview_stats") {
       return Promise.resolve({
         data: null,
@@ -264,6 +297,8 @@ beforeEach(() => {
   ]) {
     fake.seed(t, []);
   }
+  fake.rateLimitCounts.clear();
+  fake.rateLimitOverride = null;
 });
 
 describe("POST /v1/ingest + dashboard read path (#14)", () => {
@@ -779,5 +814,68 @@ describe("POST /v1/ingest — device_id squatting protections (#181)", () => {
     );
 
     expect(res.status).toBe(200);
+  });
+});
+
+describe("POST /v1/ingest — rate limiting (#179)", () => {
+  function seedUser() {
+    fake.seed("orgs", [{ id: "org_test", name: "test" }]);
+    fake.seed("users", [
+      {
+        id: "usr_test",
+        org_id: "org_test",
+        role: "manager",
+        api_key: "budi_testkey",
+        display_name: "Test",
+        email: "t@example.com",
+      },
+    ]);
+  }
+
+  function mkReq(body: Record<string, unknown>): Request {
+    return new Request("http://localhost/v1/ingest", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer budi_testkey",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  const baseEnvelope = {
+    schema_version: 1,
+    device_id: "11111111-1111-4111-8111-111111111111",
+    org_id: "org_test",
+    synced_at: "2026-04-15T12:00:00Z",
+    payload: { daily_rollups: [], session_summaries: [] },
+  };
+
+  it("returns 429 with Retry-After when the per-key bucket is exhausted", async () => {
+    seedUser();
+    fake.rateLimitOverride = { allowed: false };
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      mkReq(baseEnvelope) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBeTruthy();
+    expect(res.headers.get("X-RateLimit-Limit")).toBe("60");
+    // No device row was inserted on the rate-limited path.
+    expect(fake.rows("devices")).toHaveLength(0);
+  });
+
+  it("emits rate-limit headers on a successful ingest", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+    const res = await POST(
+      mkReq(baseEnvelope) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("X-RateLimit-Limit")).toBe("60");
+    expect(res.headers.get("X-RateLimit-Remaining")).toBe("59");
   });
 });

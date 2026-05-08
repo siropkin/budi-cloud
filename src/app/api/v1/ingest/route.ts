@@ -6,6 +6,11 @@ import {
   type IngestDailyRollup,
   type IngestSessionSummary,
 } from "@/app/api/v1/ingest/rows";
+import {
+  enforceRateLimit,
+  RATE_LIMITS,
+  withRateLimitHeaders,
+} from "@/lib/rate-limit";
 
 // ADR-0083 §7: Max body size 1 MiB
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -142,6 +147,17 @@ export async function POST(request: NextRequest) {
   if (!user) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // #179: rate-limit per authenticated user. The daemon's default sync
+  // interval is well below 60/min; this only kicks in for runaway loops
+  // or a leaked key being abused. ADR-0083 §7 covers the daemon's 429
+  // backoff so legitimate clients self-heal on transient pressure.
+  const { blocked, result: rl } = await enforceRateLimit({
+    namespace: "ingest",
+    identifier: user.id as string,
+    ...RATE_LIMITS.ingest,
+  });
+  if (blocked) return blocked;
 
   // --- Parse body ---
   let body: SyncEnvelope;
@@ -319,11 +335,14 @@ export async function POST(request: NextRequest) {
   // --- ADR-0083 §5: Success response ---
   // `records_upserted` stays for backward compatibility with existing daemon
   // builds; the per-table counts make session regressions obvious (#14).
-  return Response.json({
-    accepted: true,
-    watermark,
-    records_upserted: dailyRollupsUpserted + sessionSummariesUpserted,
-    daily_rollups_upserted: dailyRollupsUpserted,
-    session_summaries_upserted: sessionSummariesUpserted,
-  });
+  return withRateLimitHeaders(
+    Response.json({
+      accepted: true,
+      watermark,
+      records_upserted: dailyRollupsUpserted + sessionSummariesUpserted,
+      daily_rollups_upserted: dailyRollupsUpserted,
+      session_summaries_upserted: sessionSummariesUpserted,
+    }),
+    rl
+  );
 }

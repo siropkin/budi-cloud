@@ -1,5 +1,10 @@
 import { type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  enforceRateLimit,
+  RATE_LIMITS,
+  withRateLimitHeaders,
+} from "@/lib/rate-limit";
 
 /**
  * GET /v1/ingest/status
@@ -31,6 +36,15 @@ export async function GET(request: NextRequest) {
   if (userError || !user) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // #179: rate-limit per user (so a leaked key — or a polling daemon stuck
+  // on a 4xx response — can't be used to enumerate device ids cheaply).
+  const { blocked, result: rl } = await enforceRateLimit({
+    namespace: "ingest_status",
+    identifier: user.id as string,
+    ...RATE_LIMITS.ingest_status,
+  });
+  if (blocked) return blocked;
 
   // --- Get device_id from query param ---
   const deviceId = request.nextUrl.searchParams.get("device_id");
@@ -88,11 +102,14 @@ export async function GET(request: NextRequest) {
     .select("*", { count: "exact", head: true })
     .eq("device_id", deviceId);
 
-  return Response.json({
-    device_id: deviceId,
-    watermark: watermarkRow?.bucket_day ?? null,
-    last_seen: device.last_seen,
-    total_rollup_records: rollupCount ?? 0,
-    total_session_records: sessionCount ?? 0,
-  });
+  return withRateLimitHeaders(
+    Response.json({
+      device_id: deviceId,
+      watermark: watermarkRow?.bucket_day ?? null,
+      last_seen: device.last_seen,
+      total_rollup_records: rollupCount ?? 0,
+      total_session_records: sessionCount ?? 0,
+    }),
+    rl
+  );
 }

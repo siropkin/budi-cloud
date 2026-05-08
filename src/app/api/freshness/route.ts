@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser, getSyncFreshness } from "@/lib/dal";
+import {
+  enforceRateLimit,
+  RATE_LIMITS,
+  withRateLimitHeaders,
+} from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -17,10 +22,24 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // #179: rate-limit per authenticated viewer. The dashboard polls this on
+  // a header heartbeat, so 60/min is well above the legitimate cadence and
+  // catches a compromised browser session being used as a side-channel.
+  const { blocked, result: rl } = await enforceRateLimit({
+    namespace: "freshness",
+    identifier: user.id,
+    ...RATE_LIMITS.freshness,
+  });
+  if (blocked) return blocked;
+
   const freshness = await getSyncFreshness(user);
   // No-store: this endpoint exists precisely to detect new uploads, so any
   // CDN/Next caching here would defeat the point.
-  return NextResponse.json(freshness, {
-    headers: { "Cache-Control": "no-store" },
-  });
+  return withRateLimitHeaders(
+    NextResponse.json(freshness, {
+      headers: { "Cache-Control": "no-store" },
+    }),
+    rl
+  );
 }
