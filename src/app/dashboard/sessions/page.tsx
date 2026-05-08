@@ -164,132 +164,158 @@ export default async function SessionsPage({
               No sessions found for this period
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-white/10 text-left text-zinc-400">
-                    {isManager && (
-                      <th className="pr-3 pb-2 font-medium">Member</th>
-                    )}
-                    <th className="pr-3 pb-2 font-medium whitespace-nowrap">
-                      Provider
-                    </th>
-                    <th className="pr-3 pb-2 font-medium">Model</th>
-                    {showSurfaceColumn && (
-                      <th className="pr-3 pb-2 font-medium">Surface</th>
-                    )}
-                    <th className="pr-3 pb-2 font-medium">Started</th>
-                    <th className="pr-3 pb-2 font-medium">Duration</th>
-                    <th className="pr-3 pb-2 font-medium">Repo</th>
-                    <th className="pr-3 pb-2 font-medium">Branch</th>
-                    <th className="pr-3 pb-2 text-right font-medium">
-                      Messages
-                    </th>
-                    <th className="pb-2 text-right font-medium">
-                      {isTokens ? "Tokens" : "Cost"}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sessions.map((s) => {
-                    const href = `/dashboard/sessions/${encodeURIComponent(
-                      s.session_id
-                    )}?device=${encodeURIComponent(s.device_id)}`;
-                    return (
-                      <tr
-                        key={`${s.device_id}-${s.session_id}`}
-                        className="border-b border-white/5 transition-colors hover:bg-white/5"
-                      >
-                        {isManager && (
+            <div className="relative">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10 text-left text-zinc-400">
+                      {isManager && (
+                        <th className="pr-3 pb-2 font-medium whitespace-nowrap">
+                          Member
+                        </th>
+                      )}
+                      <th className="pr-3 pb-2 font-medium whitespace-nowrap">
+                        Provider
+                      </th>
+                      <th className="pr-3 pb-2 font-medium whitespace-nowrap">
+                        Model
+                      </th>
+                      {showSurfaceColumn && (
+                        <th className="pr-3 pb-2 font-medium whitespace-nowrap">
+                          Surface
+                        </th>
+                      )}
+                      <th className="pr-3 pb-2 font-medium whitespace-nowrap">
+                        Started
+                      </th>
+                      <th className="pr-3 pb-2 font-medium whitespace-nowrap">
+                        Duration
+                      </th>
+                      <th className="pr-3 pb-2 font-medium whitespace-nowrap">
+                        Repo
+                      </th>
+                      <th className="pr-3 pb-2 font-medium whitespace-nowrap">
+                        Branch
+                      </th>
+                      <th className="pr-3 pb-2 text-right font-medium whitespace-nowrap">
+                        Messages
+                      </th>
+                      <th className="pb-2 text-right font-medium whitespace-nowrap">
+                        {isTokens ? "Tokens" : "Cost"}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sessions.map((s) => {
+                      const href = `/dashboard/sessions/${encodeURIComponent(
+                        s.session_id
+                      )}?device=${encodeURIComponent(s.device_id)}`;
+                      return (
+                        <tr
+                          key={`${s.device_id}-${s.session_id}`}
+                          className="border-b border-white/5 transition-colors hover:bg-white/5"
+                        >
+                          {isManager && (
+                            <td
+                              className="text-zinc-300"
+                              title={s.owner_name ?? undefined}
+                            >
+                              <Link
+                                href={href}
+                                className="block max-w-[20ch] truncate py-2 pr-3"
+                              >
+                                {s.owner_name ?? "-"}
+                              </Link>
+                            </td>
+                          )}
+                          <td className="text-zinc-300">
+                            <Link
+                              href={href}
+                              className="block py-2 pr-3 whitespace-nowrap"
+                            >
+                              {formatProvider(s.provider)}
+                            </Link>
+                          </td>
                           <td
-                            className="text-zinc-300"
-                            title={s.owner_name ?? undefined}
+                            className="text-zinc-400"
+                            title={s.main_model ?? undefined}
                           >
                             <Link
                               href={href}
-                              className="block max-w-[20ch] truncate py-2 pr-3"
+                              className="block max-w-[16ch] truncate py-2 pr-3"
                             >
-                              {s.owner_name ?? "-"}
+                              {s.main_model
+                                ? formatModelName(s.main_model)
+                                : "-"}
                             </Link>
                           </td>
-                        )}
-                        <td className="text-zinc-300">
-                          <Link
-                            href={href}
-                            className="block py-2 pr-3 whitespace-nowrap"
-                          >
-                            {formatProvider(s.provider)}
-                          </Link>
-                        </td>
-                        <td
-                          className="text-zinc-400"
-                          title={s.main_model ?? undefined}
-                        >
-                          <Link
-                            href={href}
-                            className="block max-w-[16ch] truncate py-2 pr-3"
-                          >
-                            {s.main_model ? formatModelName(s.main_model) : "-"}
-                          </Link>
-                        </td>
-                        {showSurfaceColumn && (
-                          <td
-                            className="text-zinc-400"
-                            title={`Filter to ${formatSurface(s.surface)}`}
-                          >
-                            <Link
-                              href={surfaceFilterHref(s.surface)}
-                              className="block py-2 pr-3 hover:text-zinc-200"
-                              data-testid="session-surface-cell"
+                          {showSurfaceColumn && (
+                            <td
+                              className="text-zinc-400"
+                              title={`Filter to ${formatSurface(s.surface)}`}
                             >
-                              {formatSurface(s.surface)}
+                              <Link
+                                href={surfaceFilterHref(s.surface)}
+                                className="block py-2 pr-3 hover:text-zinc-200"
+                                data-testid="session-surface-cell"
+                              >
+                                {formatSurface(s.surface)}
+                              </Link>
+                            </td>
+                          )}
+                          <td className="text-zinc-400">
+                            <Link href={href} className="block py-2 pr-3">
+                              {formatTimestamp(s.started_at)}
                             </Link>
                           </td>
-                        )}
-                        <td className="text-zinc-400">
-                          <Link href={href} className="block py-2 pr-3">
-                            {formatTimestamp(s.started_at)}
-                          </Link>
-                        </td>
-                        <td className="text-zinc-400">
-                          <Link href={href} className="block py-2 pr-3">
-                            {formatDuration(
-                              s.duration_ms,
-                              s.started_at,
-                              s.ended_at
-                            )}
-                          </Link>
-                        </td>
-                        <td className="text-zinc-400">
-                          <Link href={href} className="block py-2 pr-3">
-                            {repoName(s.repo_id)}
-                          </Link>
-                        </td>
-                        <td className="text-zinc-400">
-                          <Link href={href} className="block py-2 pr-3">
-                            {s.git_branch?.replace(/^refs\/heads\//, "") || "-"}
-                          </Link>
-                        </td>
-                        <td className="text-right tabular-nums text-zinc-300">
-                          <Link href={href} className="block py-2 pr-3">
-                            {fmtNum(s.message_count)}
-                          </Link>
-                        </td>
-                        <td className="text-right tabular-nums text-zinc-200">
-                          <Link href={href} className="block py-2">
-                            {isTokens
-                              ? fmtNum(
-                                  Number(s.total_input_tokens) +
-                                    Number(s.total_output_tokens)
-                                )
-                              : fmtCost(Number(s.total_cost_cents))}
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          <td className="text-zinc-400">
+                            <Link href={href} className="block py-2 pr-3">
+                              {formatDuration(
+                                s.duration_ms,
+                                s.started_at,
+                                s.ended_at
+                              )}
+                            </Link>
+                          </td>
+                          <td className="text-zinc-400">
+                            <Link href={href} className="block py-2 pr-3">
+                              {repoName(s.repo_id)}
+                            </Link>
+                          </td>
+                          <td className="text-zinc-400">
+                            <Link href={href} className="block py-2 pr-3">
+                              {s.git_branch?.replace(/^refs\/heads\//, "") ||
+                                "-"}
+                            </Link>
+                          </td>
+                          <td className="text-right tabular-nums text-zinc-300">
+                            <Link href={href} className="block py-2 pr-3">
+                              {fmtNum(s.message_count)}
+                            </Link>
+                          </td>
+                          <td className="text-right tabular-nums text-zinc-200">
+                            <Link href={href} className="block py-2">
+                              {isTokens
+                                ? fmtNum(
+                                    Number(s.total_input_tokens) +
+                                      Number(s.total_output_tokens)
+                                  )
+                                : fmtCost(Number(s.total_cost_cents))}
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {/* Right-edge fade hints at horizontal scroll on narrow viewports
+                  (#173). Visible only when columns overflow — the wider table
+                  lives behind it. */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[#0a0a0a] to-transparent sm:hidden"
+              />
             </div>
           )}
 
