@@ -8,8 +8,10 @@ const securityHeaders = [
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
   },
-  // Start with frame-ancestors only; expand CSP after auditing inline scripts/styles.
-  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+  // Content-Security-Policy is set per-request in src/proxy.ts (#180) so it
+  // can include a script-src nonce. Anything not covered by the proxy
+  // matcher (static files, /api/*) does not execute scripts, so a static
+  // CSP fallback here would only add maintenance cost.
 ];
 
 const nextConfig: NextConfig = {
