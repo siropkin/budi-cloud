@@ -1121,3 +1121,223 @@ describe("POST /v1/ingest — numeric metric range guards (#178)", () => {
     expect(fake.rows("daily_rollups")).toHaveLength(1);
   });
 });
+
+// Regression coverage for #204: "Spend by Surface" chart was rendering every
+// dollar as Unknown because rollup rows in production all had
+// `surface='unknown'`. The default kicks in only when the ingest path either
+// strips the field or the daemon never serializes it. These tests pin the
+// cloud's contract that envelope-supplied surfaces *do* round-trip from
+// payload to row, on both the rollup and session paths, so a future
+// regression (e.g. forgetting `surface` in the row-builder spread, narrowing
+// `normalizeSurface`, or shrinking the upsert column list) would fail loud.
+describe("POST /v1/ingest — surface round-trip (#204)", () => {
+  function seedUser() {
+    fake.seed("orgs", [{ id: "org_test", name: "test" }]);
+    fake.seed("users", [
+      {
+        id: "usr_test",
+        org_id: "org_test",
+        role: "manager",
+        api_key: "budi_testkey",
+        display_name: "Test",
+        email: "t@example.com",
+      },
+    ]);
+  }
+
+  function mkReq(body: Record<string, unknown>): Request {
+    return new Request("http://localhost/v1/ingest", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer budi_testkey",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  const baseRollup = {
+    bucket_day: "2026-04-14",
+    role: "assistant",
+    provider: "claude_code",
+    model: "claude-sonnet-4-5",
+    repo_id: "repo_x",
+    git_branch: "refs/heads/main",
+    ticket: null,
+    message_count: 1,
+    input_tokens: 1,
+    output_tokens: 1,
+    cache_creation_tokens: 0,
+    cache_read_tokens: 0,
+    cost_cents: 100,
+  };
+
+  const baseEnvelope = {
+    schema_version: 1,
+    device_id: "11111111-1111-4111-8111-111111111111",
+    org_id: "org_test",
+    synced_at: "2026-04-15T12:00:00Z",
+  };
+
+  it("persists each canonical surface as a distinct rollup row (#204)", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    // Five surfaces from the daemon's `/health` advertised list (`vscode`,
+    // `cursor`, `jetbrains`, `terminal`, `unknown`). Each varies only on
+    // surface so the new PK (014) lets them coexist; if surface were dropped
+    // they'd UPSERT-collide into a single row and #204 would re-occur.
+    const surfaces = [
+      "vscode",
+      "cursor",
+      "jetbrains",
+      "terminal",
+      "unknown",
+    ] as const;
+    const res = await POST(
+      mkReq({
+        ...baseEnvelope,
+        payload: {
+          daily_rollups: surfaces.map((s, i) => ({
+            ...baseRollup,
+            surface: s,
+            cost_cents: 100 * (i + 1),
+          })),
+          session_summaries: [],
+        },
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(200);
+    const stored = fake.rows("daily_rollups");
+    expect(stored).toHaveLength(surfaces.length);
+    const storedSurfaces = stored.map((r) => r.surface as string).sort();
+    expect(storedSurfaces).toEqual([...surfaces].sort());
+    for (const s of surfaces) {
+      expect(stored.some((r) => r.surface === s)).toBe(true);
+    }
+  });
+
+  it("persists surface on session summaries (#204)", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    const res = await POST(
+      mkReq({
+        ...baseEnvelope,
+        payload: {
+          daily_rollups: [],
+          session_summaries: [
+            {
+              session_id: "sess-vscode",
+              provider: "copilot_chat",
+              started_at: "2026-04-14T10:00:00Z",
+              ended_at: "2026-04-14T11:00:00Z",
+              duration_ms: 3_600_000,
+              repo_id: null,
+              git_branch: null,
+              ticket: null,
+              message_count: 1,
+              total_input_tokens: 1,
+              total_output_tokens: 1,
+              total_cost_cents: 1,
+              surface: "vscode",
+            },
+            {
+              session_id: "sess-cursor",
+              provider: "copilot_chat",
+              started_at: "2026-04-14T10:00:00Z",
+              ended_at: "2026-04-14T11:00:00Z",
+              duration_ms: 3_600_000,
+              repo_id: null,
+              git_branch: null,
+              ticket: null,
+              message_count: 1,
+              total_input_tokens: 1,
+              total_output_tokens: 1,
+              total_cost_cents: 1,
+              surface: "cursor",
+            },
+          ],
+        },
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(200);
+    const sessions = fake.rows("session_summaries");
+    const bySession = Object.fromEntries(
+      sessions.map((s) => [s.session_id as string, s.surface as string])
+    );
+    expect(bySession["sess-vscode"]).toBe("vscode");
+    expect(bySession["sess-cursor"]).toBe("cursor");
+  });
+
+  it("falls back to 'unknown' when surface is omitted (forward compat with pre-#701 daemons)", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    // Envelope with no `surface` key at all on either record — the literal
+    // shape an older daemon (pre siropkin/budi#701) would send.
+    const res = await POST(
+      mkReq({
+        ...baseEnvelope,
+        payload: {
+          daily_rollups: [{ ...baseRollup }],
+          session_summaries: [
+            {
+              session_id: "sess-nosurface",
+              provider: "claude_code",
+              started_at: "2026-04-14T10:00:00Z",
+              ended_at: "2026-04-14T11:00:00Z",
+              duration_ms: 1,
+              repo_id: null,
+              git_branch: null,
+              ticket: null,
+              message_count: 1,
+              total_input_tokens: 1,
+              total_output_tokens: 1,
+              total_cost_cents: 1,
+            },
+          ],
+        },
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(200);
+    expect(fake.rows("daily_rollups")[0].surface).toBe("unknown");
+    expect(fake.rows("session_summaries")[0].surface).toBe("unknown");
+  });
+
+  it("trims whitespace and caps the stored surface at MAX_SURFACE_LENGTH", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    const huge = "z".repeat(500);
+    const res = await POST(
+      mkReq({
+        ...baseEnvelope,
+        payload: {
+          daily_rollups: [
+            { ...baseRollup, surface: "  terminal  " },
+            {
+              ...baseRollup,
+              role: "user",
+              surface: huge,
+            },
+          ],
+          session_summaries: [],
+        },
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(200);
+    const stored = fake.rows("daily_rollups");
+    const trimmed = stored.find((r) => r.role === "assistant")!;
+    expect(trimmed.surface).toBe("terminal");
+    const capped = stored.find((r) => r.role === "user")!;
+    // 64 is the MAX_SURFACE_LENGTH literal in rows.ts — keep this in sync if
+    // that constant is ever bumped (justify in the same PR per the comment
+    // above the constant).
+    expect((capped.surface as string).length).toBe(64);
+  });
+});
