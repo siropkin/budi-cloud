@@ -1704,9 +1704,7 @@ describe("getSessionDetailBySessionId (#202 deep-link)", () => {
       "35a2ecbc-1144-4ac2-993e-1ca6850280a3"
     );
     expect(detail).not.toBeNull();
-    expect(detail?.session_id).toBe(
-      "35a2ecbc-1144-4ac2-993e-1ca6850280a3"
-    );
+    expect(detail?.session_id).toBe("35a2ecbc-1144-4ac2-993e-1ca6850280a3");
     expect(detail?.provider).toBe("copilot_chat");
     expect(detail?.device_id).toBe("dev_jane");
   });
