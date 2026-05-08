@@ -11,8 +11,30 @@ import type { SessionsCursor } from "@/lib/dal";
  * 500ing — same defensive posture as the user filter in #80.
  */
 export function encodeSessionsCursor(cursor: SessionsCursor): string {
-  const json = JSON.stringify(cursor);
+  const json = JSON.stringify({
+    startedAt: normalizeIsoInstant(cursor.startedAt),
+    sessionId: cursor.sessionId,
+  });
   return base64UrlEncode(json);
+}
+
+/**
+ * PostgREST returns `timestamptz` columns in the `+00:00` offset form
+ * (e.g. `2026-05-08T02:02:02.469+00:00`), but `Date.prototype.toISOString()`
+ * only ever emits the `Z` form. The decoder validates `startedAt` by
+ * round-tripping through `toISOString()` (#176), so without normalization
+ * here every real cursor produced from `tail.started_at` failed to round-trip
+ * and the page silently fell back to "first page" (#195). We normalize once
+ * at encode time so the encoded cursor is always in the canonical `Z` shape
+ * the decoder expects, regardless of what the daemon / PostgREST emits.
+ *
+ * If the value isn't parseable we leave it alone — the decoder will reject
+ * it, which is the correct behavior for non-instant input.
+ */
+function normalizeIsoInstant(value: string): string {
+  const ms = Date.parse(value);
+  if (Number.isNaN(ms)) return value;
+  return new Date(ms).toISOString();
 }
 
 /**

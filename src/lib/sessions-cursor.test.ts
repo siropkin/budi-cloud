@@ -104,6 +104,39 @@ describe("decodeSessionsCursor (#176)", () => {
     }
   });
 
+  it("normalizes PostgREST `+00:00` timestamps to the `Z` form on encode (#195)", () => {
+    // PostgREST returns `timestamptz` in `+00:00` form; `Date.toISOString()`
+    // only emits `Z`. Without encode-side normalization the cursor failed its
+    // own round-trip check and pagination silently fell back to first page.
+    const postgrestShape = "2026-05-08T02:02:02.469+00:00";
+    const canonical = "2026-05-08T02:02:02.469Z";
+    const decoded = decodeSessionsCursor(
+      encodeSessionsCursor({
+        startedAt: postgrestShape,
+        sessionId: "sess_0001",
+      })
+    );
+    expect(decoded).toEqual({
+      startedAt: canonical,
+      sessionId: "sess_0001",
+    });
+  });
+
+  it("normalizes other valid offset forms on encode", () => {
+    // Sanity-check the normalization isn't only `+00:00`-specific: any
+    // parseable instant should round-trip into the canonical UTC `Z` form.
+    const inputs: Array<[string, string]> = [
+      ["2026-05-08T07:30:00.000+05:30", "2026-05-08T02:00:00.000Z"],
+      ["2026-05-08T02:02:02+00:00", "2026-05-08T02:02:02.000Z"],
+    ];
+    for (const [input, expected] of inputs) {
+      const decoded = decodeSessionsCursor(
+        encodeSessionsCursor({ startedAt: input, sessionId: "sess_x" })
+      );
+      expect(decoded).toEqual({ startedAt: expected, sessionId: "sess_x" });
+    }
+  });
+
   it("rejects oversized cursor fields", () => {
     // Defense against a megabyte-long cursor blowing up the downstream
     // .or() string. 256 chars is well above any real daemon-emitted id.
