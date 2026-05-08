@@ -1837,3 +1837,115 @@ describe("getSessions cursor pagination (#85)", () => {
     expect(page.rows.map((r) => r.session_id)).toEqual(["sess_jane"]);
   });
 });
+
+describe("getSessions multi-provider visibility (#202)", () => {
+  // Pre-#202 the daemon's 8.4.2 release surfaced a regression: copilot_chat /
+  // cursor / codex / copilot_cli sessions landed in the cloud but never showed
+  // up in the Sessions list. The list path is provider-agnostic by contract;
+  // pin the behavior so a future filter-tightening can't silently re-collapse
+  // the list to one provider.
+  const wideRange = utcRange("2026-01-01", "2026-12-31");
+
+  const manager = {
+    id: "usr_ivan",
+    org_id: "org_team",
+    role: "manager" as const,
+    api_key: "budi_i",
+    display_name: "Ivan",
+    email: "ivan@example.com",
+  };
+
+  function seedMixedProviders() {
+    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("users", [{ ...manager }]);
+    fake.seed("devices", [{ id: "dev_ivan", user_id: "usr_ivan" }]);
+    const base = {
+      device_id: "dev_ivan",
+      ended_at: null,
+      duration_ms: null,
+      repo_id: "repo_x",
+      git_branch: "refs/heads/main",
+      ticket: null,
+      message_count: 1,
+      total_input_tokens: 0,
+      total_output_tokens: 0,
+      total_cost_cents: 0,
+    } as const;
+    fake.seed("session_summaries", [
+      {
+        ...base,
+        session_id: "sess_cc",
+        provider: "claude_code",
+        started_at: "2026-04-15T10:00:00.000Z",
+        surface: "terminal",
+      },
+      {
+        ...base,
+        session_id: "sess_copilot",
+        provider: "copilot_chat",
+        started_at: "2026-04-15T11:00:00.000Z",
+        surface: "vscode",
+      },
+      {
+        ...base,
+        session_id: "sess_cursor",
+        provider: "cursor",
+        started_at: "2026-04-15T12:00:00.000Z",
+        surface: "cursor",
+      },
+      {
+        ...base,
+        session_id: "sess_codex",
+        provider: "codex",
+        started_at: "2026-04-15T13:00:00.000Z",
+        surface: "terminal",
+      },
+      {
+        ...base,
+        session_id: "sess_copilot_cli",
+        provider: "copilot_cli",
+        started_at: "2026-04-15T14:00:00.000Z",
+        surface: "terminal",
+      },
+    ]);
+  }
+
+  it("lists sessions for every provider the daemon uploads, not only claude_code", async () => {
+    seedMixedProviders();
+    const { getSessions } = await loadDal();
+    const page = await getSessions(manager, wideRange);
+
+    const providers = page.rows.map((r) => r.provider).sort();
+    expect(providers).toEqual(
+      ["claude_code", "copilot_chat", "copilot_cli", "codex", "cursor"].sort()
+    );
+    // Each row carries the provider the daemon uploaded — no row collapses
+    // to a hardcoded "claude_code" label.
+    const ids = page.rows.map((r) => r.session_id).sort();
+    expect(ids).toEqual(
+      [
+        "sess_cc",
+        "sess_codex",
+        "sess_copilot",
+        "sess_copilot_cli",
+        "sess_cursor",
+      ].sort()
+    );
+  });
+
+  it("getSessionDetail loads a non-claude_code session by (device, session_id)", async () => {
+    seedMixedProviders();
+    const { getSessionDetail } = await loadDal();
+
+    for (const sid of [
+      "sess_copilot",
+      "sess_cursor",
+      "sess_codex",
+      "sess_copilot_cli",
+    ]) {
+      const detail = await getSessionDetail(manager, "dev_ivan", sid);
+      expect(detail, `expected detail for ${sid}`).not.toBeNull();
+      expect(detail?.session_id).toBe(sid);
+    }
+  });
+});
