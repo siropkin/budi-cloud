@@ -270,6 +270,88 @@ describe("dashboard/sessions /page", () => {
     expect(lastCall![2]).toMatchObject({ surfaces: ["vscode"] });
   });
 
+  it("multi-provider: lists rows for every provider the daemon ships, not only claude_code (#202)", async () => {
+    // The daemon's 8.4.2 release surfaced sessions for `copilot_chat`,
+    // `cursor`, `codex`, and `copilot_cli` alongside `claude_code`. The
+    // Sessions list contract is provider-agnostic — pin that the table
+    // renders one row per provider with each row's actual display label,
+    // so a future change can't silently re-collapse the list to one
+    // provider without tripping this assertion.
+    const baseRow = {
+      device_id: "dev_ivan",
+      ended_at: null,
+      duration_ms: null,
+      repo_id: "repo_x",
+      git_branch: "refs/heads/main",
+      ticket: null,
+      message_count: 1,
+      total_input_tokens: 0,
+      total_output_tokens: 0,
+      total_cost_cents: 0,
+      main_model: null,
+      owner_name: "Ivan",
+      surface: "vscode",
+    };
+    dal.getSessions.mockResolvedValue({
+      rows: [
+        {
+          ...baseRow,
+          session_id: "sess_cc",
+          provider: "claude_code",
+          started_at: "2026-04-15T14:00:00.000Z",
+        },
+        {
+          ...baseRow,
+          session_id: "sess_copilot",
+          provider: "copilot_chat",
+          started_at: "2026-04-15T13:00:00.000Z",
+        },
+        {
+          ...baseRow,
+          session_id: "sess_cursor",
+          provider: "cursor",
+          started_at: "2026-04-15T12:00:00.000Z",
+          surface: "cursor",
+        },
+        {
+          ...baseRow,
+          session_id: "sess_codex",
+          provider: "codex",
+          started_at: "2026-04-15T11:00:00.000Z",
+          surface: "terminal",
+        },
+        {
+          ...baseRow,
+          session_id: "sess_copilot_cli",
+          provider: "copilot_cli",
+          started_at: "2026-04-15T10:00:00.000Z",
+          surface: "terminal",
+        },
+      ],
+      nextCursor: null,
+    });
+    const node = await render();
+    const text = extractText(node);
+    // Each provider lands on the list with its display label, never the
+    // raw snake_case wire value.
+    for (const label of [
+      "Claude Code",
+      "Copilot Chat",
+      "Cursor",
+      "Codex",
+      "Copilot CLI",
+    ]) {
+      expect(text).toContain(label);
+    }
+    for (const wire of [
+      "claude_code",
+      "copilot_chat",
+      "copilot_cli",
+    ]) {
+      expect(text).not.toContain(wire);
+    }
+  });
+
   it("surface column: rendered when the org has 2+ surfaces, hidden when only one (#187)", async () => {
     // Multi-surface org: column header + per-row cells render the formatted
     // surface label, not the raw daemon id.
