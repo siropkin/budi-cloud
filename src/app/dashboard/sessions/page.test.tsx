@@ -174,10 +174,73 @@ describe("dashboard/sessions /page", () => {
     expect(node).toBeTruthy();
     const text = extractText(node);
     expect(text).toContain("No sessions found");
-    // The "← Newest" / "Older →" labels live in the pagination nav — neither
+    // The "« First" / "Next ›" labels live in the pagination nav — neither
     // should render when there are no rows + no next cursor.
+    expect(text).not.toContain("First");
+    expect(text).not.toContain("Next");
+  });
+
+  it("pagination labels: forward-only cursor scheme exposes only « First and Next › (#197)", async () => {
+    // Page 1 with more pages available: only Next renders. The earlier copy
+    // ("← Newest") read as a back-by-one button and confused users (#197).
+    dal.getSessions.mockResolvedValueOnce({
+      rows: [
+        {
+          device_id: "dev_ivan",
+          session_id: "sess_a",
+          provider: "claude_code",
+          started_at: "2026-04-15T10:00:00.000Z",
+          ended_at: "2026-04-15T11:00:00.000Z",
+          duration_ms: 3_600_000,
+          repo_id: "repo_x",
+          git_branch: "refs/heads/main",
+          ticket: null,
+          message_count: 12,
+          total_input_tokens: 2000,
+          total_output_tokens: 800,
+          total_cost_cents: 250,
+          main_model: "claude-opus-4-7-20260101",
+          owner_name: "Ivan",
+          surface: "vscode",
+        },
+      ],
+      nextCursor: { startedAt: "2026-04-15T10:00:00.000Z", sessionId: "sess_a" },
+    });
+    let text = extractText(await render());
+    expect(text).toContain("Next");
+    expect(text).not.toContain("First");
+    // The retired labels must not creep back in.
     expect(text).not.toContain("Newest");
     expect(text).not.toContain("Older");
+
+    // Page 2+ with no further pages: only « First renders. Next is hidden
+    // because `nextCursor` is null.
+    dal.getSessions.mockResolvedValueOnce({
+      rows: [
+        {
+          device_id: "dev_ivan",
+          session_id: "sess_b",
+          provider: "claude_code",
+          started_at: "2026-04-15T09:00:00.000Z",
+          ended_at: "2026-04-15T09:30:00.000Z",
+          duration_ms: 1_800_000,
+          repo_id: "repo_x",
+          git_branch: "refs/heads/main",
+          ticket: null,
+          message_count: 4,
+          total_input_tokens: 200,
+          total_output_tokens: 80,
+          total_cost_cents: 30,
+          main_model: null,
+          owner_name: "Ivan",
+          surface: "vscode",
+        },
+      ],
+      nextCursor: null,
+    });
+    text = extractText(await render({ p: "2" }));
+    expect(text).toContain("First");
+    expect(text).not.toContain("Next");
   });
 
   it("loading: composes a Suspense boundary around the filter cluster so the table can stream", async () => {
