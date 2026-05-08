@@ -31,6 +31,11 @@ const WEEK_STARTS_ON = 1;
 // two cards on the Overview line up vertically (#150).
 const HEATMAP_HEIGHT = 300;
 
+// Calendar cells are fixed squares (GitHub-style) rather than flexing to fill
+// the card, so 30d / All windows don't stretch into wide rectangles (#170).
+// Sized to fit 7 rows + gaps + header + legend within HEATMAP_HEIGHT.
+const CALENDAR_CELL_SIZE = "1.75rem";
+
 type Props =
   | {
       mode: "hourly";
@@ -217,15 +222,16 @@ function CalendarHeatmap({
   const isTokens = unit === "tokens";
   const fmt = isTokens ? fmtNum : fmtCost;
 
-  // Inline grid template since `weekCount` is dynamic and Tailwind's JIT
-  // can't pre-compute every possible value at build time.
-  const gridTemplate = `2.5rem repeat(${weekCount}, minmax(0, 1fr))`;
+  // Fixed-square cells with a static column width — 1fr would stretch each
+  // day into a wide rectangle when the period spans only a few weeks (#170).
+  // The day-label column stays auto so it shrinks to its text width.
+  const gridTemplate = `auto repeat(${weekCount}, ${CALENDAR_CELL_SIZE})`;
 
   return (
     <div className="overflow-x-auto">
       <div
-        className="flex flex-col"
-        style={{ minWidth: 600, height: HEATMAP_HEIGHT }}
+        className="flex flex-col justify-center"
+        style={{ minHeight: HEATMAP_HEIGHT }}
       >
         <div
           className="grid flex-none gap-x-1"
@@ -235,7 +241,7 @@ function CalendarHeatmap({
           {monthLabels.map((label, i) => (
             <div
               key={i}
-              className="text-center text-[10px] text-zinc-500"
+              className="text-left text-[10px] text-zinc-500"
               aria-hidden="true"
             >
               {label ?? ""}
@@ -243,14 +249,14 @@ function CalendarHeatmap({
           ))}
         </div>
 
-        <div className="mt-1 flex flex-1 flex-col gap-y-1">
+        <div className="mt-1 flex flex-none flex-col gap-y-1">
           {DAY_ROW_TO_PG_DOW.map((_dow, rowIdx) => (
             <div
               key={rowIdx}
-              className="grid flex-1 gap-x-1"
+              className="grid flex-none gap-x-1"
               style={{ gridTemplateColumns: gridTemplate }}
             >
-              <div className="flex items-center text-xs text-zinc-500">
+              <div className="flex items-center pr-2 text-xs text-zinc-500">
                 {/* Show every other label (Mon/Wed/Fri/Sun) so rows don't
                     crowd when the cell height shrinks — same trick GitHub
                     uses on its contribution graph. */}
@@ -259,7 +265,13 @@ function CalendarHeatmap({
               {weeks.map((col, weekIdx) => {
                 const cell = col[rowIdx];
                 if (!cell.inRange) {
-                  return <div key={weekIdx} className="h-full rounded-sm" />;
+                  return (
+                    <div
+                      key={weekIdx}
+                      className="rounded-sm"
+                      style={{ height: CALENDAR_CELL_SIZE }}
+                    />
+                  );
                 }
                 const datum = byDay.get(cell.key);
                 const value = valueOf(datum);
@@ -272,16 +284,16 @@ function CalendarHeatmap({
                   <div
                     key={weekIdx}
                     className={clsx(
-                      "h-full rounded-sm",
+                      "rounded-sm",
                       value === 0 && "bg-white/[0.03]"
                     )}
-                    style={
-                      value > 0
-                        ? {
-                            backgroundColor: `rgba(59, 130, 246, ${intensity})`,
-                          }
-                        : undefined
-                    }
+                    style={{
+                      height: CALENDAR_CELL_SIZE,
+                      backgroundColor:
+                        value > 0
+                          ? `rgba(59, 130, 246, ${intensity})`
+                          : undefined,
+                    }}
                     title={`${dayLabel} — ${valueLabel}`}
                   />
                 );
