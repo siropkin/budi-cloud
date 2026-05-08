@@ -217,9 +217,9 @@ describe("CostBarChart", () => {
       const truncTickNodes = Array.from(walk(truncRendered));
       const titleNode = truncTickNodes.find((n) => n.type === "title");
       expect(titleNode).toBeDefined();
-      expect(
-        (titleNode!.props as { children: string }).children
-      ).toBe("really-long-surface-name-that-will-truncate");
+      expect((titleNode!.props as { children: string }).children).toBe(
+        "really-long-surface-name-that-will-truncate"
+      );
     } finally {
       isCompact = false;
     }
