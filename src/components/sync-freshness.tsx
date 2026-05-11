@@ -271,14 +271,6 @@ function StalledBadge({
               .
             </li>
           </ol>
-          <a
-            className="text-zinc-400 underline decoration-dotted underline-offset-2 hover:text-zinc-200"
-            href="https://github.com/siropkin/budi/blob/main/docs/adr/0083-cloud-ingest-identity-and-privacy-contract.md"
-            target="_blank"
-            rel="noreferrer"
-          >
-            ADR-0083 — cloud sync contract
-          </a>
         </div>
       )}
     </div>

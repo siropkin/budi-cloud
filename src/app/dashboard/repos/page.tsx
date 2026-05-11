@@ -216,16 +216,7 @@ export default async function ReposPage({
             <span className="text-zinc-400">(no repo)</span> aggregates spend
             from sessions whose directory didn&rsquo;t map to a known git
             remote. Your local Budi&rsquo;s privacy layer strips the repo
-            identifier in that case; see{" "}
-            <a
-              className="underline decoration-dotted underline-offset-2 hover:text-zinc-300"
-              href="https://github.com/siropkin/budi/blob/main/docs/adr/0083-cloud-ingest-identity-and-privacy-contract.md"
-              target="_blank"
-              rel="noreferrer"
-            >
-              ADR-0083
-            </a>
-            .
+            identifier in that case.
           </p>
         </CardContent>
       </Card>
