@@ -73,6 +73,9 @@ Required GitHub Actions secrets: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`
 
 - **[budi](https://github.com/siropkin/budi)** — Rust daemon + CLI (pushes data via cloud sync)
 - **[budi-cursor](https://github.com/siropkin/budi-cursor)** — VS Code/Cursor extension
+- **[budi-jetbrains](https://github.com/siropkin/budi-jetbrains)** — JetBrains IDE plugin
+- **[homebrew-budi](https://github.com/siropkin/homebrew-budi)** — Homebrew tap for `brew install siropkin/budi/budi`
+- **[getbudi.dev](https://github.com/siropkin/getbudi.dev)** — Public marketing landing page
 
 ## License
 
