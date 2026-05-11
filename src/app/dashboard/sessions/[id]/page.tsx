@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
+  getBranchSessionTimeline,
   getCurrentUser,
   getDeviceSessionsForDay,
   getEarliestActivity,
@@ -10,6 +11,8 @@ import {
 } from "@/lib/dal";
 import { dateRangeFromDays } from "@/lib/date-range";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
+import { parseUnit } from "@/lib/units";
+import { BranchSessionTimeline } from "@/components/branch-session-timeline";
 import { SessionCostDistributionStrip } from "@/components/session-cost-distribution-strip";
 import { SessionTokenComposition } from "@/components/session-token-composition";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -52,6 +55,7 @@ export default async function SessionDetailPage({
     device?: string;
     days?: string;
     user?: string;
+    units?: string;
     cursor?: string;
     p?: string;
   }>;
@@ -125,6 +129,25 @@ export default async function SessionDetailPage({
     user,
     distributionRange
   );
+
+  // Same-branch timeline (#216). Trailing-30d window on the same
+  // `(repo_id, git_branch)` so a viewer can see whether this branch has been
+  // chewing tokens for weeks or this is a one-off spike. The window is
+  // independent of the list-page `?days=` — the comparative is most useful at
+  // 30d regardless of the period the viewer arrived from. Skipped entirely
+  // when the session is missing either half of the (repo, branch) key, since
+  // there's nothing meaningful to plot against.
+  const branchTimelineRange = dateRangeFromDays("30", null, viewerTz);
+  const branchTimeline =
+    session.repo_id && session.git_branch
+      ? await getBranchSessionTimeline(
+          user,
+          session.repo_id,
+          session.git_branch,
+          branchTimelineRange
+        )
+      : [];
+  const unit = parseUnit(sp.units);
 
   return (
     <div className="space-y-6">
@@ -244,6 +267,14 @@ export default async function SessionDetailPage({
         currentCostCents={Number(session.total_cost_cents)}
       />
 
+      <BranchSessionTimeline
+        sessions={branchTimeline}
+        currentSessionId={sessionId}
+        rangeStartIso={branchTimelineRange.startedAtFrom}
+        rangeEndIso={branchTimelineRange.startedAtTo}
+        unit={unit}
+      />
+
       {sessionLocalDate ? (
         <DeviceDayTimeline
           sessions={sameDaySessions}
@@ -277,12 +308,14 @@ function Field({ label, value }: { label: string; value: string | number }) {
 function buildSessionsBackHref(sp: {
   days?: string;
   user?: string;
+  units?: string;
   cursor?: string;
   p?: string;
 }): string {
   const qs = new URLSearchParams();
   if (sp.days) qs.set("days", sp.days);
   if (sp.user) qs.set("user", sp.user);
+  if (sp.units) qs.set("units", sp.units);
   if (sp.cursor) qs.set("cursor", sp.cursor);
   if (sp.p) qs.set("p", sp.p);
   const s = qs.toString();

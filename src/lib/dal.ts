@@ -1349,6 +1349,57 @@ export async function getSessionCostDistribution(
 }
 
 /**
+ * Per-session timeline of every session on the same `(repo_id, git_branch)`
+ * the viewer can see, ordered oldest → newest (#216).
+ *
+ * Powers the "same branch over time" bar chart on the session-detail page:
+ * a manager investigating a costly session reads at a glance whether the
+ * branch has been chewing tokens for weeks or this is a one-off spike. Scope
+ * mirrors `getSessions` — manager sees the org, member sees own devices — so
+ * the chart never leaks the existence of a foreign-org session that happens
+ * to share a branch name.
+ *
+ * Returns a thin row shape (cost + token totals only) rather than the full
+ * `SessionRow`: the chart only needs what's plotted, and trimming the select
+ * keeps the round-trip light on long-running branches with hundreds of
+ * sessions. Privacy (ADR-0083 §1): no prompt / response / file content is
+ * read here, only numeric metrics and the daemon-emitted `session_id`.
+ */
+export interface BranchSessionTimelineRow {
+  session_id: string;
+  started_at: string;
+  total_cost_cents: number | string;
+  total_input_tokens: number | string;
+  total_output_tokens: number | string;
+}
+
+export async function getBranchSessionTimeline(
+  user: BudiUser,
+  repoId: string,
+  gitBranch: string,
+  range: DateRange
+): Promise<BranchSessionTimelineRow[]> {
+  const admin = createAdminClient();
+  const deviceIds = await getVisibleDeviceIds(admin, user);
+  if (deviceIds.length === 0) return [];
+
+  const { data } = await admin
+    .from("session_summaries")
+    .select(
+      "session_id, started_at, total_cost_cents, total_input_tokens, total_output_tokens"
+    )
+    .in("device_id", deviceIds)
+    .eq("repo_id", repoId)
+    .eq("git_branch", gitBranch)
+    .gte("started_at", range.startedAtFrom)
+    .lte("started_at", range.startedAtTo)
+    .order("started_at", { ascending: true })
+    .order("session_id", { ascending: true });
+
+  return (data ?? []) as BranchSessionTimelineRow[];
+}
+
+/**
  * Sync freshness snapshot for the viewer.
  *
  * Used by the dashboard header to render a "Last synced X ago" indicator and
