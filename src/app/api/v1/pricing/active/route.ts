@@ -145,7 +145,8 @@ export async function GET(request: NextRequest) {
   // --- 304 short-circuit on `since_version` or `If-None-Match` ---
   const since = parseSinceVersion(request);
   const ifNoneMatch = request.headers.get("if-none-match");
-  const matchesEtag = ifNoneMatch !== null && ifNoneMatch.replace(/^W\//, "") === etag;
+  const matchesEtag =
+    ifNoneMatch !== null && ifNoneMatch.replace(/^W\//, "") === etag;
   if (since === listVersion || matchesEtag) {
     return new Response(null, {
       status: 304,

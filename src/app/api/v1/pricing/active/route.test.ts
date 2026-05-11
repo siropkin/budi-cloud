@@ -88,7 +88,10 @@ class FakeQuery {
   // an array.
   then<TResult1 = { data: Row[]; error: null }, TResult2 = never>(
     onFulfilled?:
-      | ((value: { data: Row[]; error: null }) => TResult1 | PromiseLike<TResult1>)
+      | ((value: {
+          data: Row[];
+          error: null;
+        }) => TResult1 | PromiseLike<TResult1>)
       | null,
     onRejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
   ): Promise<TResult1 | TResult2> {
@@ -120,7 +123,8 @@ beforeEach(() => {
 async function call(opts: { since?: string; ifNoneMatch?: string } = {}) {
   const { GET } = await import("./route");
   const url = new URL("http://localhost/v1/pricing/active");
-  if (opts.since !== undefined) url.searchParams.set("since_version", opts.since);
+  if (opts.since !== undefined)
+    url.searchParams.set("since_version", opts.since);
   const headers: Record<string, string> = {
     authorization: "Bearer budi_testkey",
   };
@@ -155,10 +159,34 @@ describe("GET /v1/pricing/active (#234)", () => {
 
   it("404s when the only lists are draft / archived / future / past", async () => {
     fake.seed("org_price_lists", [
-      { id: 1, org_id: "org_acme", status: "draft", effective_from: PAST, effective_to: FUTURE },
-      { id: 2, org_id: "org_acme", status: "archived", effective_from: PAST, effective_to: FUTURE },
-      { id: 3, org_id: "org_acme", status: "active", effective_from: FUTURE, effective_to: null },
-      { id: 4, org_id: "org_acme", status: "active", effective_from: "2010-01-01", effective_to: "2010-12-31" },
+      {
+        id: 1,
+        org_id: "org_acme",
+        status: "draft",
+        effective_from: PAST,
+        effective_to: FUTURE,
+      },
+      {
+        id: 2,
+        org_id: "org_acme",
+        status: "archived",
+        effective_from: PAST,
+        effective_to: FUTURE,
+      },
+      {
+        id: 3,
+        org_id: "org_acme",
+        status: "active",
+        effective_from: FUTURE,
+        effective_to: null,
+      },
+      {
+        id: 4,
+        org_id: "org_acme",
+        status: "active",
+        effective_from: "2010-01-01",
+        effective_to: "2010-12-31",
+      },
     ]);
     const res = await call();
     expect(res.status).toBe(404);
@@ -294,7 +322,7 @@ describe("GET /v1/pricing/active (#234)", () => {
     expect(body.list_version).toBe(42);
   });
 
-  it("honours If-None-Match: \"<list_version>\"", async () => {
+  it('honours If-None-Match: "<list_version>"', async () => {
     fake.seed("org_price_lists", [
       {
         id: 13,
