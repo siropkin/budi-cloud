@@ -41,6 +41,7 @@ The cloud alpha supports small teams (1–20 developers):
 - **Web dashboard**: Supabase Auth with GitHub, Google, and magic link sign-in
 - **Daemon sync**: API key (`budi_<key>`) in `Authorization: Bearer` header. Users link a local daemon to their cloud account with `budi cloud init --api-key <key>`; the daemon then owns the on-disk key storage.
 - **Ingest API**: `POST /v1/ingest` accepts the sync envelope; `GET /v1/ingest/status?device_id=…` returns watermark and sync health for a linked device.
+- **Pricing API**: `GET /v1/pricing/active` returns the org's active price list so the local daemon can mirror cloud math. Pass `?since_version=N` (or `If-None-Match`) to short-circuit to `304` when the daemon is up to date. Returns `404` when no active list is configured (daemon treats this as "no override" and keeps its default LiteLLM-derived pricing). Privacy-safe — only the negotiated sale price is sent; the vendor list price stays cloud-side.
 
 ## Setup
 
