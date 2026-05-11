@@ -234,7 +234,10 @@ function PreviewBlock({ preview }: { preview: CsvPreview }) {
       )}
 
       {preview.sampleMapped.length > 0 && (
-        <SampleRowsTable label="Sample mapped rows" rows={preview.sampleMapped} />
+        <SampleRowsTable
+          label="Sample mapped rows"
+          rows={preview.sampleMapped}
+        />
       )}
 
       {preview.sampleUnmapped.length > 0 && (
