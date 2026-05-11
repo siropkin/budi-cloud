@@ -32,8 +32,12 @@ const dal = {
   getCurrentUser: vi.fn(),
   getSessionDetail: vi.fn(),
   getSessionDetailBySessionId: vi.fn(),
+  getDeviceSessionsForDay: vi.fn(),
 };
 vi.mock("@/lib/dal", () => dal);
+vi.mock("@/lib/viewer-timezone", () => ({
+  getViewerTimeZone: async () => "UTC",
+}));
 
 const MANAGER = {
   id: "usr_ivan",
@@ -77,6 +81,9 @@ beforeEach(() => {
   dal.getCurrentUser.mockReset().mockResolvedValue(MANAGER);
   dal.getSessionDetail.mockReset().mockResolvedValue(SESSION);
   dal.getSessionDetailBySessionId.mockReset().mockResolvedValue(SESSION);
+  // Default: single-session day so the timeline is hidden in baseline
+  // smoke tests. Suites that exercise the timeline override per-case.
+  dal.getDeviceSessionsForDay.mockReset().mockResolvedValue([SESSION]);
 });
 
 async function render(

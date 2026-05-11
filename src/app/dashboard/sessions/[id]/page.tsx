@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
   getCurrentUser,
+  getDeviceSessionsForDay,
   getSessionDetail,
   getSessionDetailBySessionId,
 } from "@/lib/dal";
@@ -15,6 +16,9 @@ import {
   repoName,
 } from "@/lib/format";
 import { formatSurface } from "@/lib/surface";
+import { DeviceDayTimeline } from "@/components/device-day-timeline";
+import { getViewerTimeZone } from "@/lib/viewer-timezone";
+import { localDateInTimeZone } from "@/lib/timezone";
 
 /**
  * Session detail page (#99). The id segment is the daemon-emitted
@@ -74,6 +78,24 @@ export default async function SessionDetailPage({
   const isOutputOnly = inputTokens === 0 && outputTokens > 0;
 
   const backHref = buildSessionsBackHref(sp);
+
+  // Same-day device timeline (#218). The strip surfaces clusters of work on
+  // this device — multiple back-to-back sessions on the same branch, runaway
+  // auto-loops, etc. — that no single-session field reveals. Scoped to the
+  // viewer's local calendar day so a Pacific-time user sees their evening
+  // sessions on the same lane as their morning ones.
+  const viewerTz = (await getViewerTimeZone()) ?? "UTC";
+  const sessionLocalDate = session.started_at
+    ? localDateInTimeZone(new Date(session.started_at), viewerTz)
+    : null;
+  const sameDaySessions = sessionLocalDate
+    ? await getDeviceSessionsForDay(
+        user,
+        session.device_id,
+        sessionLocalDate,
+        viewerTz
+      )
+    : [];
 
   return (
     <div className="space-y-6">
@@ -176,6 +198,15 @@ export default async function SessionDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      {sessionLocalDate ? (
+        <DeviceDayTimeline
+          sessions={sameDaySessions}
+          currentSessionId={sessionId}
+          timeZone={viewerTz}
+          localDate={sessionLocalDate}
+        />
+      ) : null}
     </div>
   );
 }
