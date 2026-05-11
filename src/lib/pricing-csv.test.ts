@@ -1,8 +1,49 @@
 import { describe, it, expect } from "vitest";
-import { buildAliasDict, parsePricingCsv } from "./pricing-csv";
+import {
+  buildAliasDict,
+  normalizeVendorClaudeModel,
+  parsePricingCsv,
+} from "./pricing-csv";
 
 const HEADER =
   "Platform,Model,Type,Region,List Price (USD/MTok/Month),Sale Price (USD/MTok/Month)";
+
+describe("normalizeVendorClaudeModel", () => {
+  it("converts vendor display names to canonical wire ids", () => {
+    expect(normalizeVendorClaudeModel("Claude Sonnet 4.5")).toBe(
+      "claude-sonnet-4-5"
+    );
+    expect(normalizeVendorClaudeModel("Claude Opus 4.5")).toBe(
+      "claude-opus-4-5"
+    );
+    expect(normalizeVendorClaudeModel("Claude Haiku 4.5")).toBe(
+      "claude-haiku-4-5"
+    );
+    expect(normalizeVendorClaudeModel("Claude Opus 4.6")).toBe(
+      "claude-opus-4-6"
+    );
+  });
+
+  it("tolerates case and whitespace variation", () => {
+    expect(normalizeVendorClaudeModel("claude opus 4.5")).toBe(
+      "claude-opus-4-5"
+    );
+    expect(normalizeVendorClaudeModel("  Claude   Sonnet   4.5  ")).toBe(
+      "claude-sonnet-4-5"
+    );
+    expect(normalizeVendorClaudeModel("Claude-Sonnet-4.5")).toBe(
+      "claude-sonnet-4-5"
+    );
+  });
+
+  it("returns null for non-Claude or non-matching shapes", () => {
+    expect(normalizeVendorClaudeModel("Claude Sonnet 4")).toBeNull();
+    expect(normalizeVendorClaudeModel("Claude Banana 4.5")).toBeNull();
+    expect(normalizeVendorClaudeModel("GPT-4o")).toBeNull();
+    expect(normalizeVendorClaudeModel("claude-sonnet-4-5")).toBeNull();
+    expect(normalizeVendorClaudeModel("")).toBeNull();
+  });
+});
 
 describe("parsePricingCsv", () => {
   it("rejects a file missing required headers", () => {
@@ -30,9 +71,11 @@ describe("parsePricingCsv", () => {
     expect(result.errors).toHaveLength(0);
     expect(result.rows).toHaveLength(4);
 
+    // Vendor display "Claude Sonnet 4.5" is normalized to its canonical wire
+    // id even without an alias dictionary (#244).
     expect(result.rows[0]).toMatchObject({
       platform: "bedrock",
-      model: "Claude Sonnet 4.5",
+      model: "claude-sonnet-4-5",
       tokenType: "input",
       region: "regional",
       listUsdPerMtok: 3.3,
@@ -100,6 +143,51 @@ describe("parsePricingCsv", () => {
     expect(result.errors).toHaveLength(0);
     expect(result.rows[0]?.listUsdPerMtok).toBeNull();
     expect(result.rows[0]?.saleUsdPerMtok).toBe(0.1);
+  });
+
+  it("maps vendor display names to canonical wire ids (#244)", () => {
+    // model_aliases is empty — the vendor-display normalizer is the only
+    // thing that should make these map.
+    const aliases = buildAliasDict([]);
+
+    const csv = [
+      HEADER,
+      "Anthropic,Claude Sonnet 4.5,Prompts,Global,$3.00,$3.00",
+      "Anthropic,Claude Opus 4.5,Prompts,Global,$15.00,$15.00",
+      "Anthropic,Claude Haiku 4.5,Prompts,Global,$0.80,$0.80",
+      "Anthropic,Claude Opus 4.6,Prompts,Global,$15.00,$15.00",
+    ].join("\n");
+
+    const result = parsePricingCsv(csv, aliases);
+    expect(result.errors).toHaveLength(0);
+    expect(result.rows).toHaveLength(4);
+    expect(result.mappedCount).toBe(4);
+    expect(result.unmappedCount).toBe(0);
+    expect(result.rows.map((r) => r.model)).toEqual([
+      "claude-sonnet-4-5",
+      "claude-opus-4-5",
+      "claude-haiku-4-5",
+      "claude-opus-4-6",
+    ]);
+  });
+
+  it("maps daemon-emitted wire ids when known to the org (#244 regression)", () => {
+    // model_aliases empty, but the org has uploaded "claude-sonnet-4-5"
+    // rollups before — the known-models hint should still map the row.
+    const aliases = buildAliasDict([], ["claude-sonnet-4-5"]);
+
+    const csv = [
+      HEADER,
+      "Anthropic,claude-sonnet-4-5,Prompts,Global,$3.00,$3.00",
+    ].join("\n");
+
+    const result = parsePricingCsv(csv, aliases);
+    expect(result.errors).toHaveLength(0);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({
+      model: "claude-sonnet-4-5",
+      mapped: true,
+    });
   });
 
   it("ignores blank lines between rows", () => {

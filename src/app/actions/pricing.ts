@@ -82,6 +82,75 @@ export async function savePricingDefaults(
   return { ok: true };
 }
 
+/**
+ * Build the alias dictionary used to map CSV rows. The "known models" hint
+ * (issue #244) is sourced from the org's own `daily_rollups.model` set so the
+ * vendor-display-name normalizer can confirm its guesses match real ingested
+ * data — and so a freshly pasted daemon id still maps when `model_aliases` is
+ * empty.
+ */
+async function loadAliasDict(
+  admin: ReturnType<typeof createAdminClient>,
+  orgId: string
+) {
+  const aliasRowsPromise = admin
+    .from("model_aliases")
+    .select("display_name, patterns");
+
+  const knownModelsPromise = loadKnownModels(admin, orgId);
+
+  const [{ data: aliasRows }, knownModels] = await Promise.all([
+    aliasRowsPromise,
+    knownModelsPromise,
+  ]);
+
+  return buildAliasDict(
+    (aliasRows ?? []).map((r) => ({
+      display_name: r.display_name as string,
+      patterns: (r.patterns as string[] | null) ?? [],
+    })),
+    knownModels
+  );
+}
+
+/**
+ * Distinct `daily_rollups.model` values ever uploaded by any of the org's
+ * devices. Two-step query mirrors the pattern in `org.ts` (users → devices →
+ * rollups) to avoid relying on Supabase's nested-relation filter syntax.
+ */
+async function loadKnownModels(
+  admin: ReturnType<typeof createAdminClient>,
+  orgId: string
+): Promise<string[]> {
+  const { data: orgUsers } = await admin
+    .from("users")
+    .select("id")
+    .eq("org_id", orgId);
+  const userIds = (orgUsers ?? []).map((u) => u.id as string);
+  if (userIds.length === 0) return [];
+
+  const { data: orgDevices } = await admin
+    .from("devices")
+    .select("id")
+    .in("user_id", userIds);
+  const deviceIds = (orgDevices ?? []).map((d) => d.id as string);
+  if (deviceIds.length === 0) return [];
+
+  const { data: rows } = await admin
+    .from("daily_rollups")
+    .select("model")
+    .in("device_id", deviceIds);
+  if (!Array.isArray(rows)) return [];
+
+  return Array.from(
+    new Set(
+      rows
+        .map((r) => (r as { model: unknown }).model)
+        .filter((m): m is string => typeof m === "string" && m.length > 0)
+    )
+  );
+}
+
 // ============================================================
 // CSV preview (parse-only; no DB writes)
 // ============================================================
@@ -128,15 +197,7 @@ export async function previewPricingCsv(
   const text = await file.text();
   const admin = createAdminClient();
 
-  const { data: aliasRows } = await admin
-    .from("model_aliases")
-    .select("display_name, patterns");
-  const aliases = buildAliasDict(
-    (aliasRows ?? []).map((r) => ({
-      display_name: r.display_name as string,
-      patterns: (r.patterns as string[] | null) ?? [],
-    }))
-  );
+  const aliases = await loadAliasDict(admin, auth.me.org_id);
 
   const result = parsePricingCsv(text, aliases);
 
@@ -227,15 +288,7 @@ export async function commitPricingDraft(
   const text = await file.text();
   const admin = createAdminClient();
 
-  const { data: aliasRows } = await admin
-    .from("model_aliases")
-    .select("display_name, patterns");
-  const aliases = buildAliasDict(
-    (aliasRows ?? []).map((r) => ({
-      display_name: r.display_name as string,
-      patterns: (r.patterns as string[] | null) ?? [],
-    }))
-  );
+  const aliases = await loadAliasDict(admin, auth.me.org_id);
 
   const parsed = parsePricingCsv(text, aliases);
   if (parsed.rows.length === 0) {

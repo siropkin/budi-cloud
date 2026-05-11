@@ -129,11 +129,19 @@ export type AliasDict = {
   displayNames: Set<string>;
   /** Map each wire-model pattern → its canonical display name. */
   patternToDisplay: Map<string, string>;
+  /**
+   * Wire-model ids actually observed in `daily_rollups.model` for the caller's
+   * org. Used as a fallback when a CSV row carries a vendor display form
+   * ("Claude Sonnet 4.5") that the model_aliases seed doesn't cover — issue
+   * #244. Empty when the org has no ingested rollups yet.
+   */
+  knownModels: Set<string>;
 };
 
 /** Build an alias dictionary from `{display_name, patterns}` rows. */
 export function buildAliasDict(
-  rows: Array<{ display_name: string; patterns: string[] | null }>
+  rows: Array<{ display_name: string; patterns: string[] | null }>,
+  knownModels: Iterable<string> = []
 ): AliasDict {
   const displayNames = new Set<string>();
   const patternToDisplay = new Map<string, string>();
@@ -144,7 +152,31 @@ export function buildAliasDict(
       if (p) patternToDisplay.set(p, row.display_name);
     }
   }
-  return { displayNames, patternToDisplay };
+  return {
+    displayNames,
+    patternToDisplay,
+    knownModels: new Set(knownModels),
+  };
+}
+
+/**
+ * Normalize a vendor's human-readable Claude model name (the form Anthropic
+ * publishes on its pricing page) to the canonical wire id the daemon emits.
+ *
+ *   "Claude Sonnet 4.5"  → "claude-sonnet-4-5"
+ *   "Claude  Opus  4.6"  → "claude-opus-4-6"
+ *   "claude opus 4.5"    → "claude-opus-4-5"
+ *
+ * Returns `null` if the input doesn't match the vendor display shape — the
+ * caller falls through to the existing alias dictionary in that case.
+ */
+export function normalizeVendorClaudeModel(model: string): string | null {
+  const collapsed = model.trim().replace(/\s+/g, " ").toLowerCase();
+  const match = collapsed.match(
+    /^claude[\s-]+(sonnet|opus|haiku)[\s-]+(\d+)\.(\d+)$/
+  );
+  if (!match) return null;
+  return `claude-${match[1]}-${match[2]}-${match[3]}`;
 }
 
 /**
@@ -154,7 +186,11 @@ export function buildAliasDict(
  */
 export function parsePricingCsv(
   source: string,
-  aliases: AliasDict = { displayNames: new Set(), patternToDisplay: new Map() }
+  aliases: AliasDict = {
+    displayNames: new Set(),
+    patternToDisplay: new Map(),
+    knownModels: new Set(),
+  }
 ): ParseResult {
   const lines = source
     .split(/\r?\n/)
@@ -249,8 +285,15 @@ export function parsePricingCsv(
       continue;
     }
 
-    // Resolve canonical model: alias display-name match wins; otherwise check
-    // if a pattern lookup canonicalizes; otherwise mark unmapped (still kept).
+    // Resolve canonical model. Resolution order:
+    //   1. exact alias display-name match
+    //   2. alias pattern lookup (canonicalizes to the display name)
+    //   3. wire id already present in the org's `daily_rollups` (handles a
+    //      pasted daemon id even when model_aliases is empty)
+    //   4. vendor display form ("Claude Sonnet 4.5") → wire id via
+    //      `normalizeVendorClaudeModel`; accepted as mapped because the
+    //      transformed id is what the recalc engine matches exactly against
+    //      `daily_rollups.model` (issue #244)
     let canonicalModel = model;
     let mapped = false;
     if (aliases.displayNames.has(model)) {
@@ -258,6 +301,14 @@ export function parsePricingCsv(
     } else if (aliases.patternToDisplay.has(model)) {
       canonicalModel = aliases.patternToDisplay.get(model)!;
       mapped = true;
+    } else if (aliases.knownModels.has(model)) {
+      mapped = true;
+    } else {
+      const vendorWireId = normalizeVendorClaudeModel(model);
+      if (vendorWireId !== null) {
+        canonicalModel = vendorWireId;
+        mapped = true;
+      }
     }
 
     const raw: Record<string, string> = {};
