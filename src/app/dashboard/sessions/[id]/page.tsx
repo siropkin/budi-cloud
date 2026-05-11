@@ -3,9 +3,14 @@ import Link from "next/link";
 import {
   getCurrentUser,
   getDeviceSessionsForDay,
+  getEarliestActivity,
+  getSessionCostDistribution,
   getSessionDetail,
   getSessionDetailBySessionId,
 } from "@/lib/dal";
+import { dateRangeFromDays } from "@/lib/date-range";
+import { ALL_PERIOD_VALUE } from "@/lib/periods";
+import { SessionCostDistributionStrip } from "@/components/session-cost-distribution-strip";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
   fmtCost,
@@ -96,6 +101,29 @@ export default async function SessionDetailPage({
         viewerTz
       )
     : [];
+
+  // Cost-percentile distribution strip (#217). Compares the current session's
+  // cost against every other session the viewer can see in the same period —
+  // round-tripped from the list page's `?days=` when present so a manager
+  // arriving from the filtered Sessions table sees the percentile against the
+  // same window. We default to 30d (rather than the dashboard's 7d default)
+  // because a small team frequently has < 10 sessions in a 7-day window and
+  // the strip would self-hide; 30d trades a slightly broader baseline for a
+  // meaningful percentile in the common case.
+  const distributionDays = sp.days ?? "30";
+  const earliestActivity =
+    distributionDays === ALL_PERIOD_VALUE
+      ? await getEarliestActivity(user)
+      : null;
+  const distributionRange = dateRangeFromDays(
+    distributionDays,
+    earliestActivity,
+    viewerTz
+  );
+  const costDistribution = await getSessionCostDistribution(
+    user,
+    distributionRange
+  );
 
   return (
     <div className="space-y-6">
@@ -198,6 +226,11 @@ export default async function SessionDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      <SessionCostDistributionStrip
+        distribution={costDistribution}
+        currentCostCents={Number(session.total_cost_cents)}
+      />
 
       {sessionLocalDate ? (
         <DeviceDayTimeline

@@ -2,6 +2,22 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { utcInstantForLocalEnd, utcInstantForLocalStart } from "@/lib/timezone";
+import {
+  buildSessionCostBuckets,
+  sessionCostBucketIndex,
+  type SessionCostDistribution,
+} from "@/lib/session-cost-distribution";
+
+export type {
+  SessionCostBucket,
+  SessionCostDistribution,
+} from "@/lib/session-cost-distribution";
+export {
+  buildSessionCostBuckets,
+  sessionCostBucketIndex,
+  SESSION_COST_BUCKET_COUNT,
+  SESSION_COST_MIN_CENTS,
+} from "@/lib/session-cost-distribution";
 
 export interface DateRange {
   /** Inclusive lower bound in the **viewer's local TZ** (`YYYY-MM-DD`). */
@@ -1263,6 +1279,73 @@ export async function getDeviceSessionsForDay(
   const rows = (data ?? []) as SessionRow[];
   if (rows.length === 0) return rows;
   return attachOwners(admin, user, rows);
+}
+
+/**
+ * Cost-distribution histogram for the session-detail page (#217).
+ *
+ * Returns a fixed bank of log-spaced buckets between `$0.01` and the period's
+ * max session cost, with each bucket's session count. Combined with the
+ * caller-known `total_cost_cents` of the session on screen, this powers the
+ * "This session is in the top X%" strip rendered below the Activity card —
+ * answering "is this session abnormally expensive?" at a glance, without the
+ * viewer having to mentally compare a dollar figure against the team's typical
+ * session.
+ *
+ * Scope mirrors `getSessions`: visible-device set respects ADR-0083 §6 (manager
+ * sees the org; member sees their own devices), with optional `surfaces` /
+ * `scopedUserId` narrowing. Privacy: no prompt / file / response content is
+ * read here — only the numeric `total_cost_cents` column.
+ *
+ * The histogram is computed in JS rather than via a Postgres RPC because the
+ * aggregation is small (one row per session in the period, cost column only)
+ * and the same-day-timeline RPC-free pattern at `getDeviceSessionsForDay`
+ * sets the precedent (#218). Switch to an RPC if the row volume grows.
+ */
+export async function getSessionCostDistribution(
+  user: BudiUser,
+  range: DateRange,
+  options?: ScopeOptions
+): Promise<SessionCostDistribution> {
+  const admin = createAdminClient();
+  const deviceIds = await getVisibleDeviceIds(admin, user, options);
+  if (deviceIds.length === 0) {
+    return { buckets: [], total_sessions: 0, max_cost_cents: 0 };
+  }
+  const surfaces = normalizeSurfaces(options?.surfaces);
+  let query = admin
+    .from("session_summaries")
+    .select("total_cost_cents")
+    .in("device_id", deviceIds)
+    .gte("started_at", range.startedAtFrom)
+    .lte("started_at", range.startedAtTo);
+  if (surfaces) query = query.in("surface", surfaces);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const rows = (data ?? []) as { total_cost_cents: number | string }[];
+  const costs: number[] = [];
+  let maxCostCents = 0;
+  for (const r of rows) {
+    const n = Number(r.total_cost_cents);
+    if (!Number.isFinite(n)) continue;
+    costs.push(n);
+    if (n > maxCostCents) maxCostCents = n;
+  }
+  const totalSessions = costs.length;
+
+  const buckets = buildSessionCostBuckets(maxCostCents);
+  for (const c of costs) {
+    const idx = sessionCostBucketIndex(buckets, c);
+    if (idx >= 0) buckets[idx]!.count += 1;
+  }
+
+  return {
+    buckets,
+    total_sessions: totalSessions,
+    max_cost_cents: maxCostCents,
+  };
 }
 
 /**
