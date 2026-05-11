@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCurrentUser } from "@/lib/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -83,7 +84,14 @@ export default async function PricingSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold">Pricing</h1>
+        <Link
+          href="/dashboard/settings"
+          className="inline-flex items-center text-sm text-zinc-400 hover:text-zinc-200"
+        >
+          <span aria-hidden="true">←</span>
+          <span className="ml-1">Settings</span>
+        </Link>
+        <h1 className="mt-2 text-xl font-bold">Pricing</h1>
         <p className="mt-1 text-sm text-zinc-400">
           Manage your team&apos;s negotiated price lists. Recalculations use the
           active list to override the daemon&apos;s ingested costs.
