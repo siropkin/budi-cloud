@@ -35,6 +35,7 @@ const dal = {
   getDeviceSessionsForDay: vi.fn(),
   getEarliestActivity: vi.fn(),
   getSessionCostDistribution: vi.fn(),
+  getBranchSessionTimeline: vi.fn(),
 };
 // The strip component imports `sessionCostBucketIndex` directly from
 // `@/lib/dal`; spread the real exports so that helper resolves while the
@@ -49,6 +50,7 @@ vi.mock("@/lib/dal", async () => {
     getDeviceSessionsForDay: dal.getDeviceSessionsForDay,
     getEarliestActivity: dal.getEarliestActivity,
     getSessionCostDistribution: dal.getSessionCostDistribution,
+    getBranchSessionTimeline: dal.getBranchSessionTimeline,
   };
 });
 vi.mock("@/lib/viewer-timezone", () => ({
@@ -108,6 +110,10 @@ beforeEach(() => {
     total_sessions: 0,
     max_cost_cents: 0,
   });
+  // Default: empty branch timeline so the same-branch chart is hidden in
+  // baseline smoke tests. Suites that exercise the chart override per-case
+  // (#216).
+  dal.getBranchSessionTimeline.mockReset().mockResolvedValue([]);
 });
 
 async function render(
