@@ -1,11 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getCurrentUser } from "@/lib/dal";
+import { getCurrentUser, getRecalculationRuns } from "@/lib/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { DefaultsForm } from "./defaults-form";
 import { UploadCsvSection } from "./upload-csv-section";
 import { PriceListsTable } from "./price-lists-table";
+import {
+  AuditHistoryTable,
+  PAGE_SIZE,
+  parsePage,
+  parseStatusFilter,
+} from "./audit-history-table";
 
 /**
  * #232: Settings → Pricing. Admin-only surface for managing the team's
@@ -21,27 +27,45 @@ import { PriceListsTable } from "./price-lists-table";
  * Non-managers get a 404 (same response the rest of the dashboard uses for
  * manager-only sections — see #110).
  */
-export default async function PricingSettingsPage() {
+export default async function PricingSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    recalc_status?: string;
+    recalc_page?: string;
+  }>;
+}) {
   const user = await getCurrentUser();
   if (!user?.org_id) return null;
   if (user.role !== "manager") notFound();
 
+  const params = await searchParams;
+  const recalcStatus = parseStatusFilter(params.recalc_status);
+  const recalcPage = parsePage(params.recalc_page);
+  const recalcOffset = (recalcPage - 1) * PAGE_SIZE;
+
   const admin = createAdminClient();
 
-  const [{ data: defaultsRow }, { data: lists }] = await Promise.all([
-    admin
-      .from("org_pricing_defaults")
-      .select("default_platform, default_region")
-      .eq("org_id", user.org_id)
-      .maybeSingle(),
-    admin
-      .from("org_price_lists")
-      .select(
-        "id, name, status, effective_from, effective_to, source_file_name, uploaded_at, uploaded_by"
-      )
-      .eq("org_id", user.org_id)
-      .order("uploaded_at", { ascending: false }),
-  ]);
+  const [{ data: defaultsRow }, { data: lists }, recalcRuns] =
+    await Promise.all([
+      admin
+        .from("org_pricing_defaults")
+        .select("default_platform, default_region")
+        .eq("org_id", user.org_id)
+        .maybeSingle(),
+      admin
+        .from("org_price_lists")
+        .select(
+          "id, name, status, effective_from, effective_to, source_file_name, uploaded_at, uploaded_by"
+        )
+        .eq("org_id", user.org_id)
+        .order("uploaded_at", { ascending: false }),
+      getRecalculationRuns(user.org_id, {
+        status: recalcStatus === "all" ? null : recalcStatus,
+        limit: PAGE_SIZE,
+        offset: recalcOffset,
+      }),
+    ]);
 
   const defaults = {
     platform: (defaultsRow?.default_platform as string | null) ?? null,
@@ -50,9 +74,10 @@ export default async function PricingSettingsPage() {
 
   const lookupUserIds = Array.from(
     new Set(
-      (lists ?? [])
-        .map((l) => l.uploaded_by as string | null)
-        .filter((v): v is string => Boolean(v))
+      [
+        ...(lists ?? []).map((l) => l.uploaded_by as string | null),
+        ...recalcRuns.rows.map((r) => r.triggeredBy),
+      ].filter((v): v is string => Boolean(v))
     )
   );
   const usersById = new Map<string, string>();
@@ -125,6 +150,24 @@ export default async function PricingSettingsPage() {
         </CardHeader>
         <CardContent>
           <UploadCsvSection />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div id="audit-history" className="scroll-mt-6">
+            <CardTitle>Audit history</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <AuditHistoryTable
+            runs={recalcRuns.rows}
+            total={recalcRuns.total}
+            page={recalcPage}
+            pageSize={PAGE_SIZE}
+            status={recalcStatus}
+            usersById={usersById}
+          />
         </CardContent>
       </Card>
     </div>

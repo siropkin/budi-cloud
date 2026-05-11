@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { fmtCost } from "@/lib/format";
 
 /**
@@ -28,20 +29,40 @@ import { fmtCost } from "@/lib/format";
 export function SavingsStrip({
   title,
   subtitle,
+  href,
 }: {
   title: string;
   subtitle: string;
+  /** Optional deep-link target — wraps the strip in a Next `<Link>` when
+   * set. Used to drill into Settings → Pricing → Audit history (#733) for
+   * managers; member viewers don't get the link so they don't land on a 404. */
+  href?: string;
 }) {
-  return (
-    <div
-      role="status"
-      className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm"
-    >
+  const inner = (
+    <>
       <span aria-hidden className="text-emerald-300">
         ●
       </span>
       <span className="font-semibold text-emerald-200">{title}</span>
       <span className="text-zinc-400">{subtitle}</span>
+    </>
+  );
+  const className =
+    "flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm";
+  if (href) {
+    return (
+      <Link
+        href={href}
+        role="status"
+        className={`${className} transition-colors hover:bg-emerald-500/10`}
+      >
+        {inner}
+      </Link>
+    );
+  }
+  return (
+    <div role="status" className={className}>
+      {inner}
     </div>
   );
 }

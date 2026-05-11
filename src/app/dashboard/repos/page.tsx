@@ -12,7 +12,7 @@ import { dateRangeFromDays } from "@/lib/date-range";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { parseUnit } from "@/lib/units";
-import { fmtCost, fmtNum, repoName } from "@/lib/format";
+import { buildCostCellTooltip, fmtCost, fmtNum, repoName } from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
@@ -65,18 +65,25 @@ export default async function ReposPage({
   // the user actually sees.
   const repoBuckets = new Map<
     string,
-    { cost_cents: number; input_tokens: number; output_tokens: number }
+    {
+      cost_cents: number;
+      cost_cents_ingested: number;
+      input_tokens: number;
+      output_tokens: number;
+    }
   >();
   for (const r of repos) {
     const label = repoName(r.repo_id);
     const existing = repoBuckets.get(label);
     if (existing) {
       existing.cost_cents += r.cost_cents;
+      existing.cost_cents_ingested += r.cost_cents_ingested;
       existing.input_tokens += r.input_tokens;
       existing.output_tokens += r.output_tokens;
     } else {
       repoBuckets.set(label, {
         cost_cents: r.cost_cents,
+        cost_cents_ingested: r.cost_cents_ingested,
         input_tokens: r.input_tokens,
         output_tokens: r.output_tokens,
       });
@@ -93,6 +100,7 @@ export default async function ReposPage({
   const repoRows = Array.from(repoBuckets, ([label, totals]) => ({
     label,
     cost_cents: totals.cost_cents,
+    cost_cents_ingested: totals.cost_cents_ingested,
     input_tokens: totals.input_tokens,
     output_tokens: totals.output_tokens,
   }))
@@ -104,6 +112,7 @@ export default async function ReposPage({
       project: repoName(b.repo_id),
       branch: b.git_branch.replace(/^refs\/heads\//, ""),
       cost_cents: b.cost_cents,
+      cost_cents_ingested: b.cost_cents_ingested,
       input_tokens: b.input_tokens,
       output_tokens: b.output_tokens,
     }))
@@ -175,7 +184,17 @@ export default async function ReposPage({
                         <td className="py-2 pl-4 text-right tabular-nums text-zinc-400">
                           {fmtNum(r.output_tokens)}
                         </td>
-                        <td className="py-2 pl-4 text-right tabular-nums text-zinc-300">
+                        <td
+                          className="py-2 pl-4 text-right tabular-nums text-zinc-300"
+                          title={
+                            isTokens
+                              ? undefined
+                              : buildCostCellTooltip(
+                                  r.cost_cents_ingested,
+                                  r.cost_cents
+                                )
+                          }
+                        >
                           {fmtValue(
                             r.cost_cents,
                             r.input_tokens + r.output_tokens
@@ -195,7 +214,17 @@ export default async function ReposPage({
                         >
                           {r.label}
                         </span>
-                        <span className="shrink-0 tabular-nums text-zinc-300">
+                        <span
+                          className="shrink-0 tabular-nums text-zinc-300"
+                          title={
+                            isTokens
+                              ? undefined
+                              : buildCostCellTooltip(
+                                  r.cost_cents_ingested,
+                                  r.cost_cents
+                                )
+                          }
+                        >
                           {fmtValue(
                             r.cost_cents,
                             r.input_tokens + r.output_tokens
@@ -283,7 +312,17 @@ export default async function ReposPage({
                         <td className="py-2 pl-4 text-right tabular-nums text-zinc-400">
                           {fmtNum(b.output_tokens)}
                         </td>
-                        <td className="py-2 pl-4 text-right tabular-nums text-zinc-300">
+                        <td
+                          className="py-2 pl-4 text-right tabular-nums text-zinc-300"
+                          title={
+                            isTokens
+                              ? undefined
+                              : buildCostCellTooltip(
+                                  b.cost_cents_ingested,
+                                  b.cost_cents
+                                )
+                          }
+                        >
                           {fmtValue(
                             b.cost_cents,
                             b.input_tokens + b.output_tokens
@@ -303,7 +342,17 @@ export default async function ReposPage({
                         >
                           {b.project} / {b.branch}
                         </span>
-                        <span className="shrink-0 tabular-nums text-zinc-300">
+                        <span
+                          className="shrink-0 tabular-nums text-zinc-300"
+                          title={
+                            isTokens
+                              ? undefined
+                              : buildCostCellTooltip(
+                                  b.cost_cents_ingested,
+                                  b.cost_cents
+                                )
+                          }
+                        >
                           {fmtValue(
                             b.cost_cents,
                             b.input_tokens + b.output_tokens
@@ -369,7 +418,17 @@ export default async function ReposPage({
                         <td className="py-2 pl-4 text-right tabular-nums text-zinc-400">
                           {fmtNum(t.output_tokens)}
                         </td>
-                        <td className="py-2 pl-4 text-right tabular-nums text-zinc-300">
+                        <td
+                          className="py-2 pl-4 text-right tabular-nums text-zinc-300"
+                          title={
+                            isTokens
+                              ? undefined
+                              : buildCostCellTooltip(
+                                  t.cost_cents_ingested,
+                                  t.cost_cents
+                                )
+                          }
+                        >
                           {fmtValue(
                             t.cost_cents,
                             t.input_tokens + t.output_tokens
@@ -389,7 +448,17 @@ export default async function ReposPage({
                         >
                           {t.ticket}
                         </span>
-                        <span className="shrink-0 tabular-nums text-zinc-300">
+                        <span
+                          className="shrink-0 tabular-nums text-zinc-300"
+                          title={
+                            isTokens
+                              ? undefined
+                              : buildCostCellTooltip(
+                                  t.cost_cents_ingested,
+                                  t.cost_cents
+                                )
+                          }
+                        >
                           {fmtValue(
                             t.cost_cents,
                             t.input_tokens + t.output_tokens

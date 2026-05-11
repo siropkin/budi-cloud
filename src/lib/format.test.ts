@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { fmtDelta, formatDuration, formatProvider, repoName } from "./format";
+import {
+  buildCostCellTooltip,
+  fmtDelta,
+  formatDuration,
+  formatProvider,
+  repoName,
+} from "./format";
 
 describe("formatDuration (#88)", () => {
   it("uses duration_ms when provided", () => {
@@ -114,5 +120,27 @@ describe("formatProvider (#168)", () => {
     expect(formatProvider(null)).toBe("-");
     expect(formatProvider(undefined)).toBe("-");
     expect(formatProvider("")).toBe("-");
+  });
+});
+
+describe("buildCostCellTooltip (#733)", () => {
+  it("returns undefined when ingested equals effective", () => {
+    expect(buildCostCellTooltip(1000, 1000)).toBeUndefined();
+    expect(buildCostCellTooltip(0, 0)).toBeUndefined();
+  });
+
+  it("returns 'List / Effective' when team pricing changed the cost", () => {
+    expect(buildCostCellTooltip(500_00, 350_00)).toBe(
+      "List: $500.00 / Effective: $350.00"
+    );
+  });
+
+  it("treats sub-cent rounding drift as equal so a $0.001 gap doesn't render a misleading tooltip", () => {
+    expect(buildCostCellTooltip(1000.5, 1000.0)).toBeUndefined();
+  });
+
+  it("returns undefined for non-finite inputs rather than rendering NaN", () => {
+    expect(buildCostCellTooltip(Number.NaN, 100)).toBeUndefined();
+    expect(buildCostCellTooltip(100, Number.POSITIVE_INFINITY)).toBeUndefined();
   });
 });

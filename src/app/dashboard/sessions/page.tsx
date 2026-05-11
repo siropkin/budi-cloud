@@ -17,6 +17,7 @@ import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { parseUnit } from "@/lib/units";
 import {
+  buildCostCellTooltip,
   fmtCost,
   fmtNum,
   formatDuration,
@@ -291,7 +292,17 @@ export default async function SessionsPage({
                               {fmtNum(s.message_count)}
                             </Link>
                           </td>
-                          <td className="text-right tabular-nums text-zinc-200">
+                          <td
+                            className="text-right tabular-nums text-zinc-200"
+                            title={
+                              isTokens
+                                ? undefined
+                                : buildCostCellTooltip(
+                                    Number(s.total_cost_cents_ingested),
+                                    Number(s.total_cost_cents_effective)
+                                  )
+                            }
+                          >
                             <Link
                               href={href}
                               className="block py-2 whitespace-nowrap"
