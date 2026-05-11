@@ -2122,4 +2122,3 @@ describe("getSessions multi-provider visibility (#202)", () => {
     }
   });
 });
-
