@@ -11,6 +11,7 @@ import {
 import { dateRangeFromDays } from "@/lib/date-range";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { SessionCostDistributionStrip } from "@/components/session-cost-distribution-strip";
+import { SessionTokenComposition } from "@/components/session-token-composition";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
   fmtCost,
@@ -223,6 +224,17 @@ export default async function SessionDetailPage({
                 value={fmtCost(Number(session.total_cost_cents))}
               />
             </dl>
+            {/*
+              Token composition bar (#215). Sits beneath the Activity dl so
+              the input-vs-output split reads alongside the Tokens / Cost
+              pair instead of duplicating that field above. Hidden entirely
+              when both halves are 0 — a 0-width bar would read as a broken
+              UI element rather than an empty session.
+            */}
+            <SessionTokenComposition
+              inputTokens={inputTokens}
+              outputTokens={outputTokens}
+            />
           </CardContent>
         </Card>
       </div>
