@@ -10,12 +10,14 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## Product boundaries
 
-| Product         | Repo                                                              | Role                                                                                     |
-| --------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| **budi-core**   | [`siropkin/budi`](https://github.com/siropkin/budi)               | Rust daemon + CLI. Owns SQLite, pushes aggregates to this service.                       |
-| **budi-cursor** | [`siropkin/budi-cursor`](https://github.com/siropkin/budi-cursor) | VS Code/Cursor extension. Unrelated to the cloud.                                        |
-| **budi-cloud**  | **this repo** (`siropkin/budi-cloud`)                             | Cloud dashboard + ingest API.                                                            |
-| **getbudi.dev** | [`siropkin/getbudi.dev`](https://github.com/siropkin/getbudi.dev) | Public marketing landing page. Different subdomain (`getbudi.dev` vs `app.getbudi.dev`). |
+| Product             | Repo                                                                      | Role                                                                                     |
+| ------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **budi-core**       | [`siropkin/budi`](https://github.com/siropkin/budi)                       | Rust daemon + CLI. Owns SQLite, pushes aggregates to this service.                       |
+| **budi-cursor**     | [`siropkin/budi-cursor`](https://github.com/siropkin/budi-cursor)         | VS Code/Cursor extension. Unrelated to the cloud.                                        |
+| **budi-jetbrains**  | [`siropkin/budi-jetbrains`](https://github.com/siropkin/budi-jetbrains)   | JetBrains IDE plugin. Sibling surface to `budi-cursor`.                                  |
+| **budi-cloud**      | **this repo** (`siropkin/budi-cloud`)                                     | Cloud dashboard + ingest API.                                                            |
+| **homebrew-budi**   | [`siropkin/homebrew-budi`](https://github.com/siropkin/homebrew-budi)     | Homebrew tap for `brew install siropkin/budi/budi`.                                      |
+| **getbudi.dev**     | [`siropkin/getbudi.dev`](https://github.com/siropkin/getbudi.dev)         | Public marketing landing page. Different subdomain (`getbudi.dev` vs `app.getbudi.dev`). |
 
 Extraction boundaries are defined in [ADR-0086](https://github.com/siropkin/budi/blob/main/docs/adr/0086-extraction-boundaries.md) in the main repo. The privacy contract is [ADR-0083](https://github.com/siropkin/budi/blob/main/docs/adr/0083-cloud-ingest-identity-and-privacy-contract.md). Read both before touching the ingest path.
 
