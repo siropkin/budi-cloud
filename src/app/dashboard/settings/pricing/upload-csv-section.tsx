@@ -129,6 +129,14 @@ export function UploadCsvSection() {
 
       {preview && preview.totalRows > 0 && (
         <div className="space-y-4 border-t border-white/10 pt-4">
+          {preview.mappedCount === 0 && (
+            <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+              No rows mapped to known models — the recalc engine would never
+              apply this draft. Fix the CSV or update model names before
+              committing.
+            </div>
+          )}
+
           {preview.duplicateOfListName && (
             <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-300">
               Duplicate filename: a previous upload named &quot;
@@ -175,8 +183,9 @@ export function UploadCsvSection() {
             <button
               type="button"
               onClick={handleCommit}
-              disabled={isPending}
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+              disabled={isPending || preview.mappedCount === 0}
+              aria-disabled={isPending || preview.mappedCount === 0}
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isPending ? "Saving…" : "Commit as draft"}
             </button>
@@ -227,7 +236,9 @@ function PreviewBlock({ preview }: { preview: CsvPreview }) {
       {preview.unmappedModels.length > 0 && (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300">
           <p className="mb-1 font-medium">
-            Unmapped models (still committable)
+            {preview.mappedCount > 0
+              ? "Unmapped models (still committable)"
+              : "Unmapped models"}
           </p>
           <p>{preview.unmappedModels.join(", ")}</p>
         </div>
