@@ -1315,6 +1315,69 @@ describe("POST /v1/ingest — surface round-trip (#204)", () => {
     expect(fake.rows("session_summaries")[0].surface).toBe("unknown");
   });
 
+  it("response echoes the persisted surfaces/providers so operators can verify what the cloud actually saw (#204)", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    const res = await POST(
+      mkReq({
+        ...baseEnvelope,
+        payload: {
+          daily_rollups: [
+            { ...baseRollup, surface: "terminal", provider: "claude_code" },
+            { ...baseRollup, surface: "cursor", provider: "claude_code" },
+            { ...baseRollup, surface: "vscode", provider: "copilot_chat" },
+          ],
+          session_summaries: [
+            {
+              session_id: "sess-vscode",
+              provider: "copilot_chat",
+              started_at: "2026-04-14T10:00:00Z",
+              ended_at: "2026-04-14T11:00:00Z",
+              duration_ms: 1,
+              repo_id: null,
+              git_branch: null,
+              ticket: null,
+              message_count: 1,
+              total_input_tokens: 1,
+              total_output_tokens: 1,
+              total_cost_cents: 1,
+              surface: "vscode",
+            },
+          ],
+        },
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      surfaces_seen: string[];
+      providers_seen: string[];
+    };
+    // Sorted, deduped union across both row sets.
+    expect(body.surfaces_seen).toEqual(["cursor", "terminal", "vscode"]);
+    expect(body.providers_seen).toEqual(["claude_code", "copilot_chat"]);
+  });
+
+  it("response collapses to ['unknown'] when no envelope row carries a surface — the receipt that confirms the bug is daemon-side, not cloud-side (#204)", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    const res = await POST(
+      mkReq({
+        ...baseEnvelope,
+        payload: {
+          daily_rollups: [{ ...baseRollup }, { ...baseRollup, role: "user" }],
+          session_summaries: [],
+        },
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { surfaces_seen: string[] };
+    expect(body.surfaces_seen).toEqual(["unknown"]);
+  });
+
   it("trims whitespace and caps the stored surface at MAX_SURFACE_LENGTH", async () => {
     seedUser();
     const { POST } = await import("./route");
