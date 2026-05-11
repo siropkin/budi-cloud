@@ -17,18 +17,20 @@ const ALL_SURFACE_LABEL = "All surfaces";
  * multi-select UIs can ship without a wire-shape change. For v1 the chip
  * surfaces a single-select dropdown.
  *
- * Hidden only when `surfaces` is empty — i.e. the org has no rollups yet,
- * so a dropdown that would only offer "All surfaces" carries zero signal.
- * Once any surface is known (even just `unknown` from pre-bump daemons)
- * the chip renders so the dimension is discoverable: #203 explicitly asks
- * the filter to land alongside Teammate / time-range / $/Tokens
- * regardless of the number of distinct surfaces in the data.
+ * Hidden when `surfaces` is empty (org has no rollups yet) and also when
+ * the only known surface is the schema default `'unknown'` (#227): in that
+ * case the dropdown would read as "All surfaces / Unknown" with no real
+ * choice, because every daemon today predates the `surface` bump and lands
+ * on migration 014's `DEFAULT 'unknown'`. The chip reappears automatically
+ * as soon as `getKnownSurfaces` returns a second value — i.e. the day the
+ * first daemon ships a real `surface`.
  */
 export function SurfaceFilter({ surfaces }: { surfaces: string[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   if (surfaces.length === 0) return null;
+  if (surfaces.length === 1 && surfaces[0] === "unknown") return null;
 
   const raw = searchParams.get("surface");
   const parsed = parseSurfaceParam(raw);
