@@ -171,6 +171,7 @@ export type CsvPreview = {
   mappedCount: number;
   unmappedCount: number;
   sampleMapped: PreviewRow[];
+  sampleUnmapped: PreviewRow[];
   unmappedModels: string[];
   errors: { lineNumber: number; message: string }[];
   /** Same `(filename, sha256-ish)` heuristic surfaced as a duplicate warning. */
@@ -228,25 +229,33 @@ function shapePreview(
   const unmappedModels = Array.from(
     new Set(result.rows.filter((r) => !r.mapped).map((r) => r.model))
   );
+  const toPreviewRow = (r: ParseResult["rows"][number]): PreviewRow => ({
+    lineNumber: r.lineNumber,
+    platform: r.platform,
+    model: r.model,
+    tokenType: r.tokenType,
+    region: r.region,
+    listUsdPerMtok: r.listUsdPerMtok,
+    saleUsdPerMtok: r.saleUsdPerMtok,
+    mapped: r.mapped,
+  });
+
   const sampleMapped: PreviewRow[] = result.rows
     .filter((r) => r.mapped)
     .slice(0, 5)
-    .map((r) => ({
-      lineNumber: r.lineNumber,
-      platform: r.platform,
-      model: r.model,
-      tokenType: r.tokenType,
-      region: r.region,
-      listUsdPerMtok: r.listUsdPerMtok,
-      saleUsdPerMtok: r.saleUsdPerMtok,
-      mapped: r.mapped,
-    }));
+    .map(toPreviewRow);
+
+  const sampleUnmapped: PreviewRow[] = result.rows
+    .filter((r) => !r.mapped)
+    .slice(0, 5)
+    .map(toPreviewRow);
 
   return {
     totalRows: result.rows.length,
     mappedCount: result.mappedCount,
     unmappedCount: result.unmappedCount,
     sampleMapped,
+    sampleUnmapped,
     unmappedModels,
     errors: result.errors,
     duplicateOfListName,
