@@ -32,14 +32,7 @@ const dal = {
   getCurrentUser: vi.fn(),
   getSessionDetail: vi.fn(),
   getSessionDetailBySessionId: vi.fn(),
-  getDeviceSessionsForDay: vi.fn(),
-  getEarliestActivity: vi.fn(),
-  getSessionCostDistribution: vi.fn(),
-  getBranchSessionTimeline: vi.fn(),
 };
-// The strip component imports `sessionCostBucketIndex` directly from
-// `@/lib/dal`; spread the real exports so that helper resolves while the
-// async DAL entry points stay mockable per-test.
 vi.mock("@/lib/dal", async () => {
   const actual = await vi.importActual<typeof import("@/lib/dal")>("@/lib/dal");
   return {
@@ -47,15 +40,8 @@ vi.mock("@/lib/dal", async () => {
     getCurrentUser: dal.getCurrentUser,
     getSessionDetail: dal.getSessionDetail,
     getSessionDetailBySessionId: dal.getSessionDetailBySessionId,
-    getDeviceSessionsForDay: dal.getDeviceSessionsForDay,
-    getEarliestActivity: dal.getEarliestActivity,
-    getSessionCostDistribution: dal.getSessionCostDistribution,
-    getBranchSessionTimeline: dal.getBranchSessionTimeline,
   };
 });
-vi.mock("@/lib/viewer-timezone", () => ({
-  getViewerTimeZone: async () => "UTC",
-}));
 
 const MANAGER = {
   id: "usr_ivan",
@@ -99,21 +85,6 @@ beforeEach(() => {
   dal.getCurrentUser.mockReset().mockResolvedValue(MANAGER);
   dal.getSessionDetail.mockReset().mockResolvedValue(SESSION);
   dal.getSessionDetailBySessionId.mockReset().mockResolvedValue(SESSION);
-  // Default: single-session day so the timeline is hidden in baseline
-  // smoke tests. Suites that exercise the timeline override per-case.
-  dal.getDeviceSessionsForDay.mockReset().mockResolvedValue([SESSION]);
-  dal.getEarliestActivity.mockReset().mockResolvedValue(null);
-  // Default: empty cost distribution so the cost-vs-team strip is hidden in
-  // baseline smoke tests (matches the < 10 sessions empty state from #217).
-  dal.getSessionCostDistribution.mockReset().mockResolvedValue({
-    buckets: [],
-    total_sessions: 0,
-    max_cost_cents: 0,
-  });
-  // Default: empty branch timeline so the same-branch chart is hidden in
-  // baseline smoke tests. Suites that exercise the chart override per-case
-  // (#216).
-  dal.getBranchSessionTimeline.mockReset().mockResolvedValue([]);
 });
 
 async function render(
@@ -125,57 +96,6 @@ async function render(
     params: Promise.resolve({ id }),
     searchParams: Promise.resolve(searchParams),
   });
-}
-
-/**
- * Walk the rendered tree for the cost-distribution strip element and pull its
- * props out. The strip is a function component, so its body never executes
- * inside the page-test pipeline — we capture the props the page handed it
- * (distribution + current cost) and verify the wiring without poking at the
- * strip's rendered output. Render-side coverage lives in the strip's own
- * test file (`session-cost-distribution-strip.test.tsx`).
- */
-function findStripProps(node: unknown): {
-  distribution: unknown;
-  currentCostCents: unknown;
-} | null {
-  const seen = new WeakSet<object>();
-  function walk(n: unknown): {
-    distribution: unknown;
-    currentCostCents: unknown;
-  } | null {
-    if (!n || typeof n !== "object") return null;
-    if (Array.isArray(n)) {
-      for (const c of n) {
-        const f = walk(c);
-        if (f) return f;
-      }
-      return null;
-    }
-    if (seen.has(n as object)) return null;
-    seen.add(n as object);
-    const el = n as {
-      type?: unknown;
-      props?: {
-        children?: unknown;
-        distribution?: unknown;
-        currentCostCents?: unknown;
-      };
-    };
-    const t = el.type as { name?: string } | undefined;
-    if (
-      t &&
-      typeof t === "function" &&
-      (t as { name?: string }).name === "SessionCostDistributionStrip"
-    ) {
-      return {
-        distribution: el.props?.distribution,
-        currentCostCents: el.props?.currentCostCents,
-      };
-    }
-    return walk(el.props?.children);
-  }
-  return walk(node);
 }
 
 /**
@@ -392,48 +312,6 @@ describe("dashboard/sessions/[id] /page", () => {
     const text = extractText(node);
     expect(text).toContain("Copilot Chat");
     expect(text).not.toContain("copilot_chat");
-  });
-
-  it("queries the cost distribution and feeds it into the strip with the current session's cost (#217)", async () => {
-    // The strip itself owns the render-side contract (see its own tests).
-    // At the page level we pin the wiring: the DAL is called with the
-    // viewer's user, and the strip element receives the current session's
-    // `total_cost_cents` so the highlighted bucket can resolve correctly.
-    const distribution = {
-      buckets: Array.from({ length: 20 }, (_, i) => ({
-        lower_cents: i * 100,
-        upper_cents: (i + 1) * 100,
-        count: i === 5 ? 8 : 1,
-      })),
-      total_sessions: 27,
-      max_cost_cents: 2000,
-    };
-    dal.getSessionCostDistribution.mockResolvedValue(distribution);
-    const node = await render();
-    expect(dal.getSessionCostDistribution).toHaveBeenCalledTimes(1);
-    expect(dal.getSessionCostDistribution).toHaveBeenCalledWith(
-      MANAGER,
-      expect.objectContaining({ from: expect.any(String) })
-    );
-    const stripProps = findStripProps(node);
-    expect(stripProps).not.toBeNull();
-    expect(stripProps!.distribution).toBe(distribution);
-    expect(stripProps!.currentCostCents).toBe(250);
-  });
-
-  it("round-trips `?days=` from the URL into the cost-distribution range (#217)", async () => {
-    // When the viewer arrived from a filtered Sessions list (?days=7), the
-    // percentile must be computed against the same window so the call-out
-    // doesn't disagree with what the list page showed.
-    await render("sess_v", { device: "dev_ivan", days: "7" });
-    const range = dal.getSessionCostDistribution.mock.calls[0]?.[1] as {
-      from: string;
-      to: string;
-    };
-    // 7-day rolling window: from = to - 7 days.
-    const fromMs = new Date(`${range.from}T00:00:00Z`).getTime();
-    const toMs = new Date(`${range.to}T00:00:00Z`).getTime();
-    expect((toMs - fromMs) / 86_400_000).toBe(7);
   });
 
   it("annotates output-only sessions so a `0` input-token count reads as a known May-2026+ Copilot Chat state, not missing data (#168)", async () => {
