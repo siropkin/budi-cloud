@@ -114,17 +114,27 @@ export async function getCurrentUser(): Promise<BudiUser | null> {
  * was enough to collapse the previous-period count to zero while every
  * other card on the same row showed real period-over-period deltas.
  */
+export interface OverviewStats {
+  totalCostCents: number;
+  totalCostCentsIngested: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalMessages: number;
+  totalSessions: number;
+}
+
 export async function getOverviewStats(
   user: BudiUser,
   range: DateRange,
   options?: ScopeOptions
-) {
+): Promise<OverviewStats> {
   const admin = createAdminClient();
 
   const deviceIds = await getVisibleDeviceIds(admin, user, options);
   if (deviceIds.length === 0) {
     return {
       totalCostCents: 0,
+      totalCostCentsIngested: 0,
       totalInputTokens: 0,
       totalOutputTokens: 0,
       totalMessages: 0,
@@ -141,8 +151,14 @@ export async function getOverviewStats(
   if (error) throw error;
 
   const row = (data?.[0] ?? null) as OverviewRow | null;
+  // Pre-#235 the RPC didn't surface `_ingested`; default to the effective
+  // total so a deployment that ships the dashboard ahead of migration 020
+  // simply reports zero savings rather than crashing on `undefined`.
+  const effective: number = Number(row?.total_cost_cents ?? 0);
+  const ingested: number = Number(row?.total_cost_cents_ingested ?? effective);
   return {
-    totalCostCents: Number(row?.total_cost_cents ?? 0),
+    totalCostCents: effective,
+    totalCostCentsIngested: ingested,
     totalInputTokens: Number(row?.total_input_tokens ?? 0),
     totalOutputTokens: Number(row?.total_output_tokens ?? 0),
     totalMessages: Number(row?.total_messages ?? 0),
@@ -152,6 +168,7 @@ export async function getOverviewStats(
 
 interface OverviewRow {
   total_cost_cents: number | string;
+  total_cost_cents_ingested?: number | string;
   total_input_tokens: number | string;
   total_output_tokens: number | string;
   total_messages: number | string;
@@ -185,13 +202,20 @@ export async function getDailyActivity(
   if (error) throw error;
 
   return ((data ?? []) as DailyActivityRow[])
-    .map((r) => ({
-      bucket_day: r.bucket_day,
-      input_tokens: Number(r.input_tokens),
-      output_tokens: Number(r.output_tokens),
-      cost_cents: Number(r.cost_cents),
-      message_count: Number(r.message_count),
-    }))
+    .map((r) => {
+      const effective = Number(r.cost_cents);
+      return {
+        bucket_day: r.bucket_day,
+        input_tokens: Number(r.input_tokens),
+        output_tokens: Number(r.output_tokens),
+        cost_cents: effective,
+        // Pre-#235 RPC has no `_ingested` column — collapse to effective so
+        // the toggle's "hide when ingested == effective everywhere" check
+        // stays correct and we never paint a fake savings delta.
+        cost_cents_ingested: Number(r.cost_cents_ingested ?? effective),
+        message_count: Number(r.message_count),
+      };
+    })
     .sort((a, b) => a.bucket_day.localeCompare(b.bucket_day));
 }
 
@@ -200,6 +224,7 @@ interface DailyActivityRow {
   input_tokens: number | string;
   output_tokens: number | string;
   cost_cents: number | string;
+  cost_cents_ingested?: number | string;
   message_count: number | string;
 }
 
@@ -1310,6 +1335,30 @@ export async function getSyncFreshness(user: BudiUser): Promise<{
     lastRollupAt: (lastRollupRow?.synced_at as string | null) ?? null,
     lastSessionAt: (lastSessionRow?.started_at as string | null) ?? null,
   };
+}
+
+/**
+ * Whether the org has at least one `active` price list. Powers the
+ * conditional rendering of the savings strip and the Effective/List toggle
+ * on the Overview (#235): when no list is active, the daemon-uploaded cost
+ * is the only number that exists, so there is nothing to compare against
+ * and the UI stays clean. Until the upload UI ships (#232) this returns
+ * `false` for every org — and the Overview keeps rendering exactly as it
+ * does today, which is the acceptance criterion for migration 019.
+ */
+export async function getOrgHasActivePriceList(
+  orgId: string
+): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("org_price_lists")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+  if (error) return false;
+  return data !== null;
 }
 
 /**

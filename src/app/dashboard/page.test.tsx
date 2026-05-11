@@ -6,6 +6,40 @@ import {
 } from "@/test-utils/page-tree";
 
 /**
+ * Find an element with a given displayName / function name anywhere in the
+ * tree. Lighter than rendering — Server Component bodies aren't invoked, so
+ * the walker just sees component nodes by their type. Used by the #235
+ * tests to assert the cost-lens toggle is or isn't mounted without peeking
+ * inside its function body.
+ */
+function containsElementType(node: unknown, name: string): boolean {
+  const seen = new WeakSet<object>();
+  function walk(n: unknown): boolean {
+    if (n == null || typeof n === "boolean") return false;
+    if (typeof n === "string" || typeof n === "number") return false;
+    if (Array.isArray(n)) return n.some(walk);
+    if (typeof n !== "object") return false;
+    if (seen.has(n as object)) return false;
+    seen.add(n as object);
+    const el = n as { type?: unknown; props?: { children?: unknown } };
+    const t = el.type as
+      | { displayName?: string; name?: string }
+      | string
+      | undefined;
+    if (
+      t &&
+      typeof t === "function" &&
+      ((t as { displayName?: string }).displayName === name ||
+        (t as { name?: string }).name === name)
+    ) {
+      return true;
+    }
+    return walk(el.props?.children);
+  }
+  return walk(node);
+}
+
+/**
  * Page-level coverage for `/dashboard` (the Overview page).
  *
  * Locks in four contracts the recent dashboard PRs have shipped without
@@ -37,6 +71,7 @@ const dal = {
   getOverviewStats: vi.fn(),
   getDailyActivity: vi.fn(),
   getEarliestActivity: vi.fn(),
+  getOrgHasActivePriceList: vi.fn(),
   getOrgMembers: vi.fn(),
   getSyncFreshness: vi.fn(),
   getCostByModel: vi.fn(),
@@ -65,6 +100,7 @@ beforeEach(() => {
   dal.getCurrentUser.mockResolvedValue(MANAGER);
   dal.getOverviewStats.mockResolvedValue({
     totalCostCents: 1_234_56,
+    totalCostCentsIngested: 1_234_56,
     totalInputTokens: 4000,
     totalOutputTokens: 2000,
     totalMessages: 17,
@@ -76,10 +112,12 @@ beforeEach(() => {
       input_tokens: 4000,
       output_tokens: 2000,
       cost_cents: 1_234_56,
+      cost_cents_ingested: 1_234_56,
       message_count: 17,
     },
   ]);
   dal.getEarliestActivity.mockResolvedValue("2026-04-01");
+  dal.getOrgHasActivePriceList.mockResolvedValue(false);
   dal.getOrgMembers.mockResolvedValue([]);
   dal.getSyncFreshness.mockResolvedValue({
     deviceCount: 1,
@@ -168,6 +206,7 @@ describe("dashboard /page (Overview)", () => {
   it("empty: renders headline + zero-value stat cards (not a crash) when the org has no devices yet", async () => {
     dal.getOverviewStats.mockResolvedValue({
       totalCostCents: 0,
+      totalCostCentsIngested: 0,
       totalInputTokens: 0,
       totalOutputTokens: 0,
       totalMessages: 0,
@@ -347,6 +386,114 @@ describe("dashboard /page (Overview)", () => {
     // here, otherwise a viewer is told to wait for a second IDE when the
     // real unlock is a daemon upgrade.
     expect(text).not.toContain("Single-surface org");
+  });
+
+  it("savings strip: hidden when the org has no active price list, even if costs differ (#235)", async () => {
+    // No active list — engine never ran. The strip must stay off so the
+    // empty-state acceptance criterion ("hidden when no active price list")
+    // is enforced regardless of the dual-cost column values.
+    dal.getOrgHasActivePriceList.mockResolvedValue(false);
+    dal.getOverviewStats.mockResolvedValue({
+      totalCostCents: 100_000,
+      totalCostCentsIngested: 150_000,
+      totalInputTokens: 1000,
+      totalOutputTokens: 500,
+      totalMessages: 10,
+      totalSessions: 2,
+    });
+    const node = await render();
+    const text = extractText(node);
+    expect(text).not.toContain("saved this period");
+  });
+
+  it("savings strip: hidden when an active price list exists but effective == ingested (no recalc divergence yet) (#235)", async () => {
+    dal.getOrgHasActivePriceList.mockResolvedValue(true);
+    // Both totals equal — the recalc engine hasn't run yet, or the team's
+    // negotiated rate happens to match list. Either way, no savings story.
+    const node = await render();
+    const text = extractText(node);
+    expect(text).not.toContain("saved this period");
+  });
+
+  it("savings strip: surfaces the gap when an active price list exists and effective < ingested (#235)", async () => {
+    dal.getOrgHasActivePriceList.mockResolvedValue(true);
+    dal.getOverviewStats.mockResolvedValue({
+      totalCostCents: 352_777,
+      totalCostCentsIngested: 481_520,
+      totalInputTokens: 4000,
+      totalOutputTokens: 2000,
+      totalMessages: 17,
+      totalSessions: 5,
+    });
+    const node = await render();
+    const text = extractText(node);
+    expect(text).toContain("saved this period at negotiated rates");
+  });
+
+  it("cost-lens toggle: hidden when ingested == effective for every visible point (#235 acceptance)", async () => {
+    dal.getOrgHasActivePriceList.mockResolvedValue(true);
+    // Every row has equal ingested/effective — the toggle would be a no-op,
+    // so it must collapse to keep the chrome quiet.
+    dal.getDailyActivity.mockResolvedValue([
+      {
+        bucket_day: "2026-04-15",
+        input_tokens: 4000,
+        output_tokens: 2000,
+        cost_cents: 100_00,
+        cost_cents_ingested: 100_00,
+        message_count: 17,
+      },
+    ]);
+    const node = await render();
+    expect(containsElementType(node, "CostLensToggle")).toBe(false);
+  });
+
+  it("cost-lens toggle: hidden when no active price list exists, even if mocked data carries a delta (#235)", async () => {
+    dal.getOrgHasActivePriceList.mockResolvedValue(false);
+    dal.getDailyActivity.mockResolvedValue([
+      {
+        bucket_day: "2026-04-15",
+        input_tokens: 4000,
+        output_tokens: 2000,
+        cost_cents: 70_00,
+        cost_cents_ingested: 100_00,
+        message_count: 17,
+      },
+    ]);
+    const node = await render();
+    expect(containsElementType(node, "CostLensToggle")).toBe(false);
+  });
+
+  it("cost-lens toggle: visible when any point has list ≠ effective and a price list is active (#235)", async () => {
+    dal.getOrgHasActivePriceList.mockResolvedValue(true);
+    dal.getDailyActivity.mockResolvedValue([
+      {
+        bucket_day: "2026-04-15",
+        input_tokens: 4000,
+        output_tokens: 2000,
+        cost_cents: 70_00,
+        cost_cents_ingested: 100_00,
+        message_count: 17,
+      },
+    ]);
+    const node = await render();
+    expect(containsElementType(node, "CostLensToggle")).toBe(true);
+  });
+
+  it("cost-lens toggle: hidden under ?units=tokens (the toggle only configures the dollar lens) (#235)", async () => {
+    dal.getOrgHasActivePriceList.mockResolvedValue(true);
+    dal.getDailyActivity.mockResolvedValue([
+      {
+        bucket_day: "2026-04-15",
+        input_tokens: 4000,
+        output_tokens: 2000,
+        cost_cents: 70_00,
+        cost_cents_ingested: 100_00,
+        message_count: 17,
+      },
+    ]);
+    const node = await render({ units: "tokens" });
+    expect(containsElementType(node, "CostLensToggle")).toBe(false);
   });
 
   it("surface chart: mixed window with a small unknown slice keeps the unknown bar visible alongside named surfaces (#210)", async () => {

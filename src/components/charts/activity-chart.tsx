@@ -12,12 +12,20 @@ import {
 import { differenceInDays, format, startOfMonth, startOfWeek } from "date-fns";
 import { fmtCost, fmtDate, fmtFullDate, fmtNum } from "@/lib/format";
 import type { Unit } from "@/lib/units";
+import type { CostLens } from "@/lib/cost-lens";
 
 interface ActivityData {
   bucket_day: string;
   input_tokens: number;
   output_tokens: number;
   cost_cents: number;
+  /**
+   * Daemon-uploaded cost prior to any team-pricing recalc (#235). Optional
+   * because the consumers that don't surface a lens toggle (sparkline math
+   * on `page.tsx`, the calendar heatmap) keep passing the legacy shape.
+   * Defaults to `cost_cents` when omitted so rebucket math stays consistent.
+   */
+  cost_cents_ingested?: number;
   message_count: number;
 }
 
@@ -48,6 +56,9 @@ function rebucket(data: ActivityData[]): ActivityData[] {
       existing.input_tokens += row.input_tokens;
       existing.output_tokens += row.output_tokens;
       existing.cost_cents += row.cost_cents;
+      existing.cost_cents_ingested =
+        (existing.cost_cents_ingested ?? existing.cost_cents) +
+        (row.cost_cents_ingested ?? row.cost_cents);
       existing.message_count += row.message_count;
     } else {
       byBucket.set(key, { ...row, bucket_day: key });
@@ -61,9 +72,17 @@ function rebucket(data: ActivityData[]): ActivityData[] {
 export function ActivityChart({
   data,
   unit = "tokens",
+  costLens = "effective",
 }: {
   data: ActivityData[];
   unit?: Unit;
+  /**
+   * Which cost column to plot when `unit === "dollars"`. `"effective"` reads
+   * `cost_cents` (the post-recalc value); `"list"` reads `cost_cents_ingested`
+   * (what the daemon shipped). Ignored when `unit === "tokens"`. Default
+   * "effective" keeps every existing caller on today's behavior (#235).
+   */
+  costLens?: CostLens;
 }) {
   if (data.length === 0) {
     return (
@@ -77,11 +96,24 @@ export function ActivityChart({
   const isTokens = unit === "tokens";
   const fmt = isTokens ? fmtNum : fmtCost;
   const yAxisLabel = isTokens ? "Tokens" : "Cost";
+  // For the dollar view, project the active lens onto a single `cost_value`
+  // field so the bar binds to one stable dataKey regardless of which column
+  // the recharts series reads. Avoids the temptation to remount the BarChart
+  // — and the animation glitch that would come with it — on every toggle.
+  const series = isTokens
+    ? bucketed
+    : bucketed.map((d) => ({
+        ...d,
+        cost_value:
+          costLens === "list"
+            ? (d.cost_cents_ingested ?? d.cost_cents)
+            : d.cost_cents,
+      }));
 
   return (
     <ResponsiveContainer width="100%" height={300}>
       <BarChart
-        data={bucketed}
+        data={series}
         margin={{ left: 16, right: 8, top: 8, bottom: 8 }}
       >
         <CartesianGrid
@@ -126,7 +158,9 @@ export function ActivityChart({
               ? key === "input_tokens"
                 ? "Input"
                 : "Output"
-              : "Cost";
+              : costLens === "list"
+                ? "List cost"
+                : "Effective cost";
             return [fmt(Number(value)), seriesLabel];
           }}
         />
@@ -151,7 +185,7 @@ export function ActivityChart({
           </>
         ) : (
           <Bar
-            dataKey="cost_cents"
+            dataKey="cost_value"
             fill="#3b82f6"
             maxBarSize={28}
             radius={[4, 4, 0, 0]}
