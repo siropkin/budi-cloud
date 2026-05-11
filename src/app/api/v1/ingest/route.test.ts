@@ -70,8 +70,7 @@ class FakeSupabase {
       (acc, r) => ({
         // #231: mirror the real `dashboard_overview_stats` RPC, which sums
         // `cost_cents_effective` (the post-recalc value the dashboard shows).
-        total_cost_cents:
-          acc.total_cost_cents + Number(r.cost_cents_effective),
+        total_cost_cents: acc.total_cost_cents + Number(r.cost_cents_effective),
         total_input_tokens: acc.total_input_tokens + Number(r.input_tokens),
         total_output_tokens: acc.total_output_tokens + Number(r.output_tokens),
         total_messages: acc.total_messages + Number(r.message_count),
