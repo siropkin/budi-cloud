@@ -27,10 +27,7 @@ export default async function PricingSettingsPage() {
 
   const admin = createAdminClient();
 
-  const [
-    { data: defaultsRow },
-    { data: lists },
-  ] = await Promise.all([
+  const [{ data: defaultsRow }, { data: lists }] = await Promise.all([
     admin
       .from("org_pricing_defaults")
       .select("default_platform, default_region")
@@ -38,7 +35,9 @@ export default async function PricingSettingsPage() {
       .maybeSingle(),
     admin
       .from("org_price_lists")
-      .select("id, name, status, effective_from, effective_to, source_file_name, uploaded_at, uploaded_by")
+      .select(
+        "id, name, status, effective_from, effective_to, source_file_name, uploaded_at, uploaded_by"
+      )
       .eq("org_id", user.org_id)
       .order("uploaded_at", { ascending: false }),
   ]);
@@ -62,7 +61,10 @@ export default async function PricingSettingsPage() {
       .select("id, display_name, email")
       .in("id", lookupUserIds);
     for (const u of users ?? []) {
-      const name = (u.display_name as string | null) || (u.email as string | null) || (u.id as string);
+      const name =
+        (u.display_name as string | null) ||
+        (u.email as string | null) ||
+        (u.id as string);
       usersById.set(u.id as string, name);
     }
   }
@@ -83,8 +85,8 @@ export default async function PricingSettingsPage() {
       <div>
         <h1 className="text-xl font-bold">Pricing</h1>
         <p className="mt-1 text-sm text-zinc-400">
-          Manage your team&apos;s negotiated price lists. Recalculations use
-          the active list to override the daemon&apos;s ingested costs.
+          Manage your team&apos;s negotiated price lists. Recalculations use the
+          active list to override the daemon&apos;s ingested costs.
         </p>
       </div>
 

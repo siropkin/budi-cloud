@@ -90,8 +90,8 @@ export function UploadCsvSection() {
       <p className="text-sm text-zinc-400">
         Canonical columns:{" "}
         <code className="rounded bg-black/40 px-1 text-xs text-zinc-300">
-          Platform, Model, Type, Region, List Price (USD/MTok/Month), Sale
-          Price (USD/MTok/Month)
+          Platform, Model, Type, Region, List Price (USD/MTok/Month), Sale Price
+          (USD/MTok/Month)
         </code>
       </p>
 
@@ -225,7 +225,9 @@ function PreviewBlock({ preview }: { preview: CsvPreview }) {
 
       {preview.unmappedModels.length > 0 && (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300">
-          <p className="mb-1 font-medium">Unmapped models (still committable)</p>
+          <p className="mb-1 font-medium">
+            Unmapped models (still committable)
+          </p>
           <p>{preview.unmappedModels.join(", ")}</p>
         </div>
       )}

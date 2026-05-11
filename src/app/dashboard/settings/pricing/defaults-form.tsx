@@ -27,9 +27,10 @@ export function DefaultsForm({
 }) {
   const [platform, setPlatform] = useState(initialPlatform ?? "");
   const [region, setRegion] = useState(initialRegion ?? "");
-  const [message, setMessage] = useState<
-    { kind: "ok" | "error"; text: string } | null
-  >(null);
+  const [message, setMessage] = useState<{
+    kind: "ok" | "error";
+    text: string;
+  } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {

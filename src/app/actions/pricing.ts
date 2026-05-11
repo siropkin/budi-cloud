@@ -37,7 +37,8 @@ async function requireManager(): Promise<
     .eq("id", authUser.id)
     .single();
 
-  if (!me?.org_id) return { ok: false, error: "Not a member of any organization" };
+  if (!me?.org_id)
+    return { ok: false, error: "Not a member of any organization" };
   if (me.role !== "manager") {
     return { ok: false, error: "Only managers can manage pricing" };
   }
@@ -59,8 +60,10 @@ export async function savePricingDefaults(
   const auth = await requireManager();
   if (!auth.ok) return { error: auth.error };
 
-  const platform = (formData.get("default_platform") as string | null)?.trim() || null;
-  const region = (formData.get("default_region") as string | null)?.trim() || null;
+  const platform =
+    (formData.get("default_platform") as string | null)?.trim() || null;
+  const region =
+    (formData.get("default_region") as string | null)?.trim() || null;
 
   const admin = createAdminClient();
   const { error } = await admin.from("org_pricing_defaults").upsert(
@@ -105,7 +108,9 @@ export type CsvPreview = {
   duplicateOfListName: string | null;
 };
 
-export async function previewPricingCsv(formData: FormData): Promise<
+export async function previewPricingCsv(
+  formData: FormData
+): Promise<
   | { error: string; preview?: undefined }
   | { error?: undefined; preview: CsvPreview }
 > {
@@ -284,9 +289,9 @@ export async function commitPricingDraft(
 // Activate a draft price list (and trigger recalc)
 // ============================================================
 
-export async function activatePricingList(listId: number): Promise<
-  { ok?: true; error?: string }
-> {
+export async function activatePricingList(
+  listId: number
+): Promise<{ ok?: true; error?: string }> {
   const auth = await requireManager();
   if (!auth.ok) return { error: auth.error };
 
@@ -358,9 +363,9 @@ export async function activatePricingList(listId: number): Promise<
 // Discard a draft (managers only)
 // ============================================================
 
-export async function discardPricingDraft(listId: number): Promise<
-  { ok?: true; error?: string }
-> {
+export async function discardPricingDraft(
+  listId: number
+): Promise<{ ok?: true; error?: string }> {
   const auth = await requireManager();
   if (!auth.ok) return { error: auth.error };
 

@@ -94,10 +94,7 @@ describe("parsePricingCsv", () => {
   });
 
   it("treats a missing List price as null but keeps the row", () => {
-    const csv = [
-      HEADER,
-      "Bedrock,X,Prompts,Global,,$0.10",
-    ].join("\n");
+    const csv = [HEADER, "Bedrock,X,Prompts,Global,,$0.10"].join("\n");
 
     const result = parsePricingCsv(csv);
     expect(result.errors).toHaveLength(0);

@@ -96,9 +96,7 @@ export function PriceListsTable({ lists }: { lists: PriceListRow[] }) {
                 <td className="py-2 text-zinc-400">
                   {l.sourceFileName ?? "—"}
                 </td>
-                <td className="py-2 text-zinc-400">
-                  {l.uploadedBy ?? "—"}
-                </td>
+                <td className="py-2 text-zinc-400">{l.uploadedBy ?? "—"}</td>
                 <td className="py-2 text-right">
                   {l.status === "draft" && (
                     <div className="flex items-center justify-end gap-2">
@@ -107,7 +105,9 @@ export function PriceListsTable({ lists }: { lists: PriceListRow[] }) {
                         disabled={isPending && busyId === l.id}
                         className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
                       >
-                        {isPending && busyId === l.id ? "Activating…" : "Activate"}
+                        {isPending && busyId === l.id
+                          ? "Activating…"
+                          : "Activate"}
                       </button>
                       <button
                         onClick={() => handleDiscard(l.id)}

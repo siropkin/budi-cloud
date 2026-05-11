@@ -68,9 +68,9 @@ const TYPE_MAP: Record<string, TokenType> = {
   outputs: "output",
   output: "output",
   "cache read": "cache_read",
-  "cache_read": "cache_read",
+  cache_read: "cache_read",
   "cache write": "cache_write",
-  "cache_write": "cache_write",
+  cache_write: "cache_write",
 };
 
 const REGION_MAP: Record<string, string | null> = {
