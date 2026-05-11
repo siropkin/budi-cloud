@@ -187,7 +187,7 @@ export default async function SessionsPage({
                     {sessions.map((s) => {
                       const href = `/dashboard/sessions/${encodeURIComponent(
                         s.session_id
-                      )}?device=${encodeURIComponent(s.device_id)}`;
+                      )}`;
                       return (
                         <tr
                           key={`${s.device_id}-${s.session_id}`}
