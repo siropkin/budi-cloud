@@ -4,6 +4,7 @@ import {
   getOverviewStats,
   getDailyActivity,
   getEarliestActivity,
+  getOrgHasActivePriceList,
   getOrgMembers,
   getSyncFreshness,
   getCostByModel,
@@ -18,6 +19,7 @@ import { dateRangeFromDays, previousDateRange } from "@/lib/date-range";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { parseUnit, type Unit } from "@/lib/units";
+import { parseCostLens } from "@/lib/cost-lens";
 import {
   fmtCost,
   fmtDelta,
@@ -39,6 +41,11 @@ import {
 import { ActivityChart } from "@/components/charts/activity-chart";
 import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
 import { CostBarChart } from "@/components/charts/cost-bar-chart";
+import { CostLensToggle } from "@/components/cost-lens-toggle";
+import {
+  SavingsStrip,
+  buildSavingsStripCopy,
+} from "@/components/savings-strip";
 import {
   LinkDaemonBanner,
   FirstSyncInProgressBanner,
@@ -53,6 +60,7 @@ export default async function OverviewPage({
     user?: string;
     units?: string;
     surface?: string;
+    lens?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -60,6 +68,7 @@ export default async function OverviewPage({
   if (!user?.org_id) return null;
 
   const unit = parseUnit(params.units);
+  const costLens = parseCostLens(params.lens);
   const scopedUserId = params.user || null;
   const surfaces = parseSurfaceParam(params.surface);
   const scope = { scopedUserId, surfaces };
@@ -97,6 +106,7 @@ export default async function OverviewPage({
     heatmap,
     knownSurfaces,
     surfaceShare,
+    hasActivePriceList,
   ] = await Promise.all([
     getOverviewStats(user, range, scope),
     getDailyActivity(user, range, scope),
@@ -119,7 +129,24 @@ export default async function OverviewPage({
     // still let the user widen out from a single-surface state.
     getKnownSurfaces(user, { scopedUserId }),
     getCostBySurface(user, range, scope),
+    getOrgHasActivePriceList(user.org_id),
   ]);
+
+  // Savings strip + Effective/List toggle (#235): only worth surfacing when
+  // the org has an active price list *and* the period actually has a list
+  // vs. effective gap. The two conditions are independent — a fresh upload
+  // with no recalc yet still shows the toggle (per-row delta exists but
+  // hasn't been materialized), so we don't collapse them into one flag.
+  const ingestedTotal = stats.totalCostCentsIngested;
+  const effectiveTotal = stats.totalCostCents;
+  const periodHasSavings = hasActivePriceList && ingestedTotal > effectiveTotal;
+  const hasAnyLensDelta = activity.some(
+    (d) => d.cost_cents_ingested !== d.cost_cents
+  );
+  // Toggle is hidden when ingested == effective for every visible point —
+  // acceptance criterion 2. Same gate covers the "no active price list"
+  // case because without a list the recalc engine never diverges the two.
+  const showCostLensToggle = hasActivePriceList && hasAnyLensDelta;
 
   // Caption for the headline-card delta (e.g. "vs previous 7d"). For numeric
   // ?days= we show the length verbatim; for any other window we say "previous
@@ -155,6 +182,9 @@ export default async function OverviewPage({
     user: params.user,
     units: params.units,
     surface: params.surface,
+    // `lens` is intentionally not forwarded: it only configures the
+    // Overview's cost chart, and the deep-link targets (Models, Team,
+    // Repos) render their own breakdowns that always read `_effective`.
   });
   const totalCostCents = stats.totalCostCents;
   const topModelLeader = topModels[0] ?? null;
@@ -183,6 +213,12 @@ export default async function OverviewPage({
 
       {showLinkBanner && <LinkDaemonBanner apiKey={user.api_key} />}
       {showFirstSyncBanner && <FirstSyncInProgressBanner />}
+
+      {periodHasSavings && (
+        <SavingsStrip
+          {...buildSavingsStripCopy(ingestedTotal, effectiveTotal)}
+        />
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {unit === "tokens" ? (
@@ -267,10 +303,17 @@ export default async function OverviewPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>{`Daily Activity (${unit === "tokens" ? "Tokens" : "Cost"})`}</CardTitle>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle>{`Daily Activity (${unit === "tokens" ? "Tokens" : "Cost"})`}</CardTitle>
+            {unit === "dollars" && showCostLensToggle && (
+              <Suspense>
+                <CostLensToggle />
+              </Suspense>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
-          <ActivityChart data={activity} unit={unit} />
+          <ActivityChart data={activity} unit={unit} costLens={costLens} />
         </CardContent>
       </Card>
 
