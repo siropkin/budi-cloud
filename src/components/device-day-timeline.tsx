@@ -166,7 +166,10 @@ function clampDurationMs(
   if (session.ended_at) {
     const endedMs = new Date(session.ended_at).getTime();
     if (endedMs > startedAtMs) {
-      return Math.min(endedMs - startedAtMs, dayStartUtcMs + DAY_MS - startedAtMs);
+      return Math.min(
+        endedMs - startedAtMs,
+        dayStartUtcMs + DAY_MS - startedAtMs
+      );
     }
   }
   // Open-ended (still running) or daemon-side garbage: render a small fixed

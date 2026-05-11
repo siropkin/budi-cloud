@@ -42,11 +42,19 @@ function collectBars(node: unknown): CapturedBar[] {
       props?: Record<string, unknown> & { children?: unknown };
     };
     const props = el.props as Record<string, unknown> | undefined;
-    if (props && typeof props.href === "string" && props.href.startsWith("/dashboard/sessions/")) {
+    if (
+      props &&
+      typeof props.href === "string" &&
+      props.href.startsWith("/dashboard/sessions/")
+    ) {
       const href = props.href as string;
       const style = (props.style as Record<string, string>) ?? {};
-      const dataCurrent = (props as { "data-current"?: string })["data-current"];
-      const ariaCurrent = (props as { "aria-current"?: string })["aria-current"];
+      const dataCurrent = (props as { "data-current"?: string })[
+        "data-current"
+      ];
+      const ariaCurrent = (props as { "aria-current"?: string })[
+        "aria-current"
+      ];
       out.push({
         href,
         sessionId: href.slice("/dashboard/sessions/".length).split("?")[0]!,
@@ -111,7 +119,11 @@ describe("DeviceDayTimeline (#218)", () => {
       localDate: LOCAL_DATE,
     });
     const bars = collectBars(node);
-    expect(bars.map((b) => b.sessionId)).toEqual(["sess_a", "sess_b", "sess_c"]);
+    expect(bars.map((b) => b.sessionId)).toEqual([
+      "sess_a",
+      "sess_b",
+      "sess_c",
+    ]);
     // The leftFraction is monotonically increasing because the input is
     // already started_at ascending — this catches a regression that
     // accidentally re-sorts by cost or duration.
