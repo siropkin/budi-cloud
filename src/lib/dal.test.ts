@@ -251,7 +251,11 @@ const RPC_HANDLERS: Record<string, RpcHandler> = {
         cost_cents: 0,
       };
       existing.session_count += 1;
-      existing.cost_cents += Number(s.total_cost_cents ?? 0);
+      // Match the real RPC (#231): heatmap sums `total_cost_cents_effective`,
+      // not the legacy `total_cost_cents`. Tests seed sessions using the
+      // post-#231 shape so the simulator reads the same column the production
+      // RPC does.
+      existing.cost_cents += Number(s.total_cost_cents_effective ?? 0);
       cells.set(key, existing);
     }
     return Array.from(cells.values());
@@ -1566,7 +1570,8 @@ describe("getSessionDetail (#99)", () => {
         message_count: 12,
         total_input_tokens: 2000,
         total_output_tokens: 800,
-        total_cost_cents: 250,
+        total_cost_cents_effective: 250,
+        total_cost_cents_ingested: 250,
         ...extras,
       },
       {
@@ -1587,7 +1592,8 @@ describe("getSessionDetail (#99)", () => {
     expect(detail?.session_id).toBe("sess_v");
     expect(detail?.provider).toBe("claude_code");
     expect(detail?.repo_id).toBe("repo_x");
-    expect(Number(detail?.total_cost_cents)).toBe(250);
+    expect(Number(detail?.total_cost_cents_effective)).toBe(250);
+    expect(Number(detail?.total_cost_cents_ingested)).toBe(250);
   });
 
   it("returns null for a foreign-org session — collapses with not-found", async () => {
@@ -1680,7 +1686,8 @@ describe("getSessionDetailBySessionId (#202 deep-link)", () => {
         message_count: 4,
         total_input_tokens: 100,
         total_output_tokens: 50,
-        total_cost_cents: 12,
+        total_cost_cents_effective: 12,
+        total_cost_cents_ingested: 12,
         surface: "vscode",
       },
       {
@@ -1827,7 +1834,8 @@ describe("getSessions cursor pagination (#85)", () => {
       message_count: 1,
       total_input_tokens: 0,
       total_output_tokens: 0,
-      total_cost_cents: 0,
+      total_cost_cents_effective: 0,
+      total_cost_cents_ingested: 0,
     }));
     fake.seed("session_summaries", rows);
     return rows;
@@ -1908,7 +1916,8 @@ describe("getSessions cursor pagination (#85)", () => {
         message_count: 1,
         total_input_tokens: 0,
         total_output_tokens: 0,
-        total_cost_cents: 0,
+        total_cost_cents_effective: 0,
+        total_cost_cents_ingested: 0,
       },
       {
         device_id: "dev_ivan",
@@ -1923,7 +1932,8 @@ describe("getSessions cursor pagination (#85)", () => {
         message_count: 1,
         total_input_tokens: 0,
         total_output_tokens: 0,
-        total_cost_cents: 0,
+        total_cost_cents_effective: 0,
+        total_cost_cents_ingested: 0,
       },
     ]);
 
@@ -1978,7 +1988,8 @@ describe("getSessions cursor pagination (#85)", () => {
         message_count: 1,
         total_input_tokens: 0,
         total_output_tokens: 0,
-        total_cost_cents: 0,
+        total_cost_cents_effective: 0,
+        total_cost_cents_ingested: 0,
       },
       {
         device_id: "dev_jane",
@@ -1993,7 +2004,8 @@ describe("getSessions cursor pagination (#85)", () => {
         message_count: 1,
         total_input_tokens: 0,
         total_output_tokens: 0,
-        total_cost_cents: 0,
+        total_cost_cents_effective: 0,
+        total_cost_cents_ingested: 0,
       },
     ]);
 
@@ -2042,7 +2054,8 @@ describe("getSessions multi-provider visibility (#202)", () => {
       message_count: 1,
       total_input_tokens: 0,
       total_output_tokens: 0,
-      total_cost_cents: 0,
+      total_cost_cents_effective: 0,
+      total_cost_cents_ingested: 0,
     } as const;
     fake.seed("session_summaries", [
       {

@@ -1118,7 +1118,12 @@ export interface SessionRow {
   message_count: number;
   total_input_tokens: number | string;
   total_output_tokens: number | string;
-  total_cost_cents: number | string;
+  // Dual cost columns (#231): `_effective` is what the dashboard renders;
+  // `_ingested` is the daemon-uploaded value before any team-pricing recalc
+  // was applied. Until the recalc engine ships (#233) the two are equal; the
+  // "list-vs-effective delta + savings" widget (#235) will surface the gap.
+  total_cost_cents_effective: number | string;
+  total_cost_cents_ingested: number | string;
   // Per-session main model (#140). NULL for rows ingested before the daemon
   // started emitting `primary_model`, and for sessions with zero scored
   // messages — render as em-dash in those cases.

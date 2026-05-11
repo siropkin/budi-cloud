@@ -282,7 +282,18 @@ export function buildRollupRows(
       r.cache_read_tokens,
       METRIC_CAPS.cache_read_tokens
     ),
-    cost_cents: safeNonNegativeNumber(r.cost_cents, METRIC_CAPS.cost_cents),
+    // #231: write both cost columns. The daemon-uploaded value lives in
+    // `_ingested`; the dashboard-facing value lives in `_effective`. Until the
+    // recalculation engine (#233) rewrites `_effective` from a team price
+    // list, the two columns are equal on every freshly-ingested row.
+    cost_cents_ingested: safeNonNegativeNumber(
+      r.cost_cents,
+      METRIC_CAPS.cost_cents
+    ),
+    cost_cents_effective: safeNonNegativeNumber(
+      r.cost_cents,
+      METRIC_CAPS.cost_cents
+    ),
     surface: normalizeSurface(r.surface),
     synced_at: syncedAt,
   }));
@@ -333,7 +344,14 @@ export function buildSessionRows(
       s.total_output_tokens,
       METRIC_CAPS.total_output_tokens
     ),
-    total_cost_cents: safeNonNegativeNumber(
+    // #231: see the matching note in `buildRollupRows` — every freshly
+    // ingested session lands with `_effective == _ingested`; the recalc
+    // engine (#233) is the only path that can ever decouple them.
+    total_cost_cents_ingested: safeNonNegativeNumber(
+      s.total_cost_cents,
+      METRIC_CAPS.total_cost_cents
+    ),
+    total_cost_cents_effective: safeNonNegativeNumber(
       s.total_cost_cents,
       METRIC_CAPS.total_cost_cents
     ),

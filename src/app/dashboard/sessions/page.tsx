@@ -301,7 +301,7 @@ export default async function SessionsPage({
                                     Number(s.total_input_tokens) +
                                       Number(s.total_output_tokens)
                                   )
-                                : fmtCost(Number(s.total_cost_cents))}
+                                : fmtCost(Number(s.total_cost_cents_effective))}
                             </Link>
                           </td>
                         </tr>
