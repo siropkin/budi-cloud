@@ -12,7 +12,13 @@ import { dateRangeFromDays } from "@/lib/date-range";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { parseUnit } from "@/lib/units";
-import { fmtCost, fmtNum, formatModelName, formatProvider } from "@/lib/format";
+import {
+  buildCostCellTooltip,
+  fmtCost,
+  fmtNum,
+  formatModelName,
+  formatProvider,
+} from "@/lib/format";
 import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
@@ -166,7 +172,17 @@ export default async function ModelsPage({
                         <td className="py-2 text-right tabular-nums text-zinc-400">
                           {fmtNum(m.output_tokens)}
                         </td>
-                        <td className="py-2 text-right tabular-nums text-zinc-300">
+                        <td
+                          className="py-2 text-right tabular-nums text-zinc-300"
+                          title={
+                            isTokens
+                              ? undefined
+                              : buildCostCellTooltip(
+                                  m.cost_cents_ingested,
+                                  m.cost_cents
+                                )
+                          }
+                        >
                           {fmtValue(
                             m.cost_cents,
                             m.input_tokens + m.output_tokens
@@ -186,7 +202,17 @@ export default async function ModelsPage({
                         <span className="text-zinc-200">
                           {formatModelName(m.model)}
                         </span>
-                        <span className="tabular-nums text-zinc-300">
+                        <span
+                          className="tabular-nums text-zinc-300"
+                          title={
+                            isTokens
+                              ? undefined
+                              : buildCostCellTooltip(
+                                  m.cost_cents_ingested,
+                                  m.cost_cents
+                                )
+                          }
+                        >
                           {fmtValue(
                             m.cost_cents,
                             m.input_tokens + m.output_tokens

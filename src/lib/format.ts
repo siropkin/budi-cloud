@@ -11,6 +11,25 @@ export function fmtCost(cents: number): string {
   return `$${dollars.toFixed(2)}`;
 }
 
+/**
+ * Detail-table cost-cell tooltip text (#733). Returns `undefined` when
+ * effective equals ingested (no team pricing applied to this row) so the
+ * caller can drop the `title` attribute entirely — a `title=""` would render
+ * an empty hover bubble in some browsers. We tolerate tiny rounding drift:
+ * recalc resolves prices per-token-type and rejoins, so a $0.01 gap on a
+ * multi-row aggregation is meaningless to a viewer.
+ */
+export function buildCostCellTooltip(
+  ingestedCents: number,
+  effectiveCents: number
+): string | undefined {
+  if (!Number.isFinite(ingestedCents) || !Number.isFinite(effectiveCents)) {
+    return undefined;
+  }
+  if (Math.abs(ingestedCents - effectiveCents) < 1) return undefined;
+  return `List: ${fmtCost(ingestedCents)} / Effective: ${fmtCost(effectiveCents)}`;
+}
+
 /** Format a number with locale-aware grouping. */
 export function fmtNum(n: number): string {
   if (n === 0) return "0";

@@ -217,6 +217,11 @@ export default async function OverviewPage({
       {periodHasSavings && (
         <SavingsStrip
           {...buildSavingsStripCopy(ingestedTotal, effectiveTotal)}
+          href={
+            user.role === "manager"
+              ? "/dashboard/settings/pricing#audit-history"
+              : undefined
+          }
         />
       )}
 

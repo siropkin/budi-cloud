@@ -8,6 +8,7 @@ import {
 import { SessionTokenComposition } from "@/components/session-token-composition";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
+  buildCostCellTooltip,
   fmtCost,
   fmtNum,
   formatDuration,
@@ -173,6 +174,10 @@ export default async function SessionDetailPage({
               <Field
                 label="Cost"
                 value={fmtCost(Number(session.total_cost_cents_effective))}
+                title={buildCostCellTooltip(
+                  Number(session.total_cost_cents_ingested),
+                  Number(session.total_cost_cents_effective)
+                )}
               />
             </dl>
             {/*
@@ -193,13 +198,24 @@ export default async function SessionDetailPage({
   );
 }
 
-function Field({ label, value }: { label: string; value: string | number }) {
+function Field({
+  label,
+  value,
+  title,
+}: {
+  label: string;
+  value: string | number;
+  /** Override the default value-as-title tooltip — used by the cost field to
+   * show "List: $X / Effective: $Y" when team pricing changed the number
+   * (#733). When omitted, falls back to the rendered value. */
+  title?: string;
+}) {
   return (
     <div className="min-w-0">
       <dt className="text-xs uppercase tracking-wide text-zinc-500">{label}</dt>
       <dd
         className="mt-0.5 truncate whitespace-nowrap text-zinc-200"
-        title={typeof value === "string" ? value : String(value)}
+        title={title ?? (typeof value === "string" ? value : String(value))}
       >
         {value}
       </dd>

@@ -755,13 +755,20 @@ export async function getCostByModel(
   if (error) throw error;
 
   return ((data ?? []) as ModelCostRow[])
-    .map((r) => ({
-      provider: r.provider,
-      model: r.model,
-      cost_cents: Number(r.cost_cents),
-      input_tokens: Number(r.input_tokens ?? 0),
-      output_tokens: Number(r.output_tokens ?? 0),
-    }))
+    .map((r) => {
+      const effective = Number(r.cost_cents);
+      return {
+        provider: r.provider,
+        model: r.model,
+        cost_cents: effective,
+        // Pre-022 the RPC didn't surface `_ingested`; fall back to effective so
+        // the "List / Effective" tooltip stays hidden on deployments running
+        // ahead of migration 022 rather than rendering "$X / $X" everywhere.
+        cost_cents_ingested: Number(r.cost_cents_ingested ?? effective),
+        input_tokens: Number(r.input_tokens ?? 0),
+        output_tokens: Number(r.output_tokens ?? 0),
+      };
+    })
     .filter((m) => m.cost_cents > 0 || m.input_tokens + m.output_tokens > 0)
     .sort((a, b) => b.cost_cents - a.cost_cents);
 }
@@ -770,6 +777,7 @@ interface ModelCostRow {
   provider: string;
   model: string;
   cost_cents: number | string;
+  cost_cents_ingested?: number | string;
   input_tokens?: number | string;
   output_tokens?: number | string;
 }
@@ -797,12 +805,16 @@ export async function getCostByRepo(
   if (error) throw error;
 
   return ((data ?? []) as RepoCostRow[])
-    .map((r) => ({
-      repo_id: r.repo_id,
-      cost_cents: Number(r.cost_cents),
-      input_tokens: Number(r.input_tokens ?? 0),
-      output_tokens: Number(r.output_tokens ?? 0),
-    }))
+    .map((r) => {
+      const effective = Number(r.cost_cents);
+      return {
+        repo_id: r.repo_id,
+        cost_cents: effective,
+        cost_cents_ingested: Number(r.cost_cents_ingested ?? effective),
+        input_tokens: Number(r.input_tokens ?? 0),
+        output_tokens: Number(r.output_tokens ?? 0),
+      };
+    })
     .filter((r) => r.cost_cents > 0 || r.input_tokens + r.output_tokens > 0)
     .sort((a, b) => b.cost_cents - a.cost_cents);
 }
@@ -810,6 +822,7 @@ export async function getCostByRepo(
 interface RepoCostRow {
   repo_id: string;
   cost_cents: number | string;
+  cost_cents_ingested?: number | string;
   input_tokens?: number | string;
   output_tokens?: number | string;
 }
@@ -837,13 +850,17 @@ export async function getCostByBranch(
   if (error) throw error;
 
   return ((data ?? []) as BranchCostRow[])
-    .map((r) => ({
-      repo_id: r.repo_id,
-      git_branch: r.git_branch,
-      cost_cents: Number(r.cost_cents),
-      input_tokens: Number(r.input_tokens ?? 0),
-      output_tokens: Number(r.output_tokens ?? 0),
-    }))
+    .map((r) => {
+      const effective = Number(r.cost_cents);
+      return {
+        repo_id: r.repo_id,
+        git_branch: r.git_branch,
+        cost_cents: effective,
+        cost_cents_ingested: Number(r.cost_cents_ingested ?? effective),
+        input_tokens: Number(r.input_tokens ?? 0),
+        output_tokens: Number(r.output_tokens ?? 0),
+      };
+    })
     .filter((b) => b.cost_cents > 0 || b.input_tokens + b.output_tokens > 0)
     .sort((a, b) => b.cost_cents - a.cost_cents);
 }
@@ -852,6 +869,7 @@ interface BranchCostRow {
   repo_id: string;
   git_branch: string;
   cost_cents: number | string;
+  cost_cents_ingested?: number | string;
   input_tokens?: number | string;
   output_tokens?: number | string;
 }
@@ -879,12 +897,16 @@ export async function getCostByTicket(
   if (error) throw error;
 
   return ((data ?? []) as TicketCostRow[])
-    .map((r) => ({
-      ticket: r.ticket,
-      cost_cents: Number(r.cost_cents),
-      input_tokens: Number(r.input_tokens ?? 0),
-      output_tokens: Number(r.output_tokens ?? 0),
-    }))
+    .map((r) => {
+      const effective = Number(r.cost_cents);
+      return {
+        ticket: r.ticket,
+        cost_cents: effective,
+        cost_cents_ingested: Number(r.cost_cents_ingested ?? effective),
+        input_tokens: Number(r.input_tokens ?? 0),
+        output_tokens: Number(r.output_tokens ?? 0),
+      };
+    })
     .filter((t) => t.cost_cents > 0 || t.input_tokens + t.output_tokens > 0)
     .sort((a, b) => b.cost_cents - a.cost_cents);
 }
@@ -892,6 +914,7 @@ export async function getCostByTicket(
 interface TicketCostRow {
   ticket: string;
   cost_cents: number | string;
+  cost_cents_ingested?: number | string;
   input_tokens?: number | string;
   output_tokens?: number | string;
 }
@@ -1359,6 +1382,69 @@ export async function getOrgHasActivePriceList(
     .maybeSingle();
   if (error) return false;
   return data !== null;
+}
+
+/**
+ * Page of `recalculation_runs` rows for the Settings → Pricing audit-history
+ * tab (#733). Each row is one invocation of the recalc engine (#728); the
+ * rows are immutable. We support a simple offset window because the table is
+ * small (one row per admin click) and the surface paginates 50 at a time.
+ *
+ * `status` narrows by `recalculation_runs.status`. Pass `null` to include
+ * every run. The page also returns `total` so the UI can size the pager
+ * without a second round-trip — `count: "exact"` is cheap on this table.
+ */
+export interface RecalculationRunRow {
+  id: number;
+  startedAt: string;
+  finishedAt: string | null;
+  status: string;
+  scopeFromDate: string | null;
+  scopeToDate: string | null;
+  priceListIds: number[];
+  rowsProcessed: number | null;
+  rowsChanged: number | null;
+  beforeTotalCents: number | null;
+  afterTotalCents: number | null;
+  triggeredBy: string | null;
+}
+
+export async function getRecalculationRuns(
+  orgId: string,
+  options: { status: string | null; limit: number; offset: number }
+): Promise<{ rows: RecalculationRunRow[]; total: number }> {
+  const admin = createAdminClient();
+  let query = admin
+    .from("recalculation_runs")
+    .select(
+      "id, started_at, finished_at, status, scope_from_date, scope_to_date, price_list_ids, rows_processed, rows_changed, before_total_cents, after_total_cents, triggered_by",
+      { count: "exact" }
+    )
+    .eq("org_id", orgId)
+    .order("started_at", { ascending: false })
+    .range(options.offset, options.offset + options.limit - 1);
+  if (options.status) query = query.eq("status", options.status);
+
+  const { data, count, error } = await query;
+  if (error) throw error;
+
+  const rows: RecalculationRunRow[] = (data ?? []).map((r) => ({
+    id: r.id as number,
+    startedAt: r.started_at as string,
+    finishedAt: (r.finished_at as string | null) ?? null,
+    status: (r.status as string) ?? "",
+    scopeFromDate: (r.scope_from_date as string | null) ?? null,
+    scopeToDate: (r.scope_to_date as string | null) ?? null,
+    priceListIds: ((r.price_list_ids as number[] | null) ?? []).map(Number),
+    rowsProcessed: r.rows_processed == null ? null : Number(r.rows_processed),
+    rowsChanged: r.rows_changed == null ? null : Number(r.rows_changed),
+    beforeTotalCents:
+      r.before_total_cents == null ? null : Number(r.before_total_cents),
+    afterTotalCents:
+      r.after_total_cents == null ? null : Number(r.after_total_cents),
+    triggeredBy: (r.triggered_by as string | null) ?? null,
+  }));
+  return { rows, total: count ?? 0 };
 }
 
 /**
