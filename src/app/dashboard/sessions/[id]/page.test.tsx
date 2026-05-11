@@ -40,8 +40,7 @@ const dal = {
 // `@/lib/dal`; spread the real exports so that helper resolves while the
 // async DAL entry points stay mockable per-test.
 vi.mock("@/lib/dal", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/lib/dal")>("@/lib/dal");
+  const actual = await vi.importActual<typeof import("@/lib/dal")>("@/lib/dal");
   return {
     ...actual,
     getCurrentUser: dal.getCurrentUser,
@@ -151,7 +150,11 @@ function findStripProps(node: unknown): {
     seen.add(n as object);
     const el = n as {
       type?: unknown;
-      props?: { children?: unknown; distribution?: unknown; currentCostCents?: unknown };
+      props?: {
+        children?: unknown;
+        distribution?: unknown;
+        currentCostCents?: unknown;
+      };
     };
     const t = el.type as { name?: string } | undefined;
     if (

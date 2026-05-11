@@ -172,8 +172,7 @@ describe("SessionCostDistributionStrip (#217)", () => {
     counts[0] = 5;
     counts[19] = 95;
     const buckets = bucketsWithCounts(counts);
-    const targetCost =
-      (buckets[0]!.lower_cents + buckets[0]!.upper_cents) / 2;
+    const targetCost = (buckets[0]!.lower_cents + buckets[0]!.upper_cents) / 2;
     const node = SessionCostDistributionStrip({
       distribution: {
         buckets,
