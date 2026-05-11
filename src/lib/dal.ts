@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { utcInstantForLocalEnd, utcInstantForLocalStart } from "@/lib/timezone";
 
 export interface DateRange {
   /** Inclusive lower bound in the **viewer's local TZ** (`YYYY-MM-DD`). */
@@ -1210,6 +1211,58 @@ export async function getSessionDetailBySessionId(
   if (rows.length !== 1) return null;
   const [enriched] = await attachOwners(admin, user, rows);
   return enriched ?? rows[0]!;
+}
+
+/**
+ * Fetch every session that ran on `deviceId` on the local calendar day
+ * `localDate` (in `timeZone`), ordered by `started_at` ascending (#218).
+ *
+ * Powers the same-day device timeline strip on the session-detail page: a
+ * small horizontal lane that surfaces clusters of work on the same device,
+ * e.g. "this teammate ran 8 back-to-back sessions on the same branch in 2
+ * hours". The X axis is the viewer's wall-clock day (00:00 → 23:59 in
+ * `timeZone`); each bar is positioned by `started_at` and sized by
+ * `duration_ms`.
+ *
+ * Visibility collapses with not-found: the caller passes a `deviceId` they
+ * already resolved via `getSessionDetail*`, but we re-check here so a
+ * direct DAL caller (e.g. a future API route) can't bypass the scope
+ * check. A device outside the viewer's scope returns `[]`, never an error,
+ * to preserve the ADR-0083 §6 contract that foreign-org existence is never
+ * leaked.
+ *
+ * The window translates to a `started_at` instant range in UTC using the
+ * same `utcInstantFor*` helpers as the rest of the DAL, so a viewer in
+ * Pacific time sees their evening sessions on the same strip as their
+ * morning ones rather than seeing the evening half jump to the next day's
+ * timeline.
+ */
+export async function getDeviceSessionsForDay(
+  user: BudiUser,
+  deviceId: string,
+  localDate: string,
+  timeZone: string
+): Promise<SessionRow[]> {
+  const admin = createAdminClient();
+  const visibleDeviceIds = await getVisibleDeviceIds(admin, user);
+  if (!visibleDeviceIds.includes(deviceId)) return [];
+
+  const startedAtFrom = utcInstantForLocalStart(localDate, timeZone);
+  const startedAtTo = utcInstantForLocalEnd(localDate, timeZone);
+
+  const { data } = await admin
+    .from("session_summaries")
+    .select("*")
+    .eq("device_id", deviceId)
+    .gte("started_at", startedAtFrom)
+    .lte("started_at", startedAtTo)
+    .order("started_at", { ascending: true })
+    // Tie-breaker so the order is stable when two rows share `started_at`.
+    .order("session_id", { ascending: true });
+
+  const rows = (data ?? []) as SessionRow[];
+  if (rows.length === 0) return rows;
+  return attachOwners(admin, user, rows);
 }
 
 /**
