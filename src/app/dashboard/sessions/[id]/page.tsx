@@ -172,7 +172,7 @@ export default async function SessionDetailPage({
               />
               <Field
                 label="Cost"
-                value={fmtCost(Number(session.total_cost_cents))}
+                value={fmtCost(Number(session.total_cost_cents_effective))}
               />
             </dl>
             {/*

@@ -68,7 +68,10 @@ class FakeSupabase {
       total_messages: number;
     }>(
       (acc, r) => ({
-        total_cost_cents: acc.total_cost_cents + Number(r.cost_cents),
+        // #231: mirror the real `dashboard_overview_stats` RPC, which sums
+        // `cost_cents_effective` (the post-recalc value the dashboard shows).
+        total_cost_cents:
+          acc.total_cost_cents + Number(r.cost_cents_effective),
         total_input_tokens: acc.total_input_tokens + Number(r.input_tokens),
         total_output_tokens: acc.total_output_tokens + Number(r.output_tokens),
         total_messages: acc.total_messages + Number(r.message_count),
@@ -946,7 +949,9 @@ describe("POST /v1/ingest — numeric metric range guards (#178)", () => {
       { ...baseRollup, input_tokens: huge, cost_cents: huge },
     ]);
     expect(rows[0].input_tokens).toBe(METRIC_CAPS.input_tokens);
-    expect(rows[0].cost_cents).toBe(METRIC_CAPS.cost_cents);
+    // #231: ingest writes both cost columns; the cap runs identically on each.
+    expect(rows[0].cost_cents_effective).toBe(METRIC_CAPS.cost_cents);
+    expect(rows[0].cost_cents_ingested).toBe(METRIC_CAPS.cost_cents);
   });
 
   it("coerces NaN / negative metrics to 0 in the row-builder", async () => {
@@ -976,7 +981,10 @@ describe("POST /v1/ingest — numeric metric range guards (#178)", () => {
     ]);
     expect(sessionRows[0].message_count).toBe(0);
     expect(sessionRows[0].total_input_tokens).toBe(0);
-    expect(sessionRows[0].total_cost_cents).toBe(0);
+    // #231: NaN coerces to 0 on both the daemon-ingested column and the
+    // dashboard-facing effective column.
+    expect(sessionRows[0].total_cost_cents_effective).toBe(0);
+    expect(sessionRows[0].total_cost_cents_ingested).toBe(0);
   });
 
   it("truncates over-long string fields on rollups (#177)", async () => {
