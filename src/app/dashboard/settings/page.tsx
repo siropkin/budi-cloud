@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getCurrentUser, getOrgMembers } from "@/lib/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -114,6 +115,26 @@ export default async function SettingsPage() {
       </Card>
 
       {user.role === "manager" && <InviteSection />}
+
+      {user.role === "manager" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Pricing</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-sm text-zinc-400">
+              Upload and manage your team&apos;s negotiated price lists. The
+              active list overrides the daemon&apos;s ingested costs.
+            </p>
+            <Link
+              href="/dashboard/settings/pricing"
+              className="inline-block rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-white/15"
+            >
+              Manage pricing
+            </Link>
+          </CardContent>
+        </Card>
+      )}
 
       <DangerZone userRole={user.role} orgName={org?.name ?? ""} />
     </div>
