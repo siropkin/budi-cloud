@@ -205,6 +205,44 @@ function normalizeSurface(raw: unknown): string {
   return trimmed.slice(0, MAX_SURFACE_LENGTH);
 }
 
+/**
+ * Diagnostic for #204. The receiving cloud knows exactly what `surface` /
+ * `provider` values it persisted for this envelope; echoing the sorted-unique
+ * sets back in the ingest response lets `budi cloud sync` (or `curl`) show
+ * the operator whether named surfaces are arriving at all, without having to
+ * pull cloud logs or open the dashboard.
+ *
+ * If `surfaces_seen === ["unknown"]` and the dashboard reports the same shape,
+ * the gap is daemon-side (envelope never carried the field). If the daemon
+ * sent named surfaces but the dashboard still aggregates everything as
+ * "unknown", the gap is somewhere between this point and the rendered chart.
+ *
+ * Costs nothing on the hot path: one pass over the already-built row arrays,
+ * Set-deduped, capped at the same `MAX_*_SEEN` to bound the response body.
+ */
+const MAX_SURFACES_SEEN = 32;
+const MAX_PROVIDERS_SEEN = 32;
+
+export function summarizeEnvelope(
+  rollupRows: ReadonlyArray<{ surface: string; provider: string }>,
+  sessionRows: ReadonlyArray<{ surface: string; provider: string }>
+): { surfaces_seen: string[]; providers_seen: string[] } {
+  const surfaces = new Set<string>();
+  const providers = new Set<string>();
+  for (const r of rollupRows) {
+    surfaces.add(r.surface);
+    providers.add(r.provider);
+  }
+  for (const s of sessionRows) {
+    surfaces.add(s.surface);
+    providers.add(s.provider);
+  }
+  return {
+    surfaces_seen: [...surfaces].sort().slice(0, MAX_SURFACES_SEEN),
+    providers_seen: [...providers].sort().slice(0, MAX_PROVIDERS_SEEN),
+  };
+}
+
 export interface IngestSessionSummary {
   session_id: string;
   provider: string;

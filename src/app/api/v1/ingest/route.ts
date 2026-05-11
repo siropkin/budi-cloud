@@ -9,6 +9,7 @@ import {
 import {
   buildRollupRows,
   buildSessionRows,
+  summarizeEnvelope,
   validateIngestMetrics,
   type IngestDailyRollup,
   type IngestSessionSummary,
@@ -285,13 +286,27 @@ export async function POST(request: NextRequest) {
   let dailyRollupsUpserted = 0;
   let sessionSummariesUpserted = 0;
 
-  if (body.payload.daily_rollups.length > 0) {
-    const rollupRows = buildRollupRows(
-      body.device_id,
-      body.synced_at,
-      body.payload.daily_rollups
-    );
+  // Build both row sets up front so the response-shape diagnostic (#204) can
+  // echo the exact `surface` / `provider` values the cloud actually persisted
+  // — see `summarizeEnvelope` for why this matters.
+  const rollupRows =
+    body.payload.daily_rollups.length > 0
+      ? buildRollupRows(
+          body.device_id,
+          body.synced_at,
+          body.payload.daily_rollups
+        )
+      : [];
+  const sessionRows =
+    body.payload.session_summaries.length > 0
+      ? buildSessionRows(
+          body.device_id,
+          body.synced_at,
+          body.payload.session_summaries
+        )
+      : [];
 
+  if (rollupRows.length > 0) {
     const { error: rollupError, count } = await supabase
       .from("daily_rollups")
       .upsert(rollupRows, {
@@ -316,13 +331,7 @@ export async function POST(request: NextRequest) {
 
   // --- UPSERT session summaries (ADR-0083 §5) ---
   // See `buildSessionRows` for the `started_at` coalescing that fixes #14.
-  if (body.payload.session_summaries.length > 0) {
-    const sessionRows = buildSessionRows(
-      body.device_id,
-      body.synced_at,
-      body.payload.session_summaries
-    );
-
+  if (sessionRows.length > 0) {
     const { error: sessionError, count } = await supabase
       .from("session_summaries")
       .upsert(sessionRows, {
@@ -354,11 +363,20 @@ export async function POST(request: NextRequest) {
   // --- ADR-0083 §5: Success response ---
   // `records_upserted` stays for backward compatibility with existing daemon
   // builds; the per-table counts make session regressions obvious (#14).
+  // `surfaces_seen` / `providers_seen` echo the exact axis values the cloud
+  // persisted for this envelope — the diagnostic that closes the #204 audit
+  // loop ("did the daemon actually send named surfaces?").
+  const { surfaces_seen, providers_seen } = summarizeEnvelope(
+    rollupRows,
+    sessionRows
+  );
   return Response.json({
     accepted: true,
     watermark,
     records_upserted: dailyRollupsUpserted + sessionSummariesUpserted,
     daily_rollups_upserted: dailyRollupsUpserted,
     session_summaries_upserted: sessionSummariesUpserted,
+    surfaces_seen,
+    providers_seen,
   });
 }
