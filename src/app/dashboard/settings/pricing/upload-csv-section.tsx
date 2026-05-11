@@ -5,6 +5,7 @@ import {
   commitPricingDraft,
   previewPricingCsv,
   type CsvPreview,
+  type PreviewRow,
 } from "@/app/actions/pricing";
 
 function todayISO() {
@@ -233,42 +234,64 @@ function PreviewBlock({ preview }: { preview: CsvPreview }) {
       )}
 
       {preview.sampleMapped.length > 0 && (
-        <div>
-          <p className="mb-2 text-xs font-medium text-zinc-400">
-            Sample mapped rows
-          </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-white/10 text-left text-zinc-500">
-                  <th className="pb-1 font-medium">Model</th>
-                  <th className="pb-1 font-medium">Token</th>
-                  <th className="pb-1 font-medium">Region</th>
-                  <th className="pb-1 font-medium text-right">List</th>
-                  <th className="pb-1 font-medium text-right">Sale</th>
-                </tr>
-              </thead>
-              <tbody>
-                {preview.sampleMapped.map((r) => (
-                  <tr key={r.lineNumber} className="border-b border-white/5">
-                    <td className="py-1 text-zinc-300">{r.model}</td>
-                    <td className="py-1 text-zinc-400">{r.tokenType}</td>
-                    <td className="py-1 text-zinc-400">{r.region ?? "—"}</td>
-                    <td className="py-1 text-right text-zinc-400">
-                      {r.listUsdPerMtok === null
-                        ? "—"
-                        : `$${r.listUsdPerMtok.toFixed(2)}`}
-                    </td>
-                    <td className="py-1 text-right text-zinc-200">
-                      ${r.saleUsdPerMtok.toFixed(2)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <SampleRowsTable label="Sample mapped rows" rows={preview.sampleMapped} />
       )}
+
+      {preview.sampleUnmapped.length > 0 && (
+        <SampleRowsTable
+          label="Sample unmapped rows"
+          rows={preview.sampleUnmapped}
+          muted
+        />
+      )}
+    </div>
+  );
+}
+
+function SampleRowsTable({
+  label,
+  rows,
+  muted,
+}: {
+  label: string;
+  rows: PreviewRow[];
+  muted?: boolean;
+}) {
+  return (
+    <div>
+      <p className="mb-2 text-xs font-medium text-zinc-400">{label}</p>
+      <div
+        className={`overflow-x-auto ${muted ? "rounded-md bg-white/5 p-2" : ""}`}
+      >
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-white/10 text-left text-zinc-500">
+              <th className="pb-1 font-medium">Model</th>
+              <th className="pb-1 font-medium">Token</th>
+              <th className="pb-1 font-medium">Region</th>
+              <th className="pb-1 font-medium text-right">List</th>
+              <th className="pb-1 font-medium text-right">Sale</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.lineNumber} className="border-b border-white/5">
+                <td className="py-1 text-zinc-300">{r.model}</td>
+                <td className="py-1 text-zinc-400">{r.tokenType}</td>
+                <td className="py-1 text-zinc-400">{r.region ?? "—"}</td>
+                <td className="py-1 text-right text-zinc-400">
+                  {r.listUsdPerMtok === null
+                    ? "—"
+                    : `$${r.listUsdPerMtok.toFixed(2)}`}
+                </td>
+                <td className="py-1 text-right text-zinc-200">
+                  ${r.saleUsdPerMtok.toFixed(2)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
