@@ -1,19 +1,10 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
-  getBranchSessionTimeline,
   getCurrentUser,
-  getDeviceSessionsForDay,
-  getEarliestActivity,
-  getSessionCostDistribution,
   getSessionDetail,
   getSessionDetailBySessionId,
 } from "@/lib/dal";
-import { dateRangeFromDays } from "@/lib/date-range";
-import { ALL_PERIOD_VALUE } from "@/lib/periods";
-import { parseUnit } from "@/lib/units";
-import { BranchSessionTimeline } from "@/components/branch-session-timeline";
-import { SessionCostDistributionStrip } from "@/components/session-cost-distribution-strip";
 import { SessionTokenComposition } from "@/components/session-token-composition";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
@@ -25,9 +16,6 @@ import {
   repoName,
 } from "@/lib/format";
 import { formatSurface } from "@/lib/surface";
-import { DeviceDayTimeline } from "@/components/device-day-timeline";
-import { getViewerTimeZone } from "@/lib/viewer-timezone";
-import { localDateInTimeZone } from "@/lib/timezone";
 
 /**
  * Session detail page (#99). The id segment is the daemon-emitted
@@ -88,66 +76,6 @@ export default async function SessionDetailPage({
   const isOutputOnly = inputTokens === 0 && outputTokens > 0;
 
   const backHref = buildSessionsBackHref(sp);
-
-  // Same-day device timeline (#218). The strip surfaces clusters of work on
-  // this device — multiple back-to-back sessions on the same branch, runaway
-  // auto-loops, etc. — that no single-session field reveals. Scoped to the
-  // viewer's local calendar day so a Pacific-time user sees their evening
-  // sessions on the same lane as their morning ones.
-  const viewerTz = (await getViewerTimeZone()) ?? "UTC";
-  const sessionLocalDate = session.started_at
-    ? localDateInTimeZone(new Date(session.started_at), viewerTz)
-    : null;
-  const sameDaySessions = sessionLocalDate
-    ? await getDeviceSessionsForDay(
-        user,
-        session.device_id,
-        sessionLocalDate,
-        viewerTz
-      )
-    : [];
-
-  // Cost-percentile distribution strip (#217). Compares the current session's
-  // cost against every other session the viewer can see in the same period —
-  // round-tripped from the list page's `?days=` when present so a manager
-  // arriving from the filtered Sessions table sees the percentile against the
-  // same window. We default to 30d (rather than the dashboard's 7d default)
-  // because a small team frequently has < 10 sessions in a 7-day window and
-  // the strip would self-hide; 30d trades a slightly broader baseline for a
-  // meaningful percentile in the common case.
-  const distributionDays = sp.days ?? "30";
-  const earliestActivity =
-    distributionDays === ALL_PERIOD_VALUE
-      ? await getEarliestActivity(user)
-      : null;
-  const distributionRange = dateRangeFromDays(
-    distributionDays,
-    earliestActivity,
-    viewerTz
-  );
-  const costDistribution = await getSessionCostDistribution(
-    user,
-    distributionRange
-  );
-
-  // Same-branch timeline (#216). Trailing-30d window on the same
-  // `(repo_id, git_branch)` so a viewer can see whether this branch has been
-  // chewing tokens for weeks or this is a one-off spike. The window is
-  // independent of the list-page `?days=` — the comparative is most useful at
-  // 30d regardless of the period the viewer arrived from. Skipped entirely
-  // when the session is missing either half of the (repo, branch) key, since
-  // there's nothing meaningful to plot against.
-  const branchTimelineRange = dateRangeFromDays("30", null, viewerTz);
-  const branchTimeline =
-    session.repo_id && session.git_branch
-      ? await getBranchSessionTimeline(
-          user,
-          session.repo_id,
-          session.git_branch,
-          branchTimelineRange
-        )
-      : [];
-  const unit = parseUnit(sp.units);
 
   return (
     <div className="space-y-6">
@@ -261,28 +189,6 @@ export default async function SessionDetailPage({
           </CardContent>
         </Card>
       </div>
-
-      <SessionCostDistributionStrip
-        distribution={costDistribution}
-        currentCostCents={Number(session.total_cost_cents)}
-      />
-
-      <BranchSessionTimeline
-        sessions={branchTimeline}
-        currentSessionId={sessionId}
-        rangeStartIso={branchTimelineRange.startedAtFrom}
-        rangeEndIso={branchTimelineRange.startedAtTo}
-        unit={unit}
-      />
-
-      {sessionLocalDate ? (
-        <DeviceDayTimeline
-          sessions={sameDaySessions}
-          currentSessionId={sessionId}
-          timeZone={viewerTz}
-          localDate={sessionLocalDate}
-        />
-      ) : null}
     </div>
   );
 }
