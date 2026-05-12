@@ -123,6 +123,14 @@ export function CostBarChart({
   }));
 
   const height = barChartHeight(sorted.length);
+  // Largest bar drives the "should we flip the value label inside?" decision
+  // (#261). Comparing per-bar value to maxValue is a stable proxy for the
+  // pixel-width ratio because recharts maps value→pixel linearly across the
+  // plot area. Bars at ≥ FLIP_INSIDE_RATIO of the max would otherwise push
+  // their value label past the chart's right edge (visibly clipped on 390px
+  // viewports).
+  const maxValue = sorted[0]?.value ?? 0;
+  const FLIP_INSIDE_RATIO = 0.85;
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -201,10 +209,59 @@ export function CostBarChart({
         >
           <LabelList
             dataKey="value"
-            position="right"
-            fill="#71717a"
-            fontSize={12}
-            formatter={(v) => fmt(Number(v))}
+            content={(props) => {
+              // recharts passes a recharts-internal label-props object whose
+              // x/y/width/height are number | string | undefined. They're
+              // numbers in practice for vertical Bar layout but we still
+              // narrow defensively.
+              const p = props as {
+                x?: number | string;
+                y?: number | string;
+                width?: number | string;
+                height?: number | string;
+                value?: number | string;
+                index?: number;
+              };
+              const x = typeof p.x === "number" ? p.x : Number(p.x ?? 0);
+              const y = typeof p.y === "number" ? p.y : Number(p.y ?? 0);
+              const width =
+                typeof p.width === "number" ? p.width : Number(p.width ?? 0);
+              const height =
+                typeof p.height === "number" ? p.height : Number(p.height ?? 0);
+              const value = Number(p.value ?? 0);
+              const text = fmt(value);
+              const flipInside =
+                maxValue > 0 && value / maxValue >= FLIP_INSIDE_RATIO;
+              if (flipInside) {
+                // Anchor inside the bar at the right edge so the label stays
+                // visible even when the bar saturates the plot area. White
+                // sits cleanly on the blue fill (`#3b82f6`).
+                return (
+                  <text
+                    x={x + width - 6}
+                    y={y + height / 2}
+                    dy={4}
+                    textAnchor="end"
+                    fill="#ffffff"
+                    fontSize={12}
+                  >
+                    {text}
+                  </text>
+                );
+              }
+              return (
+                <text
+                  x={x + width + 4}
+                  y={y + height / 2}
+                  dy={4}
+                  textAnchor="start"
+                  fill="#71717a"
+                  fontSize={12}
+                >
+                  {text}
+                </text>
+              );
+            }}
           />
         </Bar>
       </BarChart>

@@ -75,20 +75,54 @@ describe("CostBarChart", () => {
     ).toBeDefined();
     const labelListProps = labelList!.props as {
       dataKey: string;
-      position: string;
-      formatter: (v: unknown) => string | number;
+      content: (props: Record<string, unknown>) => ReactElement;
     };
     // Both axes are now keyed off the unit-projected `value` field so the
     // toggle doesn't have to re-key the bar element on switch (#128).
     expect(labelListProps.dataKey).toBe("value");
-    expect(labelListProps.position).toBe("right");
 
-    // Default unit is dollars, so the formatter must round-trip cents into
-    // the fmtCost form and the missing-suffix regression from #41 stays put.
-    const formatter = labelListProps.formatter;
-    expect(formatter).toBeTypeOf("function");
-    expect(formatter(3000)).toBe(fmtCost(3000));
-    expect(formatter(81)).toBe(fmtCost(81));
+    // Default unit is dollars, so the content renderer must produce a <text>
+    // node whose children is the fmtCost string. Exercises the
+    // outside-the-bar branch (small value relative to the leader).
+    const content = labelListProps.content;
+    expect(content).toBeTypeOf("function");
+    const outside = content({
+      x: 100,
+      y: 10,
+      width: 30,
+      height: 20,
+      value: 81,
+    });
+    expect(outside.type).toBe("text");
+    expect((outside.props as { children: string }).children).toBe(fmtCost(81));
+    expect((outside.props as { textAnchor: string }).textAnchor).toBe("start");
+  });
+
+  it("flips the value label inside the bar when it nears the right edge (#261)", () => {
+    const saturating = [
+      { label: "leader", cost_cents: 1000, tokens: 0 },
+      { label: "tiny", cost_cents: 10, tokens: 0 },
+    ];
+    const tree = CostBarChart({ data: saturating, emptyLabel: "unused" });
+    const nodes = Array.from(walk(tree));
+    const labelList = nodes.find((n) => n.type === LabelList);
+    const content = (
+      labelList!.props as {
+        content: (props: Record<string, unknown>) => ReactElement;
+      }
+    ).content;
+
+    // Leader is 100% of the max — ratio 1.0 >= 0.85 — render inside the bar
+    // (white text, end-anchored at the right edge).
+    const inside = content({ x: 0, y: 0, width: 200, height: 20, value: 1000 });
+    expect((inside.props as { textAnchor: string }).textAnchor).toBe("end");
+    expect((inside.props as { fill: string }).fill).toBe("#ffffff");
+
+    // Tiny is 1% of the max — render outside the bar (gray text, start-anchored
+    // just past the bar's right edge).
+    const outside = content({ x: 0, y: 0, width: 2, height: 20, value: 10 });
+    expect((outside.props as { textAnchor: string }).textAnchor).toBe("start");
+    expect((outside.props as { fill: string }).fill).toBe("#71717a");
   });
 
   it("renders token totals when unit='tokens' (#128)", () => {
@@ -101,12 +135,24 @@ describe("CostBarChart", () => {
 
     const labelList = nodes.find((n) => n.type === LabelList);
     expect(labelList).toBeDefined();
-    const formatter = (
-      labelList!.props as { formatter: (v: unknown) => string | number }
-    ).formatter;
-    // Token mode formats with fmtNum (no $).
-    expect(formatter(5_000_000)).toBe(fmtNum(5_000_000));
-    expect(formatter(3_500_000)).toBe(fmtNum(3_500_000));
+    const content = (
+      labelList!.props as {
+        content: (props: Record<string, unknown>) => ReactElement;
+      }
+    ).content;
+    // Token mode formats with fmtNum (no $). Exercise the outside-the-bar
+    // branch on the smaller of the two rows so the assertion isn't sensitive
+    // to the flip-inside threshold.
+    const tinyLabel = content({
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 20,
+      value: 3_500_000,
+    });
+    expect((tinyLabel.props as { children: string }).children).toBe(
+      fmtNum(3_500_000)
+    );
 
     // Sort order follows the projected token value, not cost — alpha leads
     // because 5M > 3.5M, even though both have positive cost.
