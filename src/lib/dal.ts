@@ -1176,6 +1176,12 @@ export interface SessionRow {
   // started emitting `primary_model`, and for sessions with zero scored
   // messages — render as em-dash in those cases.
   main_model: string | null;
+  // Free-form session title (#255). Sources include the daemon's parsed
+  // `session_title` tag (siropkin/budi#779) — typically an IntelliJ project
+  // name (`Verkada-Web`) or session-type label (`chat-agent`). NULL for
+  // pre-8.5.0 rows and for surfaces that don't emit a title; render as a
+  // muted dash in those cases.
+  title: string | null;
   // Resolved owner label for the device this session ran on (#138). Only
   // populated for manager viewers; null for member viewers (every row is
   // theirs) and for sessions whose device→user mapping cannot be resolved.

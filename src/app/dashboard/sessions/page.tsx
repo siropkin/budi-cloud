@@ -188,6 +188,14 @@ export default async function SessionsPage({
                             {formatTimestamp(s.started_at)}
                           </span>
                         </div>
+                        {s.title && (
+                          <div
+                            className="truncate text-xs text-zinc-300"
+                            title={s.title}
+                          >
+                            {s.title}
+                          </div>
+                        )}
                         <div className="flex items-center gap-2 text-xs text-zinc-400">
                           <span className="truncate">
                             {s.main_model ? formatModelName(s.main_model) : "-"}
@@ -229,6 +237,9 @@ export default async function SessionsPage({
                           Member
                         </th>
                       )}
+                      <th className="pr-3 pb-2 font-medium whitespace-nowrap">
+                        Title
+                      </th>
                       <th className="pr-3 pb-2 font-medium whitespace-nowrap">
                         Provider
                       </th>
@@ -278,6 +289,17 @@ export default async function SessionsPage({
                               </Link>
                             </td>
                           )}
+                          <td
+                            className="text-zinc-300"
+                            title={s.title ?? undefined}
+                          >
+                            <Link
+                              href={href}
+                              className="block max-w-[20ch] truncate py-2 pr-3 whitespace-nowrap"
+                            >
+                              {s.title ?? "—"}
+                            </Link>
+                          </td>
                           <td
                             className="text-zinc-300"
                             title={formatProvider(s.provider)}

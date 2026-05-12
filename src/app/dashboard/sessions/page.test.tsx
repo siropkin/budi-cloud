@@ -79,6 +79,9 @@ beforeEach(() => {
         main_model: "claude-opus-4-7-20260101",
         owner_name: "Ivan",
         surface: "vscode",
+        // v8.5.0+ jetbrains row carries an IntelliJ project name as title
+        // (siropkin/budi#779). The list must surface it (#256).
+        title: "Verkada-Web",
       },
       {
         // Older daemon (#140): no main_model on the wire, column NULL in the
@@ -127,6 +130,7 @@ describe("dashboard/sessions /page", () => {
     // the unit toggle on the cost column conveys the same signal.
     for (const col of [
       "Member",
+      "Title",
       "Provider",
       "Model",
       "Started",
@@ -147,6 +151,10 @@ describe("dashboard/sessions /page", () => {
     // Manager attribution (#138): each row reads as "<member> ran <provider>".
     expect(text).toContain("Ivan");
     expect(text).toContain("Jane");
+    // Session title (#256): the populated row shows its title; the row
+    // without a title renders an em-dash placeholder.
+    expect(text).toContain("Verkada-Web");
+    expect(text).toContain("—");
   });
 
   it("hides the Member column for non-manager (member) viewers (#138)", async () => {
