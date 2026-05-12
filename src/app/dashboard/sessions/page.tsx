@@ -149,7 +149,78 @@ export default async function SessionsPage({
             </p>
           ) : (
             <div className="relative">
-              <div className="overflow-x-auto">
+              {/* < sm: stacked card list — drilling into the detail page.
+                  Surfaces primary fields only (Member · Started, Model · Repo,
+                  Duration · Messages · Cost) to keep the card legible at
+                  390px. The desktop table stays the canonical view at sm+
+                  (#259). */}
+              <ul className="divide-y divide-white/5 sm:hidden">
+                {sessions.map((s) => {
+                  const href = `/dashboard/sessions/${encodeURIComponent(
+                    s.session_id
+                  )}`;
+                  const branch =
+                    s.git_branch?.replace(/^refs\/heads\//, "") || null;
+                  const repo = repoName(s.repo_id);
+                  const value = isTokens
+                    ? fmtNum(
+                        Number(s.total_input_tokens) +
+                          Number(s.total_output_tokens)
+                      )
+                    : fmtCost(Number(s.total_cost_cents_effective));
+                  return (
+                    <li key={`${s.device_id}-${s.session_id}`}>
+                      <Link
+                        href={href}
+                        className="block space-y-1 py-3 transition-colors hover:bg-white/5"
+                      >
+                        <div className="flex items-center justify-between gap-2 text-sm">
+                          {isManager ? (
+                            <span className="truncate text-zinc-200">
+                              {s.owner_name ?? "-"}
+                            </span>
+                          ) : (
+                            <span className="truncate text-zinc-200">
+                              {formatProvider(s.provider)}
+                            </span>
+                          )}
+                          <span className="shrink-0 text-xs text-zinc-500">
+                            {formatTimestamp(s.started_at)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-zinc-400">
+                          <span className="truncate">
+                            {s.main_model ? formatModelName(s.main_model) : "-"}
+                          </span>
+                          <span aria-hidden className="text-zinc-600">
+                            ·
+                          </span>
+                          <span className="truncate">
+                            {repo}
+                            {branch ? ` / ${branch}` : ""}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="text-zinc-500">
+                            {formatDuration(
+                              s.duration_ms,
+                              s.started_at,
+                              s.ended_at
+                            )}
+                          </span>
+                          <span className="text-zinc-500 tabular-nums">
+                            {fmtNum(s.message_count)} msg
+                          </span>
+                          <span className="text-zinc-200 tabular-nums">
+                            {value}
+                          </span>
+                        </div>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="hidden overflow-x-auto sm:block">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-white/10 text-left text-zinc-400">
@@ -321,13 +392,6 @@ export default async function SessionsPage({
                   </tbody>
                 </table>
               </div>
-              {/* Right-edge fade hints at horizontal scroll on narrow viewports
-                  (#173). Visible only when columns overflow — the wider table
-                  lives behind it. */}
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[#0a0a0a] to-transparent sm:hidden"
-              />
             </div>
           )}
 
