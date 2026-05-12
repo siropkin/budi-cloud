@@ -25,6 +25,7 @@ import {
   formatProvider,
   repoName,
 } from "@/lib/format";
+import { PageHeader } from "@/components/page-header";
 import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
 import { UserFilter } from "@/components/user-filter";
@@ -122,8 +123,7 @@ export default async function SessionsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-xl font-bold">Sessions</h1>
+      <PageHeader title="Sessions">
         <Suspense>
           <div className="flex flex-wrap items-center gap-3">
             <UserFilter members={members} role={user.role} />
@@ -132,7 +132,7 @@ export default async function SessionsPage({
             <PeriodSelector />
           </div>
         </Suspense>
-      </div>
+      </PageHeader>
 
       <Card>
         <CardHeader>
