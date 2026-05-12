@@ -89,16 +89,36 @@ export default async function SessionDetailPage({
         </Link>
         {/* Session id is a long opaque string; truncate so the header stays
             scannable on narrow widths and surface the full id via the title
-            attribute for copy-paste. */}
-        <h1
-          className="mt-2 truncate text-xl font-bold"
-          title={`Session ${sessionId}`}
-        >
-          Session{" "}
-          <span className="font-mono text-base font-medium text-zinc-300">
-            {sessionId}
-          </span>
-        </h1>
+            attribute for copy-paste. When the daemon resolves a session title
+            (#256), surface it as the primary handle and demote the hash to a
+            subtitle — the title (e.g. `Verkada-Web`, `chat-agent`) is the most
+            human-readable thing on the page. */}
+        {session.title ? (
+          <>
+            <h1
+              className="mt-2 truncate text-xl font-bold"
+              title={session.title}
+            >
+              {session.title}
+            </h1>
+            <p
+              className="mt-1 truncate font-mono text-xs text-zinc-500"
+              title={sessionId}
+            >
+              {sessionId}
+            </p>
+          </>
+        ) : (
+          <h1
+            className="mt-2 truncate text-xl font-bold"
+            title={`Session ${sessionId}`}
+          >
+            Session{" "}
+            <span className="font-mono text-base font-medium text-zinc-300">
+              {sessionId}
+            </span>
+          </h1>
+        )}
       </div>
 
       {/*

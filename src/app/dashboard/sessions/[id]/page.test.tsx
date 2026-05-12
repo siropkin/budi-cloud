@@ -79,6 +79,7 @@ const SESSION = {
   main_model: "claude-opus-4-7-20260101",
   owner_name: "Jane Smith",
   surface: "vscode",
+  title: null,
 };
 
 beforeEach(() => {
@@ -313,6 +314,33 @@ describe("dashboard/sessions/[id] /page", () => {
     const text = extractText(node);
     expect(text).toContain("Copilot Chat");
     expect(text).not.toContain("copilot_chat");
+  });
+
+  it("renders the session title as the primary handle when present (#256)", async () => {
+    // v8.5.0+ daemons (siropkin/budi#779) populate session_summaries.title
+    // from the parser's session_title tag. For jetbrains rows that's the
+    // IntelliJ project name (`Verkada-Web`); for unresolved fallback rows
+    // it's the session-type label (`chat-agent`). The detail page promotes
+    // the title to the page h1 and demotes the opaque session-id hash.
+    dal.getSessionDetail.mockResolvedValue({
+      ...SESSION,
+      title: "Verkada-Web",
+    });
+    const node = await render();
+    const text = extractText(node);
+    expect(text).toContain("Verkada-Web");
+    // The hash still renders so a viewer can copy it for support.
+    expect(text).toContain("sess_v");
+  });
+
+  it("falls back to the session hash as the header when title is null (#256)", async () => {
+    // Pre-8.5.0 sessions (and Cursor / Claude Code rows that don't emit a
+    // title) keep the legacy `Session <hash>` header. Pin it so a refactor
+    // that drops the null branch doesn't blank the header.
+    const node = await render();
+    const text = extractText(node);
+    expect(text).toContain("Session");
+    expect(text).toContain("sess_v");
   });
 
   it("annotates output-only sessions so a `0` input-token count reads as a known May-2026+ Copilot Chat state, not missing data (#168)", async () => {
