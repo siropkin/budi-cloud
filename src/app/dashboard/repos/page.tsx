@@ -22,6 +22,7 @@ import { parseSurfaceParam } from "@/lib/surface";
 import { CostBarChart } from "@/components/charts/cost-bar-chart";
 import { COST_BAR_CHART_MAX_ITEMS } from "@/components/charts/cost-bar-chart-config";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { ResponsiveTable } from "@/components/responsive-table";
 
 export default async function ReposPage({
   searchParams,
@@ -162,83 +163,83 @@ export default async function ReposPage({
                   unit={unit}
                 />
               </div>
-              <div className="min-w-0 sm:overflow-x-auto">
-                <table className="hidden w-full text-sm sm:table">
-                  <thead>
-                    <tr className="border-b border-white/10 text-left text-zinc-400">
-                      <th className="pb-2 font-medium">Project</th>
-                      <th className="pb-2 pl-4 text-right font-medium">In</th>
-                      <th className="pb-2 pl-4 text-right font-medium">Out</th>
-                      <th className="pb-2 pl-4 text-right font-medium">
-                        {valueWord}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {repoRows.map((r, i) => (
-                      <tr key={i} className="border-b border-white/5">
-                        <td className="py-2 text-zinc-200">{r.label}</td>
-                        <td className="py-2 pl-4 text-right tabular-nums text-zinc-400">
-                          {fmtNum(r.input_tokens)}
-                        </td>
-                        <td className="py-2 pl-4 text-right tabular-nums text-zinc-400">
-                          {fmtNum(r.output_tokens)}
-                        </td>
-                        <td
-                          className="py-2 pl-4 text-right tabular-nums text-zinc-300"
-                          title={
-                            isTokens
-                              ? undefined
-                              : buildCostCellTooltip(
-                                  r.cost_cents_ingested,
-                                  r.cost_cents
-                                )
-                          }
-                        >
-                          {fmtValue(
-                            r.cost_cents,
-                            r.input_tokens + r.output_tokens
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <ul className="divide-y divide-white/5 text-sm sm:hidden">
-                  {repoRows.map((r, i) => (
-                    <li key={i} className="flex flex-col gap-1 py-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <span
-                          className="min-w-0 flex-1 truncate text-zinc-200"
-                          title={r.label}
-                        >
-                          {r.label}
-                        </span>
-                        <span
-                          className="shrink-0 tabular-nums text-zinc-300"
-                          title={
-                            isTokens
-                              ? undefined
-                              : buildCostCellTooltip(
-                                  r.cost_cents_ingested,
-                                  r.cost_cents
-                                )
-                          }
-                        >
-                          {fmtValue(
-                            r.cost_cents,
-                            r.input_tokens + r.output_tokens
-                          )}
-                        </span>
-                      </div>
-                      <div className="text-xs tabular-nums text-zinc-500">
-                        in {fmtNum(r.input_tokens)} · out{" "}
-                        {fmtNum(r.output_tokens)}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <ResponsiveTable
+                columns={[
+                  {
+                    key: "label",
+                    header: "Project",
+                    cellClassName: "text-zinc-200",
+                    render: (r) => r.label,
+                  },
+                  {
+                    key: "in",
+                    header: "In",
+                    align: "right",
+                    headerClassName: "pl-4",
+                    cellClassName: "pl-4 tabular-nums text-zinc-400",
+                    render: (r) => fmtNum(r.input_tokens),
+                  },
+                  {
+                    key: "out",
+                    header: "Out",
+                    align: "right",
+                    headerClassName: "pl-4",
+                    cellClassName: "pl-4 tabular-nums text-zinc-400",
+                    render: (r) => fmtNum(r.output_tokens),
+                  },
+                  {
+                    key: "value",
+                    header: valueWord,
+                    align: "right",
+                    headerClassName: "pl-4",
+                    cellClassName: "pl-4 tabular-nums text-zinc-300",
+                    cellTitle: (r) =>
+                      isTokens
+                        ? undefined
+                        : buildCostCellTooltip(
+                            r.cost_cents_ingested,
+                            r.cost_cents
+                          ),
+                    render: (r) =>
+                      fmtValue(r.cost_cents, r.input_tokens + r.output_tokens),
+                  },
+                ]}
+                rows={repoRows}
+                rowKey={(_, i) => i}
+                mobileItemClassName="flex flex-col gap-1 py-2"
+                mobileCard={(r) => (
+                  <>
+                    <div className="flex items-center justify-between gap-3">
+                      <span
+                        className="min-w-0 flex-1 truncate text-zinc-200"
+                        title={r.label}
+                      >
+                        {r.label}
+                      </span>
+                      <span
+                        className="shrink-0 tabular-nums text-zinc-300"
+                        title={
+                          isTokens
+                            ? undefined
+                            : buildCostCellTooltip(
+                                r.cost_cents_ingested,
+                                r.cost_cents
+                              )
+                        }
+                      >
+                        {fmtValue(
+                          r.cost_cents,
+                          r.input_tokens + r.output_tokens
+                        )}
+                      </span>
+                    </div>
+                    <div className="text-xs tabular-nums text-zinc-500">
+                      in {fmtNum(r.input_tokens)} · out{" "}
+                      {fmtNum(r.output_tokens)}
+                    </div>
+                  </>
+                )}
+              />
             </div>
           )}
           <p className="mt-3 text-xs text-zinc-500">
@@ -274,99 +275,97 @@ export default async function ReposPage({
                   unit={unit}
                 />
               </div>
-              <div className="min-w-0 sm:overflow-x-auto">
-                <table className="hidden w-full text-sm sm:table">
-                  <thead>
-                    <tr className="border-b border-white/10 text-left text-zinc-400">
-                      <th className="pb-2 font-medium">Project</th>
-                      <th className="pb-2 font-medium">Branch</th>
-                      <th className="pb-2 pl-4 text-right font-medium">In</th>
-                      <th className="pb-2 pl-4 text-right font-medium">Out</th>
-                      <th className="pb-2 pl-4 text-right font-medium">
-                        {valueWord}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {branchRows.map((b, i) => (
-                      <tr key={i} className="border-b border-white/5">
-                        <td className="py-2 text-zinc-200">
-                          <div
-                            className="max-w-[14rem] truncate"
-                            title={b.project}
-                          >
-                            {b.project}
-                          </div>
-                        </td>
-                        <td className="py-2 text-zinc-200">
-                          <div
-                            className="max-w-[18rem] truncate"
-                            title={b.branch}
-                          >
-                            {b.branch}
-                          </div>
-                        </td>
-                        <td className="py-2 pl-4 text-right tabular-nums text-zinc-400">
-                          {fmtNum(b.input_tokens)}
-                        </td>
-                        <td className="py-2 pl-4 text-right tabular-nums text-zinc-400">
-                          {fmtNum(b.output_tokens)}
-                        </td>
-                        <td
-                          className="py-2 pl-4 text-right tabular-nums text-zinc-300"
-                          title={
-                            isTokens
-                              ? undefined
-                              : buildCostCellTooltip(
-                                  b.cost_cents_ingested,
-                                  b.cost_cents
-                                )
-                          }
-                        >
-                          {fmtValue(
-                            b.cost_cents,
-                            b.input_tokens + b.output_tokens
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <ul className="divide-y divide-white/5 text-sm sm:hidden">
-                  {branchRows.map((b, i) => (
-                    <li key={i} className="flex flex-col gap-1 py-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <span
-                          className="min-w-0 flex-1 truncate text-zinc-200"
-                          title={`${b.project} / ${b.branch}`}
-                        >
-                          {b.project} / {b.branch}
-                        </span>
-                        <span
-                          className="shrink-0 tabular-nums text-zinc-300"
-                          title={
-                            isTokens
-                              ? undefined
-                              : buildCostCellTooltip(
-                                  b.cost_cents_ingested,
-                                  b.cost_cents
-                                )
-                          }
-                        >
-                          {fmtValue(
-                            b.cost_cents,
-                            b.input_tokens + b.output_tokens
-                          )}
-                        </span>
+              <ResponsiveTable
+                columns={[
+                  {
+                    key: "project",
+                    header: "Project",
+                    cellClassName: "text-zinc-200",
+                    render: (b) => (
+                      <div className="max-w-[14rem] truncate" title={b.project}>
+                        {b.project}
                       </div>
-                      <div className="text-xs tabular-nums text-zinc-500">
-                        in {fmtNum(b.input_tokens)} · out{" "}
-                        {fmtNum(b.output_tokens)}
+                    ),
+                  },
+                  {
+                    key: "branch",
+                    header: "Branch",
+                    cellClassName: "text-zinc-200",
+                    render: (b) => (
+                      <div className="max-w-[18rem] truncate" title={b.branch}>
+                        {b.branch}
                       </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                    ),
+                  },
+                  {
+                    key: "in",
+                    header: "In",
+                    align: "right",
+                    headerClassName: "pl-4",
+                    cellClassName: "pl-4 tabular-nums text-zinc-400",
+                    render: (b) => fmtNum(b.input_tokens),
+                  },
+                  {
+                    key: "out",
+                    header: "Out",
+                    align: "right",
+                    headerClassName: "pl-4",
+                    cellClassName: "pl-4 tabular-nums text-zinc-400",
+                    render: (b) => fmtNum(b.output_tokens),
+                  },
+                  {
+                    key: "value",
+                    header: valueWord,
+                    align: "right",
+                    headerClassName: "pl-4",
+                    cellClassName: "pl-4 tabular-nums text-zinc-300",
+                    cellTitle: (b) =>
+                      isTokens
+                        ? undefined
+                        : buildCostCellTooltip(
+                            b.cost_cents_ingested,
+                            b.cost_cents
+                          ),
+                    render: (b) =>
+                      fmtValue(b.cost_cents, b.input_tokens + b.output_tokens),
+                  },
+                ]}
+                rows={branchRows}
+                rowKey={(_, i) => i}
+                mobileItemClassName="flex flex-col gap-1 py-2"
+                mobileCard={(b) => (
+                  <>
+                    <div className="flex items-center justify-between gap-3">
+                      <span
+                        className="min-w-0 flex-1 truncate text-zinc-200"
+                        title={`${b.project} / ${b.branch}`}
+                      >
+                        {b.project} / {b.branch}
+                      </span>
+                      <span
+                        className="shrink-0 tabular-nums text-zinc-300"
+                        title={
+                          isTokens
+                            ? undefined
+                            : buildCostCellTooltip(
+                                b.cost_cents_ingested,
+                                b.cost_cents
+                              )
+                        }
+                      >
+                        {fmtValue(
+                          b.cost_cents,
+                          b.input_tokens + b.output_tokens
+                        )}
+                      </span>
+                    </div>
+                    <div className="text-xs tabular-nums text-zinc-500">
+                      in {fmtNum(b.input_tokens)} · out{" "}
+                      {fmtNum(b.output_tokens)}
+                    </div>
+                  </>
+                )}
+              />
             </div>
           )}
         </CardContent>
@@ -396,83 +395,83 @@ export default async function ReposPage({
                   unit={unit}
                 />
               </div>
-              <div className="min-w-0 sm:overflow-x-auto">
-                <table className="hidden w-full text-sm sm:table">
-                  <thead>
-                    <tr className="border-b border-white/10 text-left text-zinc-400">
-                      <th className="pb-2 font-medium">Ticket</th>
-                      <th className="pb-2 pl-4 text-right font-medium">In</th>
-                      <th className="pb-2 pl-4 text-right font-medium">Out</th>
-                      <th className="pb-2 pl-4 text-right font-medium">
-                        {valueWord}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ticketRows.map((t, i) => (
-                      <tr key={i} className="border-b border-white/5">
-                        <td className="py-2 text-zinc-200">{t.ticket}</td>
-                        <td className="py-2 pl-4 text-right tabular-nums text-zinc-400">
-                          {fmtNum(t.input_tokens)}
-                        </td>
-                        <td className="py-2 pl-4 text-right tabular-nums text-zinc-400">
-                          {fmtNum(t.output_tokens)}
-                        </td>
-                        <td
-                          className="py-2 pl-4 text-right tabular-nums text-zinc-300"
-                          title={
-                            isTokens
-                              ? undefined
-                              : buildCostCellTooltip(
-                                  t.cost_cents_ingested,
-                                  t.cost_cents
-                                )
-                          }
-                        >
-                          {fmtValue(
-                            t.cost_cents,
-                            t.input_tokens + t.output_tokens
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <ul className="divide-y divide-white/5 text-sm sm:hidden">
-                  {ticketRows.map((t, i) => (
-                    <li key={i} className="flex flex-col gap-1 py-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <span
-                          className="min-w-0 flex-1 truncate text-zinc-200"
-                          title={t.ticket}
-                        >
-                          {t.ticket}
-                        </span>
-                        <span
-                          className="shrink-0 tabular-nums text-zinc-300"
-                          title={
-                            isTokens
-                              ? undefined
-                              : buildCostCellTooltip(
-                                  t.cost_cents_ingested,
-                                  t.cost_cents
-                                )
-                          }
-                        >
-                          {fmtValue(
-                            t.cost_cents,
-                            t.input_tokens + t.output_tokens
-                          )}
-                        </span>
-                      </div>
-                      <div className="text-xs tabular-nums text-zinc-500">
-                        in {fmtNum(t.input_tokens)} · out{" "}
-                        {fmtNum(t.output_tokens)}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <ResponsiveTable
+                columns={[
+                  {
+                    key: "ticket",
+                    header: "Ticket",
+                    cellClassName: "text-zinc-200",
+                    render: (t) => t.ticket,
+                  },
+                  {
+                    key: "in",
+                    header: "In",
+                    align: "right",
+                    headerClassName: "pl-4",
+                    cellClassName: "pl-4 tabular-nums text-zinc-400",
+                    render: (t) => fmtNum(t.input_tokens),
+                  },
+                  {
+                    key: "out",
+                    header: "Out",
+                    align: "right",
+                    headerClassName: "pl-4",
+                    cellClassName: "pl-4 tabular-nums text-zinc-400",
+                    render: (t) => fmtNum(t.output_tokens),
+                  },
+                  {
+                    key: "value",
+                    header: valueWord,
+                    align: "right",
+                    headerClassName: "pl-4",
+                    cellClassName: "pl-4 tabular-nums text-zinc-300",
+                    cellTitle: (t) =>
+                      isTokens
+                        ? undefined
+                        : buildCostCellTooltip(
+                            t.cost_cents_ingested,
+                            t.cost_cents
+                          ),
+                    render: (t) =>
+                      fmtValue(t.cost_cents, t.input_tokens + t.output_tokens),
+                  },
+                ]}
+                rows={ticketRows}
+                rowKey={(_, i) => i}
+                mobileItemClassName="flex flex-col gap-1 py-2"
+                mobileCard={(t) => (
+                  <>
+                    <div className="flex items-center justify-between gap-3">
+                      <span
+                        className="min-w-0 flex-1 truncate text-zinc-200"
+                        title={t.ticket}
+                      >
+                        {t.ticket}
+                      </span>
+                      <span
+                        className="shrink-0 tabular-nums text-zinc-300"
+                        title={
+                          isTokens
+                            ? undefined
+                            : buildCostCellTooltip(
+                                t.cost_cents_ingested,
+                                t.cost_cents
+                              )
+                        }
+                      >
+                        {fmtValue(
+                          t.cost_cents,
+                          t.input_tokens + t.output_tokens
+                        )}
+                      </span>
+                    </div>
+                    <div className="text-xs tabular-nums text-zinc-500">
+                      in {fmtNum(t.input_tokens)} · out{" "}
+                      {fmtNum(t.output_tokens)}
+                    </div>
+                  </>
+                )}
+              />
             </div>
           )}
         </CardContent>

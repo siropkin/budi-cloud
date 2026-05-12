@@ -1,6 +1,10 @@
 import Link from "next/link";
 import type { RecalculationRunRow } from "@/lib/dal";
 import { fmtCost } from "@/lib/format";
+import {
+  ResponsiveTable,
+  type ResponsiveColumn,
+} from "@/components/responsive-table";
 
 /**
  * Settings → Pricing → Audit history (#733). Renders the org's
@@ -113,6 +117,87 @@ export function AuditHistoryTable({
   const showingFrom = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const showingTo = Math.min(page * pageSize, total);
 
+  const triggerLabel = (run: RecalculationRunRow): string => {
+    if (!run.triggeredBy) return "—";
+    return usersById.get(run.triggeredBy) ?? run.triggeredBy;
+  };
+
+  const deltaToneClass = (tone: "up" | "down" | "flat"): string => {
+    if (tone === "down") return "text-emerald-300";
+    if (tone === "up") return "text-amber-300";
+    return "text-zinc-300";
+  };
+
+  const columns: ResponsiveColumn<RecalculationRunRow>[] = [
+    {
+      key: "started",
+      header: "Started",
+      cellClassName: "text-zinc-200",
+      render: (run) => (
+        <details>
+          <summary className="cursor-pointer list-none whitespace-nowrap">
+            <span aria-hidden className="mr-1 text-zinc-500">
+              ▸
+            </span>
+            {formatStarted(run.startedAt)}
+          </summary>
+          <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs text-zinc-400">
+            <dt>Run id</dt>
+            <dd className="font-mono text-zinc-300">{run.id}</dd>
+            <dt>Finished</dt>
+            <dd className="text-zinc-300">
+              {run.finishedAt ? formatStarted(run.finishedAt) : "—"}
+            </dd>
+            <dt>Active price lists</dt>
+            <dd className="text-zinc-300">
+              {run.priceListIds.length === 0
+                ? "—"
+                : run.priceListIds.join(", ")}
+            </dd>
+            <dt>Rows processed</dt>
+            <dd className="text-zinc-300">{run.rowsProcessed ?? "—"}</dd>
+          </dl>
+        </details>
+      ),
+    },
+    {
+      key: "trigger",
+      header: "Triggered by",
+      cellClassName: "text-zinc-300",
+      render: (run) => triggerLabel(run),
+    },
+    {
+      key: "scope",
+      header: "Scope",
+      cellClassName: "text-zinc-400",
+      render: (run) => formatScope(run.scopeFromDate, run.scopeToDate),
+    },
+    {
+      key: "rows-changed",
+      header: "Rows changed",
+      align: "right",
+      cellClassName: "tabular-nums text-zinc-200",
+      render: (run) => run.rowsChanged ?? "—",
+    },
+    {
+      key: "delta",
+      header: "Before → After",
+      headerClassName: "pl-6",
+      cellClassName: "pl-6 tabular-nums",
+      render: (run) => {
+        const delta = formatDelta(run.beforeTotalCents, run.afterTotalCents);
+        return (
+          <span className={deltaToneClass(delta.tone)}>{delta.label}</span>
+        );
+      },
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (run) => <StatusBadge status={run.status} />,
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -145,138 +230,47 @@ export function AuditHistoryTable({
           {status === "all" ? " yet" : ` with status "${status}"`}.
         </p>
       ) : (
-        <>
-          {/* Table on sm+; below `sm` render each run as a stacked card so the
-              six columns don't collapse into each other at 390px. Mirrors the
-              members-list pattern in src/app/dashboard/settings/page.tsx
-              (#258). */}
-          <table className="hidden w-full text-sm sm:table">
-            <thead>
-              <tr className="border-b border-white/10 text-left text-zinc-400">
-                <th className="pb-2 font-medium">Started</th>
-                <th className="pb-2 font-medium">Triggered by</th>
-                <th className="pb-2 font-medium">Scope</th>
-                <th className="pb-2 text-right font-medium">Rows changed</th>
-                <th className="pb-2 pl-6 font-medium">Before → After</th>
-                <th className="pb-2 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {runs.map((run) => {
-                const delta = formatDelta(
-                  run.beforeTotalCents,
-                  run.afterTotalCents
-                );
-                const trigger = run.triggeredBy
-                  ? (usersById.get(run.triggeredBy) ?? run.triggeredBy)
-                  : "—";
-                return (
-                  <tr
-                    key={run.id}
-                    className="border-b border-white/5 align-top"
-                  >
-                    <td className="py-2 text-zinc-200">
-                      <details>
-                        <summary className="cursor-pointer list-none whitespace-nowrap">
-                          <span aria-hidden className="mr-1 text-zinc-500">
-                            ▸
-                          </span>
-                          {formatStarted(run.startedAt)}
-                        </summary>
-                        <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs text-zinc-400">
-                          <dt>Run id</dt>
-                          <dd className="font-mono text-zinc-300">{run.id}</dd>
-                          <dt>Finished</dt>
-                          <dd className="text-zinc-300">
-                            {run.finishedAt
-                              ? formatStarted(run.finishedAt)
-                              : "—"}
-                          </dd>
-                          <dt>Active price lists</dt>
-                          <dd className="text-zinc-300">
-                            {run.priceListIds.length === 0
-                              ? "—"
-                              : run.priceListIds.join(", ")}
-                          </dd>
-                          <dt>Rows processed</dt>
-                          <dd className="text-zinc-300">
-                            {run.rowsProcessed ?? "—"}
-                          </dd>
-                        </dl>
-                      </details>
-                    </td>
-                    <td className="py-2 text-zinc-300">{trigger}</td>
-                    <td className="py-2 text-zinc-400">
-                      {formatScope(run.scopeFromDate, run.scopeToDate)}
-                    </td>
-                    <td className="py-2 text-right text-zinc-200 tabular-nums">
-                      {run.rowsChanged ?? "—"}
-                    </td>
-                    <td
-                      className={`py-2 pl-6 tabular-nums ${
-                        delta.tone === "down"
-                          ? "text-emerald-300"
-                          : delta.tone === "up"
-                            ? "text-amber-300"
-                            : "text-zinc-300"
-                      }`}
-                    >
-                      {delta.label}
-                    </td>
-                    <td className="py-2">
-                      <StatusBadge status={run.status} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          <ul className="divide-y divide-white/5 text-sm sm:hidden">
-            {runs.map((run) => {
-              const delta = formatDelta(
-                run.beforeTotalCents,
-                run.afterTotalCents
-              );
-              const trigger = run.triggeredBy
-                ? (usersById.get(run.triggeredBy) ?? run.triggeredBy)
-                : "—";
-              return (
-                <li key={run.id} className="space-y-2 py-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-zinc-200">
-                      {formatStarted(run.startedAt)}
-                    </span>
-                    <StatusBadge status={run.status} />
-                  </div>
-                  <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs">
-                    <dt className="text-zinc-500">Triggered by</dt>
-                    <dd className="truncate text-zinc-300">{trigger}</dd>
-                    <dt className="text-zinc-500">Scope</dt>
-                    <dd className="text-zinc-300">
-                      {formatScope(run.scopeFromDate, run.scopeToDate)}
-                    </dd>
-                    <dt className="text-zinc-500">Rows changed</dt>
-                    <dd className="text-zinc-300 tabular-nums">
-                      {run.rowsChanged ?? "—"}
-                    </dd>
-                    <dt className="text-zinc-500">Before → After</dt>
-                    <dd
-                      className={`tabular-nums ${
-                        delta.tone === "down"
-                          ? "text-emerald-300"
-                          : delta.tone === "up"
-                            ? "text-amber-300"
-                            : "text-zinc-300"
-                      }`}
-                    >
-                      {delta.label}
-                    </dd>
-                  </dl>
-                </li>
-              );
-            })}
-          </ul>
-        </>
+        <ResponsiveTable
+          columns={columns}
+          rows={runs}
+          rowKey={(run) => run.id}
+          rowClassName="align-top"
+          mobileItemClassName="space-y-2 py-3"
+          mobileCard={(run) => {
+            const delta = formatDelta(
+              run.beforeTotalCents,
+              run.afterTotalCents
+            );
+            return (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-zinc-200">
+                    {formatStarted(run.startedAt)}
+                  </span>
+                  <StatusBadge status={run.status} />
+                </div>
+                <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs">
+                  <dt className="text-zinc-500">Triggered by</dt>
+                  <dd className="truncate text-zinc-300">
+                    {triggerLabel(run)}
+                  </dd>
+                  <dt className="text-zinc-500">Scope</dt>
+                  <dd className="text-zinc-300">
+                    {formatScope(run.scopeFromDate, run.scopeToDate)}
+                  </dd>
+                  <dt className="text-zinc-500">Rows changed</dt>
+                  <dd className="text-zinc-300 tabular-nums">
+                    {run.rowsChanged ?? "—"}
+                  </dd>
+                  <dt className="text-zinc-500">Before → After</dt>
+                  <dd className={`tabular-nums ${deltaToneClass(delta.tone)}`}>
+                    {delta.label}
+                  </dd>
+                </dl>
+              </>
+            );
+          }}
+        />
       )}
 
       {total > pageSize && (

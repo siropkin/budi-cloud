@@ -2,6 +2,10 @@ import Link from "next/link";
 import { getCurrentUser, getOrgMembers } from "@/lib/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import {
+  ResponsiveTable,
+  type ResponsiveColumn,
+} from "@/components/responsive-table";
 import { ApiKeySection } from "./api-key-section";
 import { CopyButton } from "./copy-button";
 import { InviteSection } from "./invite-section";
@@ -21,6 +25,28 @@ export default async function SettingsPage() {
 
   const members = await getOrgMembers(user.org_id);
   const canEditRoles = user.role === "manager";
+  type Member = (typeof members)[number];
+  const memberColumns: ResponsiveColumn<Member>[] = [
+    {
+      key: "name",
+      header: "Name",
+      cellClassName: "text-zinc-200",
+      render: (m) => m.display_name || "-",
+    },
+    {
+      key: "email",
+      header: "Email",
+      cellClassName: "text-zinc-400",
+      render: (m) => m.email || "-",
+    },
+    {
+      key: "role",
+      header: "Role",
+      render: (m) => (
+        <RoleCell userId={m.id} initialRole={m.role} canEdit={canEditRoles} />
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -57,59 +83,29 @@ export default async function SettingsPage() {
           {members.length === 0 ? (
             <p className="text-sm text-zinc-500">No members yet</p>
           ) : (
-            <>
-              {/* Table on sm+ stays the same; below `sm` render each member
-                  as a stacked card (name+role pill on the first row, email
-                  on the second) so the cluster doesn't overflow horizontally
-                  at phone widths. */}
-              <table className="hidden w-full text-sm sm:table">
-                <thead>
-                  <tr className="border-b border-white/10 text-left text-zinc-400">
-                    <th className="pb-2 font-medium">Name</th>
-                    <th className="pb-2 font-medium">Email</th>
-                    <th className="pb-2 font-medium">Role</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {members.map((m) => (
-                    <tr key={m.id} className="border-b border-white/5">
-                      <td className="py-2 text-zinc-200">
-                        {m.display_name || "-"}
-                      </td>
-                      <td className="py-2 text-zinc-400">{m.email || "-"}</td>
-                      <td className="py-2">
-                        <RoleCell
-                          userId={m.id}
-                          initialRole={m.role}
-                          canEdit={canEditRoles}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <ul className="divide-y divide-white/5 text-sm sm:hidden">
-                {members.map((m) => (
-                  <li key={m.id} className="space-y-1 py-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-zinc-200">
-                        {m.display_name || "-"}
-                      </span>
-                      <RoleCell
-                        userId={m.id}
-                        initialRole={m.role}
-                        canEdit={canEditRoles}
-                      />
-                    </div>
-                    {m.email && (
-                      <p className="truncate text-xs text-zinc-500">
-                        {m.email}
-                      </p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </>
+            <ResponsiveTable
+              columns={memberColumns}
+              rows={members}
+              rowKey={(m) => m.id}
+              mobileItemClassName="space-y-1 py-3"
+              mobileCard={(m) => (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-zinc-200">
+                      {m.display_name || "-"}
+                    </span>
+                    <RoleCell
+                      userId={m.id}
+                      initialRole={m.role}
+                      canEdit={canEditRoles}
+                    />
+                  </div>
+                  {m.email && (
+                    <p className="truncate text-xs text-zinc-500">{m.email}</p>
+                  )}
+                </>
+              )}
+            />
           )}
         </CardContent>
       </Card>
