@@ -1620,3 +1620,105 @@ describe("POST /v1/ingest — schema_version compatibility (#749)", () => {
     expect(stored[0].cost_cents_effective).toBe(4.25);
   });
 });
+
+// Regression coverage for #255: the v8.5.0 daemon ships a `title` field on
+// each session record (siropkin/budi#779). Cloud must accept the bumped
+// schema_version, persist the title verbatim on the row, and fall through to
+// NULL for older daemons / surfaces that don't emit it.
+describe("POST /v1/ingest — session title (#255)", () => {
+  function seedUser() {
+    fake.seed("orgs", [{ id: "org_test", name: "test" }]);
+    fake.seed("users", [
+      {
+        id: "usr_test",
+        org_id: "org_test",
+        role: "manager",
+        api_key: "budi_testkey",
+        display_name: "Test",
+        email: "t@example.com",
+      },
+    ]);
+  }
+
+  function mkReq(body: Record<string, unknown>): Request {
+    return new Request("http://localhost/v1/ingest", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer budi_testkey",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  const envelopeShell = {
+    device_id: "11111111-1111-4111-8111-111111111111",
+    org_id: "org_test",
+    synced_at: "2026-04-15T12:00:00Z",
+  };
+
+  const baseSession = {
+    session_id: "sess-titled",
+    provider: "jetbrains_copilot",
+    started_at: "2026-04-14T10:00:00Z",
+    ended_at: "2026-04-14T11:00:00Z",
+    duration_ms: 3_600_000,
+    repo_id: null,
+    git_branch: null,
+    ticket: null,
+    message_count: 1,
+    total_input_tokens: 1,
+    total_output_tokens: 1,
+    total_cost_cents: 1,
+  };
+
+  it("accepts a v3 envelope and persists session.title", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    const res = await POST(
+      mkReq({
+        ...envelopeShell,
+        schema_version: 3,
+        payload: {
+          daily_rollups: [],
+          session_summaries: [{ ...baseSession, title: "Verkada-Web" }],
+        },
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(200);
+    const [stored] = fake.rows("session_summaries");
+    expect(stored.title).toBe("Verkada-Web");
+  });
+
+  it("falls back to null when title is omitted (forward compat with pre-8.5.0 daemons)", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    const res = await POST(
+      mkReq({
+        ...envelopeShell,
+        schema_version: 2,
+        payload: {
+          daily_rollups: [],
+          session_summaries: [baseSession],
+        },
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(200);
+    const [stored] = fake.rows("session_summaries");
+    expect(stored.title).toBeNull();
+  });
+
+  it("truncates an over-long title at STRING_CAPS.title", async () => {
+    const { buildSessionRows, STRING_CAPS } = await import("./rows");
+
+    const huge = "T".repeat(50_000);
+    const rows = buildSessionRows("dev_x", "2026-04-15T12:00:00Z", [
+      { ...baseSession, title: huge },
+    ]);
+    expect((rows[0].title as string).length).toBe(STRING_CAPS.title);
+  });
+});

@@ -221,6 +221,10 @@ export const STRING_CAPS = {
   repo_id: 128,
   git_branch: 256,
   ticket: 64,
+  // #255: session.title carries the daemon's `session_title` tag — typically a
+  // project name (`Verkada-Web`) or session-type label (`chat-agent`), but the
+  // parser allows free-form values, so we cap generously.
+  title: 256,
 } as const;
 
 /**
@@ -305,6 +309,9 @@ export interface IngestSessionSummary {
   // because older daemons (< 8.3.16) don't emit it, and the daemon
   // legitimately omits it for sessions with zero scored messages.
   primary_model?: string | null;
+  // Session title (#255). Optional — older daemons (≤ 8.4.8) don't emit it;
+  // some surfaces (Cursor, Claude Code) may legitimately have no title.
+  title?: string | null;
   // Vitals (#99). Optional — older daemons (< 8.3.15) omit these, and budi-core
   // legitimately skips emission for sessions with too few assistant messages.
   vital_context_drag_state?: string | null;
@@ -440,6 +447,7 @@ export function buildSessionRows(
       METRIC_CAPS.total_cost_cents
     ),
     main_model: capString(s.primary_model ?? null, STRING_CAPS.model),
+    title: capString(s.title ?? null, STRING_CAPS.title),
     // Vitals (#99). Each field is normalized independently so a daemon that
     // emits e.g. only the overall state (or only some vitals) still lands the
     // partial signal — the dashboard already renders missing slots as a
