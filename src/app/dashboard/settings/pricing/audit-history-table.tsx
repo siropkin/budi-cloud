@@ -145,8 +145,12 @@ export function AuditHistoryTable({
           {status === "all" ? " yet" : ` with status "${status}"`}.
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <>
+          {/* Table on sm+; below `sm` render each run as a stacked card so the
+              six columns don't collapse into each other at 390px. Mirrors the
+              members-list pattern in src/app/dashboard/settings/page.tsx
+              (#258). */}
+          <table className="hidden w-full text-sm sm:table">
             <thead>
               <tr className="border-b border-white/10 text-left text-zinc-400">
                 <th className="pb-2 font-medium">Started</th>
@@ -227,7 +231,52 @@ export function AuditHistoryTable({
               })}
             </tbody>
           </table>
-        </div>
+          <ul className="divide-y divide-white/5 text-sm sm:hidden">
+            {runs.map((run) => {
+              const delta = formatDelta(
+                run.beforeTotalCents,
+                run.afterTotalCents
+              );
+              const trigger = run.triggeredBy
+                ? (usersById.get(run.triggeredBy) ?? run.triggeredBy)
+                : "—";
+              return (
+                <li key={run.id} className="space-y-2 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-zinc-200">
+                      {formatStarted(run.startedAt)}
+                    </span>
+                    <StatusBadge status={run.status} />
+                  </div>
+                  <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs">
+                    <dt className="text-zinc-500">Triggered by</dt>
+                    <dd className="truncate text-zinc-300">{trigger}</dd>
+                    <dt className="text-zinc-500">Scope</dt>
+                    <dd className="text-zinc-300">
+                      {formatScope(run.scopeFromDate, run.scopeToDate)}
+                    </dd>
+                    <dt className="text-zinc-500">Rows changed</dt>
+                    <dd className="text-zinc-300 tabular-nums">
+                      {run.rowsChanged ?? "—"}
+                    </dd>
+                    <dt className="text-zinc-500">Before → After</dt>
+                    <dd
+                      className={`tabular-nums ${
+                        delta.tone === "down"
+                          ? "text-emerald-300"
+                          : delta.tone === "up"
+                            ? "text-amber-300"
+                            : "text-zinc-300"
+                      }`}
+                    >
+                      {delta.label}
+                    </dd>
+                  </dl>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
 
       {total > pageSize && (
