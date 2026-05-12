@@ -50,6 +50,13 @@ export type ResponsiveTableProps<T> = {
    * contract.
    */
   className?: string;
+  /**
+   * Default padding applied to every `<td>`. Defaults to `py-2`. Set to `""`
+   * when each cell's child owns the padding itself — e.g. Sessions, where
+   * every cell is a `<Link className="block py-2 …">` so the click target
+   * spans the full cell box.
+   */
+  cellPadding?: string;
 };
 
 const DEFAULT_WRAPPER = "min-w-0 sm:overflow-x-auto";
@@ -62,6 +69,7 @@ export function ResponsiveTable<T>({
   mobileItemClassName = "py-3",
   rowClassName,
   className = DEFAULT_WRAPPER,
+  cellPadding = "py-2",
 }: ResponsiveTableProps<T>) {
   return (
     <div className={className}>
@@ -94,7 +102,7 @@ export function ResponsiveTable<T>({
                   <td
                     key={col.key}
                     className={clsx(
-                      "py-2",
+                      cellPadding,
                       col.align === "right" && "text-right",
                       col.cellClassName
                     )}

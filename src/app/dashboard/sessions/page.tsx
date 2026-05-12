@@ -32,6 +32,10 @@ import { UserFilter } from "@/components/user-filter";
 import { SurfaceFilter } from "@/components/surface-filter";
 import { parseSurfaceParam } from "@/lib/surface";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import {
+  ResponsiveTable,
+  type ResponsiveColumn,
+} from "@/components/responsive-table";
 
 function formatTimestamp(ts: string | null): string {
   if (!ts) return "-";
@@ -91,6 +95,170 @@ export default async function SessionsPage({
       getKnownSurfaces(user, { scopedUserId: scope.scopedUserId }),
     ]);
 
+  type SessionRow = (typeof sessions)[number];
+  const hrefForSession = (s: SessionRow) =>
+    `/dashboard/sessions/${encodeURIComponent(s.session_id)}`;
+  // Every desktop cell wraps in a `<Link>` so the whole row is a click
+  // target. With `cellPadding=""` the Link's own `py-2` becomes the cell's
+  // vertical padding — clicks on the padding still land on the Link.
+  const linkCellClass =
+    "block max-w-[16ch] truncate py-2 pr-3 whitespace-nowrap";
+  const headerCellClass = "pr-3 whitespace-nowrap";
+
+  const sessionColumns: ResponsiveColumn<SessionRow>[] = [
+    ...(isManager
+      ? [
+          {
+            key: "member",
+            header: "Member",
+            headerClassName: headerCellClass,
+            cellClassName: "text-zinc-300",
+            cellTitle: (s: SessionRow) => s.owner_name ?? undefined,
+            render: (s: SessionRow) => (
+              <Link
+                href={hrefForSession(s)}
+                className="block max-w-[20ch] truncate py-2 pr-3 whitespace-nowrap"
+              >
+                {s.owner_name ?? "-"}
+              </Link>
+            ),
+          },
+        ]
+      : []),
+    {
+      key: "title",
+      header: "Title",
+      headerClassName: headerCellClass,
+      cellClassName: "text-zinc-300",
+      cellTitle: (s) => s.title ?? undefined,
+      render: (s) => (
+        <Link
+          href={hrefForSession(s)}
+          className="block max-w-[20ch] truncate py-2 pr-3 whitespace-nowrap"
+        >
+          {s.title ?? "—"}
+        </Link>
+      ),
+    },
+    {
+      key: "provider",
+      header: "Provider",
+      headerClassName: headerCellClass,
+      cellClassName: "text-zinc-300",
+      cellTitle: (s) => formatProvider(s.provider),
+      render: (s) => (
+        <Link href={hrefForSession(s)} className={linkCellClass}>
+          {formatProvider(s.provider)}
+        </Link>
+      ),
+    },
+    {
+      key: "model",
+      header: "Model",
+      headerClassName: headerCellClass,
+      cellClassName: "text-zinc-400",
+      cellTitle: (s) => s.main_model ?? undefined,
+      render: (s) => (
+        <Link href={hrefForSession(s)} className={linkCellClass}>
+          {s.main_model ? formatModelName(s.main_model) : "-"}
+        </Link>
+      ),
+    },
+    {
+      key: "started",
+      header: "Started",
+      headerClassName: headerCellClass,
+      cellClassName: "text-zinc-400",
+      cellTitle: (s) =>
+        s.started_at ? new Date(s.started_at).toLocaleString() : undefined,
+      render: (s) => (
+        <Link
+          href={hrefForSession(s)}
+          className="block max-w-[14ch] truncate py-2 pr-3 whitespace-nowrap"
+        >
+          {formatTimestamp(s.started_at)}
+        </Link>
+      ),
+    },
+    {
+      key: "duration",
+      header: "Duration",
+      headerClassName: headerCellClass,
+      cellClassName: "text-zinc-400",
+      render: (s) => (
+        <Link
+          href={hrefForSession(s)}
+          className="block max-w-[10ch] truncate py-2 pr-3 whitespace-nowrap"
+        >
+          {formatDuration(s.duration_ms, s.started_at, s.ended_at)}
+        </Link>
+      ),
+    },
+    {
+      key: "repo",
+      header: "Repo",
+      headerClassName: headerCellClass,
+      cellClassName: "text-zinc-400",
+      cellTitle: (s) => repoName(s.repo_id) || undefined,
+      render: (s) => (
+        <Link href={hrefForSession(s)} className={linkCellClass}>
+          {repoName(s.repo_id)}
+        </Link>
+      ),
+    },
+    {
+      key: "branch",
+      header: "Branch",
+      headerClassName: headerCellClass,
+      cellClassName: "text-zinc-400",
+      cellTitle: (s) =>
+        s.git_branch?.replace(/^refs\/heads\//, "") || undefined,
+      render: (s) => (
+        <Link href={hrefForSession(s)} className={linkCellClass}>
+          {s.git_branch?.replace(/^refs\/heads\//, "") || "-"}
+        </Link>
+      ),
+    },
+    {
+      key: "messages",
+      header: "Messages",
+      align: "right",
+      headerClassName: headerCellClass,
+      cellClassName: "tabular-nums text-zinc-300",
+      render: (s) => (
+        <Link
+          href={hrefForSession(s)}
+          className="block py-2 pr-3 whitespace-nowrap"
+        >
+          {fmtNum(s.message_count)}
+        </Link>
+      ),
+    },
+    {
+      key: "value",
+      header: isTokens ? "Tokens" : "Cost",
+      align: "right",
+      headerClassName: "whitespace-nowrap",
+      cellClassName: "tabular-nums text-zinc-200",
+      cellTitle: (s) =>
+        isTokens
+          ? undefined
+          : buildCostCellTooltip(
+              Number(s.total_cost_cents_ingested),
+              Number(s.total_cost_cents_effective)
+            ),
+      render: (s) => (
+        <Link href={hrefForSession(s)} className="block py-2 whitespace-nowrap">
+          {isTokens
+            ? fmtNum(
+                Number(s.total_input_tokens) + Number(s.total_output_tokens)
+              )
+            : fmtCost(Number(s.total_cost_cents_effective))}
+        </Link>
+      ),
+    },
+  ];
+
   const startIndex = (page - 1) * SESSIONS_PAGE_SIZE + 1;
   const endIndex = startIndex + sessions.length - 1;
   const hasNext = nextCursor !== null;
@@ -148,273 +316,84 @@ export default async function SessionsPage({
               No sessions found for this period
             </p>
           ) : (
-            <div className="relative">
-              {/* < sm: stacked card list — drilling into the detail page.
-                  Surfaces primary fields only (Member · Started, Model · Repo,
-                  Duration · Messages · Cost) to keep the card legible at
-                  390px. The desktop table stays the canonical view at sm+
-                  (#259). */}
-              <ul className="divide-y divide-white/5 sm:hidden">
-                {sessions.map((s) => {
-                  const href = `/dashboard/sessions/${encodeURIComponent(
-                    s.session_id
-                  )}`;
-                  const branch =
-                    s.git_branch?.replace(/^refs\/heads\//, "") || null;
-                  const repo = repoName(s.repo_id);
-                  const value = isTokens
-                    ? fmtNum(
-                        Number(s.total_input_tokens) +
-                          Number(s.total_output_tokens)
-                      )
-                    : fmtCost(Number(s.total_cost_cents_effective));
-                  return (
-                    <li key={`${s.device_id}-${s.session_id}`}>
-                      <Link
-                        href={href}
-                        className="block space-y-1 py-3 transition-colors hover:bg-white/5"
-                      >
-                        <div className="flex items-center justify-between gap-2 text-sm">
-                          {isManager ? (
-                            <span className="truncate text-zinc-200">
-                              {s.owner_name ?? "-"}
-                            </span>
-                          ) : (
-                            <span className="truncate text-zinc-200">
-                              {formatProvider(s.provider)}
-                            </span>
-                          )}
-                          <span className="shrink-0 text-xs text-zinc-500">
-                            {formatTimestamp(s.started_at)}
-                          </span>
-                        </div>
-                        {s.title && (
-                          <div
-                            className="truncate text-xs text-zinc-300"
-                            title={s.title}
-                          >
-                            {s.title}
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2 text-xs text-zinc-400">
-                          <span className="truncate">
-                            {s.main_model ? formatModelName(s.main_model) : "-"}
-                          </span>
-                          <span aria-hidden className="text-zinc-600">
-                            ·
-                          </span>
-                          <span className="truncate">
-                            {repo}
-                            {branch ? ` / ${branch}` : ""}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between gap-2 text-xs">
-                          <span className="text-zinc-500">
-                            {formatDuration(
-                              s.duration_ms,
-                              s.started_at,
-                              s.ended_at
-                            )}
-                          </span>
-                          <span className="text-zinc-500 tabular-nums">
-                            {fmtNum(s.message_count)} msg
-                          </span>
-                          <span className="text-zinc-200 tabular-nums">
-                            {value}
-                          </span>
-                        </div>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-              <div className="hidden overflow-x-auto sm:block">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-white/10 text-left text-zinc-400">
-                      {isManager && (
-                        <th className="pr-3 pb-2 font-medium whitespace-nowrap">
-                          Member
-                        </th>
+            <ResponsiveTable
+              columns={sessionColumns}
+              rows={sessions}
+              rowKey={(s) => `${s.device_id}-${s.session_id}`}
+              rowClassName="transition-colors hover:bg-white/5"
+              cellPadding=""
+              mobileItemClassName=""
+              mobileCard={(s) => {
+                const branch =
+                  s.git_branch?.replace(/^refs\/heads\//, "") || null;
+                const repo = repoName(s.repo_id);
+                const value = isTokens
+                  ? fmtNum(
+                      Number(s.total_input_tokens) +
+                        Number(s.total_output_tokens)
+                    )
+                  : fmtCost(Number(s.total_cost_cents_effective));
+                // < sm: stacked card — primary fields only (Member · Started,
+                // Model · Repo, Duration · Messages · Cost) to stay legible at
+                // 390px (#259). The desktop table above stays canonical.
+                return (
+                  <Link
+                    href={hrefForSession(s)}
+                    className="block space-y-1 py-3 transition-colors hover:bg-white/5"
+                  >
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                      {isManager ? (
+                        <span className="truncate text-zinc-200">
+                          {s.owner_name ?? "-"}
+                        </span>
+                      ) : (
+                        <span className="truncate text-zinc-200">
+                          {formatProvider(s.provider)}
+                        </span>
                       )}
-                      <th className="pr-3 pb-2 font-medium whitespace-nowrap">
-                        Title
-                      </th>
-                      <th className="pr-3 pb-2 font-medium whitespace-nowrap">
-                        Provider
-                      </th>
-                      <th className="pr-3 pb-2 font-medium whitespace-nowrap">
-                        Model
-                      </th>
-                      <th className="pr-3 pb-2 font-medium whitespace-nowrap">
-                        Started
-                      </th>
-                      <th className="pr-3 pb-2 font-medium whitespace-nowrap">
-                        Duration
-                      </th>
-                      <th className="pr-3 pb-2 font-medium whitespace-nowrap">
-                        Repo
-                      </th>
-                      <th className="pr-3 pb-2 font-medium whitespace-nowrap">
-                        Branch
-                      </th>
-                      <th className="pr-3 pb-2 text-right font-medium whitespace-nowrap">
-                        Messages
-                      </th>
-                      <th className="pb-2 text-right font-medium whitespace-nowrap">
-                        {isTokens ? "Tokens" : "Cost"}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sessions.map((s) => {
-                      const href = `/dashboard/sessions/${encodeURIComponent(
-                        s.session_id
-                      )}`;
-                      return (
-                        <tr
-                          key={`${s.device_id}-${s.session_id}`}
-                          className="border-b border-white/5 transition-colors hover:bg-white/5"
-                        >
-                          {isManager && (
-                            <td
-                              className="text-zinc-300"
-                              title={s.owner_name ?? undefined}
-                            >
-                              <Link
-                                href={href}
-                                className="block max-w-[20ch] truncate py-2 pr-3 whitespace-nowrap"
-                              >
-                                {s.owner_name ?? "-"}
-                              </Link>
-                            </td>
-                          )}
-                          <td
-                            className="text-zinc-300"
-                            title={s.title ?? undefined}
-                          >
-                            <Link
-                              href={href}
-                              className="block max-w-[20ch] truncate py-2 pr-3 whitespace-nowrap"
-                            >
-                              {s.title ?? "—"}
-                            </Link>
-                          </td>
-                          <td
-                            className="text-zinc-300"
-                            title={formatProvider(s.provider)}
-                          >
-                            <Link
-                              href={href}
-                              className="block max-w-[16ch] truncate py-2 pr-3 whitespace-nowrap"
-                            >
-                              {formatProvider(s.provider)}
-                            </Link>
-                          </td>
-                          <td
-                            className="text-zinc-400"
-                            title={s.main_model ?? undefined}
-                          >
-                            <Link
-                              href={href}
-                              className="block max-w-[16ch] truncate py-2 pr-3 whitespace-nowrap"
-                            >
-                              {s.main_model
-                                ? formatModelName(s.main_model)
-                                : "-"}
-                            </Link>
-                          </td>
-                          <td
-                            className="text-zinc-400"
-                            title={
-                              s.started_at
-                                ? new Date(s.started_at).toLocaleString()
-                                : undefined
-                            }
-                          >
-                            <Link
-                              href={href}
-                              className="block max-w-[14ch] truncate py-2 pr-3 whitespace-nowrap"
-                            >
-                              {formatTimestamp(s.started_at)}
-                            </Link>
-                          </td>
-                          <td className="text-zinc-400">
-                            <Link
-                              href={href}
-                              className="block max-w-[10ch] truncate py-2 pr-3 whitespace-nowrap"
-                            >
-                              {formatDuration(
-                                s.duration_ms,
-                                s.started_at,
-                                s.ended_at
-                              )}
-                            </Link>
-                          </td>
-                          <td
-                            className="text-zinc-400"
-                            title={repoName(s.repo_id) || undefined}
-                          >
-                            <Link
-                              href={href}
-                              className="block max-w-[16ch] truncate py-2 pr-3 whitespace-nowrap"
-                            >
-                              {repoName(s.repo_id)}
-                            </Link>
-                          </td>
-                          <td
-                            className="text-zinc-400"
-                            title={
-                              s.git_branch?.replace(/^refs\/heads\//, "") ||
-                              undefined
-                            }
-                          >
-                            <Link
-                              href={href}
-                              className="block max-w-[16ch] truncate py-2 pr-3 whitespace-nowrap"
-                            >
-                              {s.git_branch?.replace(/^refs\/heads\//, "") ||
-                                "-"}
-                            </Link>
-                          </td>
-                          <td className="text-right tabular-nums text-zinc-300">
-                            <Link
-                              href={href}
-                              className="block py-2 pr-3 whitespace-nowrap"
-                            >
-                              {fmtNum(s.message_count)}
-                            </Link>
-                          </td>
-                          <td
-                            className="text-right tabular-nums text-zinc-200"
-                            title={
-                              isTokens
-                                ? undefined
-                                : buildCostCellTooltip(
-                                    Number(s.total_cost_cents_ingested),
-                                    Number(s.total_cost_cents_effective)
-                                  )
-                            }
-                          >
-                            <Link
-                              href={href}
-                              className="block py-2 whitespace-nowrap"
-                            >
-                              {isTokens
-                                ? fmtNum(
-                                    Number(s.total_input_tokens) +
-                                      Number(s.total_output_tokens)
-                                  )
-                                : fmtCost(Number(s.total_cost_cents_effective))}
-                            </Link>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                      <span className="shrink-0 text-xs text-zinc-500">
+                        {formatTimestamp(s.started_at)}
+                      </span>
+                    </div>
+                    {s.title && (
+                      <div
+                        className="truncate text-xs text-zinc-300"
+                        title={s.title}
+                      >
+                        {s.title}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 text-xs text-zinc-400">
+                      <span className="truncate">
+                        {s.main_model ? formatModelName(s.main_model) : "-"}
+                      </span>
+                      <span aria-hidden className="text-zinc-600">
+                        ·
+                      </span>
+                      <span className="truncate">
+                        {repo}
+                        {branch ? ` / ${branch}` : ""}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span className="text-zinc-500">
+                        {formatDuration(
+                          s.duration_ms,
+                          s.started_at,
+                          s.ended_at
+                        )}
+                      </span>
+                      <span className="text-zinc-500 tabular-nums">
+                        {fmtNum(s.message_count)} msg
+                      </span>
+                      <span className="text-zinc-200 tabular-nums">
+                        {value}
+                      </span>
+                    </div>
+                  </Link>
+                );
+              }}
+            />
           )}
 
           {(hasNext || hasFirst) && (
