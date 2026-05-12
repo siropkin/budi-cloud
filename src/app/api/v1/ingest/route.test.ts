@@ -1682,9 +1682,7 @@ describe("POST /v1/ingest — session title (#255)", () => {
         schema_version: 3,
         payload: {
           daily_rollups: [],
-          session_summaries: [
-            { ...baseSession, title: "Verkada-Web" },
-          ],
+          session_summaries: [{ ...baseSession, title: "Verkada-Web" }],
         },
       }) as unknown as Parameters<typeof POST>[0]
     );
