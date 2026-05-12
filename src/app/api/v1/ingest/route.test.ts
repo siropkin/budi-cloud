@@ -1526,4 +1526,97 @@ describe("POST /v1/ingest — schema_version compatibility (#749)", () => {
     expect(body.error).toMatch(/Unsupported schema_version: 99/);
     expect(body.error).toMatch(/1, 2/);
   });
+
+  // siropkin/budi#741 didn't just bump schema_version — it also renamed the
+  // legacy `cost_cents` column on the daily-rollup wire struct into a dual
+  // `cost_cents_ingested` / `cost_cents_effective` pair. The original #749
+  // schema-version-acceptance fix wasn't sufficient on its own; the
+  // validator + row builder also have to handle either shape. This pins
+  // both halves of the contract so the next v8.4.x daemon doesn't silently
+  // get 422'd again.
+  it("accepts a v2 rollup carrying the renamed cost fields (no cost_cents)", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    const v2Rollup = {
+      bucket_day: "2026-04-14",
+      role: "assistant",
+      provider: "claude_code",
+      model: "claude-sonnet-4-5",
+      repo_id: "repo_x",
+      git_branch: "refs/heads/main",
+      ticket: null,
+      message_count: 1,
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+      // Note: NO `cost_cents` field — only the dual pair. This is exactly
+      // what v8.4.3+ daemons ship after #741.
+      cost_cents_ingested: 12.5,
+      cost_cents_effective: 9.75,
+      surface: "terminal",
+    };
+
+    const res = await POST(
+      mkReq({
+        ...envelopeShell,
+        schema_version: 2,
+        payload: {
+          daily_rollups: [v2Rollup],
+          session_summaries: [],
+        },
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(200);
+    const stored = fake.rows("daily_rollups");
+    expect(stored).toHaveLength(1);
+    // Effective is the value every read surface displays; ingested is the
+    // immutable original. Both must round-trip exactly so the dashboard's
+    // delta widget can compare them.
+    expect(stored[0].cost_cents_effective).toBe(9.75);
+    expect(stored[0].cost_cents_ingested).toBe(12.5);
+  });
+
+  // v1 envelopes only know about `cost_cents`. The cloud must still write
+  // both columns from that single value per ADR-0094 §1 so pre-v8.4.3
+  // daemons keep working after the rename lands.
+  it("accepts a v1 rollup with only legacy cost_cents and populates both columns", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    const v1Rollup = {
+      bucket_day: "2026-04-14",
+      role: "assistant",
+      provider: "claude_code",
+      model: "claude-sonnet-4-5",
+      repo_id: "repo_x",
+      git_branch: "refs/heads/main",
+      ticket: null,
+      message_count: 1,
+      input_tokens: 1,
+      output_tokens: 1,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+      cost_cents: 4.25,
+    };
+
+    const res = await POST(
+      mkReq({
+        ...envelopeShell,
+        schema_version: 1,
+        payload: {
+          daily_rollups: [v1Rollup],
+          session_summaries: [],
+        },
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(200);
+    const stored = fake.rows("daily_rollups");
+    expect(stored).toHaveLength(1);
+    expect(stored[0].cost_cents_ingested).toBe(4.25);
+    expect(stored[0].cost_cents_effective).toBe(4.25);
+  });
 });

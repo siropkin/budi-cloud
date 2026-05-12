@@ -19,7 +19,15 @@ export interface IngestDailyRollup {
   output_tokens: number;
   cache_creation_tokens: number;
   cache_read_tokens: number;
-  cost_cents: number;
+  // v1 envelopes ship `cost_cents`; v2 envelopes (post siropkin/budi#741)
+  // split it into `cost_cents_ingested` (LiteLLM-priced at ingest, immutable)
+  // and `cost_cents_effective` (what every read surface displays, rewritten
+  // by the team-pricing recompute). Mark all three optional on the wire so
+  // both shapes parse; `rollupIngestedCents` / `rollupEffectiveCents` below
+  // resolve which value to use per row.
+  cost_cents?: number;
+  cost_cents_ingested?: number;
+  cost_cents_effective?: number;
   // Surface dimension (#187): which IDE / CLI drove the daemon for this
   // rollup — `vscode`, `cursor`, `jetbrains`, `terminal`, … Optional because
   // older daemons (pre siropkin/budi#701) don't emit it; missing values land
@@ -27,6 +35,29 @@ export interface IngestDailyRollup {
   // and the dashboard can render them in the unfiltered "where is the team
   // working?" chart on Overview.
   surface?: string | null;
+}
+
+/**
+ * Pick the canonical "what was Budi's cost at ingest" value from either
+ * envelope shape. v2 envelopes (siropkin/budi#741 onward) split the legacy
+ * `cost_cents` column into a dual `_ingested` / `_effective` pair; this
+ * helper hides the rename from the rest of the route. Returns `undefined`
+ * when neither field is present so the validator surfaces the missing-field
+ * 422 the same way it did before.
+ */
+export function rollupIngestedCents(r: IngestDailyRollup): number | undefined {
+  if (r.cost_cents_ingested !== undefined) return r.cost_cents_ingested;
+  return r.cost_cents;
+}
+
+/**
+ * Pick the "what every surface displays" value. v2 envelopes carry it
+ * explicitly; v1 envelopes only know about `cost_cents`, which by ADR-0094
+ * §1 is identical to `_ingested` until a team price list rewrites it.
+ */
+export function rollupEffectiveCents(r: IngestDailyRollup): number | undefined {
+  if (r.cost_cents_effective !== undefined) return r.cost_cents_effective;
+  return rollupIngestedCents(r);
 }
 
 /**
@@ -108,7 +139,6 @@ const ROLLUP_METRIC_FIELDS = [
   "output_tokens",
   "cache_creation_tokens",
   "cache_read_tokens",
-  "cost_cents",
 ] as const satisfies ReadonlyArray<keyof IngestDailyRollup>;
 
 const SESSION_METRIC_FIELDS = [
@@ -137,6 +167,19 @@ export function validateIngestMetrics(
       if (!isValidNonNegativeNumber(r[f])) {
         return `daily_rollups[${i}].${f} must be a finite, non-negative number`;
       }
+    }
+    // Cost lives under different field names depending on envelope shape
+    // (`cost_cents` for v1, `cost_cents_ingested` / `cost_cents_effective`
+    // for v2). Resolve through the helper so neither shape regresses; the
+    // legacy error message keeps the old field name for backward parity.
+    if (!isValidNonNegativeNumber(rollupIngestedCents(r))) {
+      return `daily_rollups[${i}].cost_cents must be a finite, non-negative number`;
+    }
+    if (
+      r.cost_cents_effective !== undefined &&
+      !isValidNonNegativeNumber(r.cost_cents_effective)
+    ) {
+      return `daily_rollups[${i}].cost_cents_effective must be a finite, non-negative number`;
     }
   }
   for (let i = 0; i < sessions.length; i++) {
@@ -320,16 +363,19 @@ export function buildRollupRows(
       r.cache_read_tokens,
       METRIC_CAPS.cache_read_tokens
     ),
-    // #231: write both cost columns. The daemon-uploaded value lives in
-    // `_ingested`; the dashboard-facing value lives in `_effective`. Until the
-    // recalculation engine (#233) rewrites `_effective` from a team price
-    // list, the two columns are equal on every freshly-ingested row.
+    // #231: write both cost columns. v1 envelopes ship `cost_cents` only —
+    // both columns are populated from that single field per ADR-0094 §1
+    // (`_effective` defaults to `_ingested` until the recalculation engine
+    // rewrites it). v2 envelopes (siropkin/budi#741) carry the columns
+    // separately, so the daemon's locally-recomputed `_effective` survives
+    // the round-trip and the cloud's audit history reflects the same number
+    // the user sees in `budi stats`.
     cost_cents_ingested: safeNonNegativeNumber(
-      r.cost_cents,
+      rollupIngestedCents(r),
       METRIC_CAPS.cost_cents
     ),
     cost_cents_effective: safeNonNegativeNumber(
-      r.cost_cents,
+      rollupEffectiveCents(r),
       METRIC_CAPS.cost_cents
     ),
     surface: normalizeSurface(r.surface),
