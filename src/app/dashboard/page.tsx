@@ -43,10 +43,6 @@ import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
 import { CostBarChart } from "@/components/charts/cost-bar-chart";
 import { CostLensToggle } from "@/components/cost-lens-toggle";
 import {
-  SavingsStrip,
-  buildSavingsStripCopy,
-} from "@/components/savings-strip";
-import {
   LinkDaemonBanner,
   FirstSyncInProgressBanner,
 } from "@/components/link-daemon-banner";
@@ -132,14 +128,10 @@ export default async function OverviewPage({
     getOrgHasActivePriceList(user.org_id),
   ]);
 
-  // Savings strip + Effective/List toggle (#235): only worth surfacing when
-  // the org has an active price list *and* the period actually has a list
-  // vs. effective gap. The two conditions are independent — a fresh upload
-  // with no recalc yet still shows the toggle (per-row delta exists but
-  // hasn't been materialized), so we don't collapse them into one flag.
-  const ingestedTotal = stats.totalCostCentsIngested;
-  const effectiveTotal = stats.totalCostCents;
-  const periodHasSavings = hasActivePriceList && ingestedTotal > effectiveTotal;
+  // Effective/List toggle (#235): worth surfacing only when the org has an
+  // active price list *and* at least one visible point has a list vs.
+  // effective gap. Same gate covers the "no active price list" case because
+  // without a list the recalc engine never diverges the two.
   const hasAnyLensDelta = activity.some(
     (d) => d.cost_cents_ingested !== d.cost_cents
   );
@@ -213,17 +205,6 @@ export default async function OverviewPage({
 
       {showLinkBanner && <LinkDaemonBanner apiKey={user.api_key} />}
       {showFirstSyncBanner && <FirstSyncInProgressBanner />}
-
-      {periodHasSavings && (
-        <SavingsStrip
-          {...buildSavingsStripCopy(ingestedTotal, effectiveTotal)}
-          href={
-            user.role === "manager"
-              ? "/dashboard/settings/pricing#audit-history"
-              : undefined
-          }
-        />
-      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {unit === "tokens" ? (
