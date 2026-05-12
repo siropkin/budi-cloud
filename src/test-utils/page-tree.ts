@@ -65,6 +65,30 @@ function walk(node: Node, parts: string[], seen: WeakSet<object>): void {
   const el = node as ReactElement & {
     props?: Record<string, unknown> & { children?: unknown };
   };
+
+  // Drill into pure sync function components. Without this, any text rendered
+  // by a component's body (rather than passed through children/TEXT_PROPS) is
+  // invisible to the haystack — e.g. ResponsiveTable (#270), whose row content
+  // is produced by a `render(row)` callback inside the component's body.
+  // Components that use client-only hooks throw on bare invocation; the
+  // try/catch falls back to the regular children walk so existing coverage is
+  // preserved.
+  if (typeof el.type === "function" && el.props) {
+    try {
+      const result = (el.type as (p: unknown) => unknown)(el.props);
+      if (
+        result == null ||
+        typeof (result as { then?: unknown }).then !== "function"
+      ) {
+        walk(result, parts, seen);
+        return;
+      }
+      // async components fall through to the props-only walk below.
+    } catch {
+      // hook-using or otherwise non-invokable component — keep walking props.
+    }
+  }
+
   if (el.props) {
     for (const key of Object.keys(el.props)) {
       if (key === "children") continue;
