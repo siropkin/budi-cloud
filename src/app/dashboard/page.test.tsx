@@ -388,34 +388,11 @@ describe("dashboard /page (Overview)", () => {
     expect(text).not.toContain("Single-surface org");
   });
 
-  it("savings strip: hidden when the org has no active price list, even if costs differ (#235)", async () => {
-    // No active list — engine never ran. The strip must stay off so the
-    // empty-state acceptance criterion ("hidden when no active price list")
-    // is enforced regardless of the dual-cost column values.
-    dal.getOrgHasActivePriceList.mockResolvedValue(false);
-    dal.getOverviewStats.mockResolvedValue({
-      totalCostCents: 100_000,
-      totalCostCentsIngested: 150_000,
-      totalInputTokens: 1000,
-      totalOutputTokens: 500,
-      totalMessages: 10,
-      totalSessions: 2,
-    });
-    const node = await render();
-    const text = extractText(node);
-    expect(text).not.toContain("saved this period");
-  });
-
-  it("savings strip: hidden when an active price list exists but effective == ingested (no recalc divergence yet) (#235)", async () => {
-    dal.getOrgHasActivePriceList.mockResolvedValue(true);
-    // Both totals equal — the recalc engine hasn't run yet, or the team's
-    // negotiated rate happens to match list. Either way, no savings story.
-    const node = await render();
-    const text = extractText(node);
-    expect(text).not.toContain("saved this period");
-  });
-
-  it("savings strip: surfaces the gap when an active price list exists and effective < ingested (#235)", async () => {
+  it("savings strip is removed: never appears regardless of price-list/cost state", async () => {
+    // The Saved This Period strip was removed per user request — the
+    // CostLensToggle on the activity charts now does all the surfacing of
+    // list-vs-effective deltas. Pin the absence so a revert that brings the
+    // banner back trips the test.
     dal.getOrgHasActivePriceList.mockResolvedValue(true);
     dal.getOverviewStats.mockResolvedValue({
       totalCostCents: 352_777,
@@ -427,7 +404,8 @@ describe("dashboard /page (Overview)", () => {
     });
     const node = await render();
     const text = extractText(node);
-    expect(text).toContain("saved this period at negotiated rates");
+    expect(text).not.toContain("saved this period");
+    expect(text).not.toContain("negotiated rates");
   });
 
   it("cost-lens toggle: hidden when ingested == effective for every visible point (#235 acceptance)", async () => {
