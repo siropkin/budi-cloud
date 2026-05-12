@@ -162,7 +162,7 @@ export default async function ReposPage({
                   unit={unit}
                 />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 sm:overflow-x-auto">
                 <table className="hidden w-full text-sm sm:table">
                   <thead>
                     <tr className="border-b border-white/10 text-left text-zinc-400">
@@ -274,7 +274,7 @@ export default async function ReposPage({
                   unit={unit}
                 />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 sm:overflow-x-auto">
                 <table className="hidden w-full text-sm sm:table">
                   <thead>
                     <tr className="border-b border-white/10 text-left text-zinc-400">
@@ -396,7 +396,7 @@ export default async function ReposPage({
                   unit={unit}
                 />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 sm:overflow-x-auto">
                 <table className="hidden w-full text-sm sm:table">
                   <thead>
                     <tr className="border-b border-white/10 text-left text-zinc-400">
