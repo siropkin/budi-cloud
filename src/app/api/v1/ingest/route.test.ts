@@ -1722,3 +1722,55 @@ describe("POST /v1/ingest — session title (#255)", () => {
     expect((rows[0].title as string).length).toBe(STRING_CAPS.title);
   });
 });
+
+// Regression coverage for #274: after Settings → Danger zone → Delete
+// organization, the cascade wipes the `users` row that held the api_key, so
+// the lookup above already fails. The org-existence guard is defense-in-depth
+// — if a future bug, partial cascade, or schema migration ever left a stale
+// `users` row pointing at a vanished org, ingest must still 401 so the local
+// daemon flips to AuthFailure and stops syncing into a dead org_id.
+describe("POST /v1/ingest — orphan key after delete-org (#274)", () => {
+  function mkReq(body: Record<string, unknown>): Request {
+    return new Request("http://localhost/v1/ingest", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer budi_orphan",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  const envelope = {
+    schema_version: 1,
+    device_id: "11111111-1111-4111-8111-111111111111",
+    org_id: "org_deleted",
+    synced_at: "2026-04-15T12:00:00Z",
+    payload: { daily_rollups: [], session_summaries: [] },
+  };
+
+  it("401s when the user's org no longer exists", async () => {
+    fake.seed("orgs", []); // org was deleted
+    fake.seed("users", [
+      {
+        id: "usr_orphan",
+        org_id: "org_deleted",
+        role: "manager",
+        api_key: "budi_orphan",
+      },
+    ]);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      mkReq(envelope) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(401);
+    expect((await res.json()).error).toBe("Unauthorized");
+    // No rollup, session, or device row should have been created under the
+    // orphan org_id. The 401 must short-circuit before any write.
+    expect(fake.rows("daily_rollups")).toHaveLength(0);
+    expect(fake.rows("session_summaries")).toHaveLength(0);
+    expect(fake.rows("devices")).toHaveLength(0);
+  });
+});

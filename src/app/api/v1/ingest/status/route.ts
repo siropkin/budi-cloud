@@ -56,6 +56,21 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // #274: defense-in-depth — a stale `users` row pointing at a deleted org
+  // must not keep authenticating status polls. `deleteOrganization` already
+  // wipes the user row, but a partial cascade shouldn't leak a "ready" badge
+  // from a dead org.
+  if (user.org_id) {
+    const { data: org } = await supabase
+      .from("orgs")
+      .select("id")
+      .eq("id", user.org_id)
+      .single();
+    if (!org) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  }
+
   // --- Get device_id from query param ---
   const deviceId = request.nextUrl.searchParams.get("device_id");
   if (!deviceId) {

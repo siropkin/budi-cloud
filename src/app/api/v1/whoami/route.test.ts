@@ -12,15 +12,22 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 type Row = Record<string, unknown>;
 
 class FakeSupabase {
-  private rows: Row[] = [];
+  private tables = new Map<string, Row[]>();
 
-  seed(rows: Row[]) {
-    this.rows = [...rows];
+  seed(rowsOrTable: Row[] | string, maybeRows?: Row[]) {
+    // Overloaded for backward compatibility with the original single-table
+    // form (`seed(rows)` seeded `users`). New form `seed("orgs", rows)` is
+    // used by the #274 org-existence guard tests, which need both tables.
+    if (typeof rowsOrTable === "string") {
+      this.tables.set(rowsOrTable, [...(maybeRows ?? [])]);
+    } else {
+      this.tables.set("users", [...rowsOrTable]);
+    }
   }
 
-  from(_table: string) {
-    void _table;
-    return new FakeQuery(this.rows);
+  from(table: string) {
+    if (!this.tables.has(table)) this.tables.set(table, []);
+    return new FakeQuery(this.tables.get(table)!);
   }
 
   // #179: route handler now consults `rate_limit_check` before/after auth.
@@ -67,18 +74,21 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 beforeEach(() => {
-  fake.seed([]);
+  fake.seed("users", []);
+  fake.seed("orgs", []);
 });
+
+function seedUserWithOrg(user: Row, org: Row) {
+  fake.seed("users", [user]);
+  fake.seed("orgs", [org]);
+}
 
 describe("GET /v1/whoami (#541)", () => {
   it("returns the org_id for a valid budi_* key", async () => {
-    fake.seed([
-      {
-        id: "usr_test",
-        org_id: "org_xEvtA",
-        api_key: "budi_testkey",
-      },
-    ]);
+    seedUserWithOrg(
+      { id: "usr_test", org_id: "org_xEvtA", api_key: "budi_testkey" },
+      { id: "org_xEvtA", name: "Acme" }
+    );
 
     const { GET } = await import("./route");
     const req = new Request("http://localhost/v1/whoami", {
@@ -120,13 +130,10 @@ describe("GET /v1/whoami (#541)", () => {
   });
 
   it("401s when the api_key has no matching user row", async () => {
-    fake.seed([
-      {
-        id: "usr_other",
-        org_id: "org_other",
-        api_key: "budi_other",
-      },
-    ]);
+    seedUserWithOrg(
+      { id: "usr_other", org_id: "org_other", api_key: "budi_other" },
+      { id: "org_other", name: "Other" }
+    );
 
     const { GET } = await import("./route");
     const req = new Request("http://localhost/v1/whoami", {
@@ -137,16 +144,32 @@ describe("GET /v1/whoami (#541)", () => {
     expect((await res.json()).error).toBe("Unauthorized");
   });
 
+  it("401s when the user's org no longer exists (#274)", async () => {
+    // Regression: after delete-org, a stale `users` row pointing at a
+    // vanished org must not keep authenticating ingest. Even if the cascade
+    // somehow left the row behind, the org-existence guard returns 401 so
+    // the local daemon flips to `AuthFailure` and stops syncing.
+    fake.seed("users", [
+      { id: "usr_orphan", org_id: "org_deleted", api_key: "budi_orphan" },
+    ]);
+    fake.seed("orgs", []); // org was deleted
+
+    const { GET } = await import("./route");
+    const req = new Request("http://localhost/v1/whoami", {
+      headers: { authorization: "Bearer budi_orphan" },
+    });
+    const res = await GET(req as unknown as Parameters<typeof GET>[0]);
+    expect(res.status).toBe(401);
+    expect((await res.json()).error).toBe("Unauthorized");
+  });
+
   it("never echoes the api_key in the response", async () => {
     // Defense-in-depth: even an authenticated response should only
     // surface `org_id`; the key itself must never come back on the wire.
-    fake.seed([
-      {
-        id: "usr_test",
-        org_id: "org_xEvtA",
-        api_key: "budi_testkey",
-      },
-    ]);
+    seedUserWithOrg(
+      { id: "usr_test", org_id: "org_xEvtA", api_key: "budi_testkey" },
+      { id: "org_xEvtA", name: "Acme" }
+    );
 
     const { GET } = await import("./route");
     const req = new Request("http://localhost/v1/whoami", {
