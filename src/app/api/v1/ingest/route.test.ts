@@ -1411,3 +1411,119 @@ describe("POST /v1/ingest — surface round-trip (#204)", () => {
     expect((capped.surface as string).length).toBe(64);
   });
 });
+
+// Regression for siropkin/budi#749: the daemon bumped schema_version from 1
+// to 2 in #741 (to signal that `surface` is part of the wire). The cloud was
+// still hard-coded to expect v1, so every v8.4.3 daemon's sync was rejected
+// with HTTP 422. Both versions must round-trip; v3+ must still be rejected so
+// that a future genuine wire break is caught loudly.
+describe("POST /v1/ingest — schema_version compatibility (#749)", () => {
+  function seedUser() {
+    fake.seed("orgs", [{ id: "org_test", name: "test" }]);
+    fake.seed("users", [
+      {
+        id: "usr_test",
+        org_id: "org_test",
+        role: "manager",
+        api_key: "budi_testkey",
+        display_name: "Test",
+        email: "t@example.com",
+      },
+    ]);
+  }
+
+  function mkReq(body: Record<string, unknown>): Request {
+    return new Request("http://localhost/v1/ingest", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer budi_testkey",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  const baseRollup = {
+    bucket_day: "2026-04-14",
+    role: "assistant",
+    provider: "claude_code",
+    model: "claude-sonnet-4-5",
+    repo_id: "repo_x",
+    git_branch: "refs/heads/main",
+    ticket: null,
+    message_count: 1,
+    input_tokens: 1,
+    output_tokens: 1,
+    cache_creation_tokens: 0,
+    cache_read_tokens: 0,
+    cost_cents: 100,
+  };
+
+  const envelopeShell = {
+    device_id: "11111111-1111-4111-8111-111111111111",
+    org_id: "org_test",
+    synced_at: "2026-04-15T12:00:00Z",
+  };
+
+  it("accepts a v1 envelope (pre-#741 daemon, no surface field)", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    const res = await POST(
+      mkReq({
+        ...envelopeShell,
+        schema_version: 1,
+        payload: {
+          daily_rollups: [baseRollup],
+          session_summaries: [],
+        },
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(200);
+    const stored = fake.rows("daily_rollups");
+    expect(stored).toHaveLength(1);
+  });
+
+  it("accepts a v2 envelope (v8.4.3+ daemon) and round-trips surface", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    const res = await POST(
+      mkReq({
+        ...envelopeShell,
+        schema_version: 2,
+        payload: {
+          daily_rollups: [{ ...baseRollup, surface: "jetbrains" }],
+          session_summaries: [],
+        },
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(200);
+    const stored = fake.rows("daily_rollups");
+    expect(stored).toHaveLength(1);
+    expect(stored[0].surface).toBe("jetbrains");
+  });
+
+  it("rejects an unknown schema_version with 422", async () => {
+    seedUser();
+    const { POST } = await import("./route");
+
+    const res = await POST(
+      mkReq({
+        ...envelopeShell,
+        schema_version: 99,
+        payload: {
+          daily_rollups: [baseRollup],
+          session_summaries: [],
+        },
+      }) as unknown as Parameters<typeof POST>[0]
+    );
+
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { error?: string };
+    expect(body.error).toMatch(/Unsupported schema_version: 99/);
+    expect(body.error).toMatch(/1, 2/);
+  });
+});
