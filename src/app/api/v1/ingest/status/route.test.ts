@@ -111,6 +111,7 @@ const callerOrg = "org_caller";
 const callerUserId = "usr_caller";
 
 function seedCaller() {
+  fake.seed("orgs", [{ id: callerOrg, name: "Caller Org" }]);
   fake.seed("users", [
     { id: callerUserId, org_id: callerOrg, api_key: callerKey },
   ]);
@@ -207,5 +208,20 @@ describe("GET /v1/ingest/status (#182)", () => {
     const unknownBody = await unknownRes.json();
     const foreignBody = await foreignRes.json();
     expect(unknownBody).toEqual(foreignBody);
+  });
+
+  it("returns 401 when the caller's org was deleted (#274)", async () => {
+    // Defense-in-depth for the orphan-key case: a stale users row pointing
+    // at a vanished org must not keep the `status` endpoint reporting a
+    // happy watermark. The local daemon needs an unambiguous 401 to flip
+    // out of `ready` and surface a re-link prompt.
+    fake.seed("orgs", []); // org was deleted
+    fake.seed("users", [
+      { id: callerUserId, org_id: callerOrg, api_key: callerKey },
+    ]);
+
+    const res = await callStatus("dev_anything");
+    expect(res.status).toBe(401);
+    expect((await res.json()).error).toBe("Unauthorized");
   });
 });

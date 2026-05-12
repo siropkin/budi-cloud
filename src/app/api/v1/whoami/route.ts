@@ -17,6 +17,12 @@ const RATE_LIMIT = { limit: 20, windowSeconds: 60 } as const;
  * Returns the user row or null if auth fails. Mirrors the shape used by
  * `/v1/ingest/route.ts::authenticateApiKey`; intentionally duplicated so
  * each endpoint stays grep-able on its own.
+ *
+ * #274: when `org_id` is set we double-check that the org still exists.
+ * `deleteOrganization` cascades through the `users` table, so in the normal
+ * path the api_key lookup above already fails. The org-existence guard is
+ * defense-in-depth: a partial cascade, future schema change, or stale row
+ * pointing at a vanished org must not keep authenticating ingest.
  */
 async function authenticateApiKey(
   supabase: ReturnType<typeof createAdminClient>,
@@ -34,6 +40,16 @@ async function authenticateApiKey(
     .single();
 
   if (error || !data) return null;
+
+  if (data.org_id) {
+    const { data: org } = await supabase
+      .from("orgs")
+      .select("id")
+      .eq("id", data.org_id)
+      .single();
+    if (!org) return null;
+  }
+
   return data;
 }
 

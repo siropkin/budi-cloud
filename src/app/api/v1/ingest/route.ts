@@ -86,6 +86,12 @@ function normalizeLabel(raw: unknown): string | null | undefined {
 /**
  * Authenticate the request via Bearer token.
  * Returns the user row or null if auth fails.
+ *
+ * #274: when `org_id` is set we double-check that the org still exists.
+ * `deleteOrganization` cascades through the `users` table, so in the normal
+ * path the api_key lookup above already fails. The org-existence guard is
+ * defense-in-depth: a partial cascade or stale user row pointing at a
+ * vanished org must not keep landing new rollups under a deleted org_id.
  */
 async function authenticateApiKey(
   supabase: ReturnType<typeof createAdminClient>,
@@ -103,6 +109,16 @@ async function authenticateApiKey(
     .single();
 
   if (error || !data) return null;
+
+  if (data.org_id) {
+    const { data: org } = await supabase
+      .from("orgs")
+      .select("id")
+      .eq("id", data.org_id)
+      .single();
+    if (!org) return null;
+  }
+
   return data;
 }
 
