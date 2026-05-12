@@ -27,6 +27,7 @@ import {
   formatModelName,
   repoName,
 } from "@/lib/format";
+import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { TopBreakdownCard } from "@/components/top-breakdown-card";
 import { PeriodSelector } from "@/components/period-selector";
@@ -191,8 +192,7 @@ export default async function OverviewPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-xl font-bold">Overview</h1>
+      <PageHeader title="Overview">
         <Suspense>
           <div className="flex flex-wrap items-center gap-3">
             <UserFilter members={members} role={user.role} />
@@ -201,7 +201,7 @@ export default async function OverviewPage({
             <PeriodSelector />
           </div>
         </Suspense>
-      </div>
+      </PageHeader>
 
       {showLinkBanner && <LinkDaemonBanner apiKey={user.api_key} />}
       {showFirstSyncBanner && <FirstSyncInProgressBanner />}

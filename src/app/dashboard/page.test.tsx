@@ -240,22 +240,16 @@ describe("dashboard /page (Overview)", () => {
     await expect(render()).rejects.toThrow("__DAL_BOOM__");
   });
 
-  it("mobile: header stacks below sm: and the filter cluster wraps so the time-range buttons cannot be clipped (#117)", async () => {
+  it("mobile: header stacks below sm: and the filter cluster wraps so the time-range buttons cannot be clipped (#117, #270)", async () => {
     const node = await render();
-    const classes = collectClassNames(node);
-    // Outer header row stacks vertically by default and only switches to a
-    // horizontal layout at the `sm` breakpoint — this is what keeps the
-    // title + team scope + period buttons from sharing one ~470px row on
-    // a 375px phone.
-    const stacked = classes.find(
-      (c) =>
-        c.includes("flex-col") &&
-        c.includes("sm:flex-row") &&
-        c.includes("sm:justify-between")
-    );
-    expect(stacked).toBeTruthy();
+    // The page mounts the shared <PageHeader>, which owns the
+    // `flex-col … sm:flex-row sm:justify-between` stacking. The classes
+    // themselves are covered by page-header.test.tsx — here we only pin
+    // that the page hasn't drifted back to an inline header div.
+    expect(containsElementType(node, "PageHeader")).toBe(true);
     // Inner filter cluster must opt into wrapping; without `flex-wrap` the
     // PeriodSelector's "All" button is what gets pushed off-screen.
+    const classes = collectClassNames(node);
     const wrapping = classes.find(
       (c) => c.includes("flex-wrap") && c.includes("items-center")
     );

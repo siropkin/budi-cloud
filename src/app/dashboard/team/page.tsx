@@ -13,6 +13,7 @@ import { getViewerTimeZone } from "@/lib/viewer-timezone";
 import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { parseUnit } from "@/lib/units";
 import { fmtCost, fmtNum } from "@/lib/format";
+import { PageHeader } from "@/components/page-header";
 import { PeriodSelector } from "@/components/period-selector";
 import { UnitsSelector } from "@/components/units-selector";
 import { SurfaceFilter } from "@/components/surface-filter";
@@ -93,8 +94,7 @@ export default async function TeamPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-xl font-bold">Team</h1>
+      <PageHeader title="Team">
         <Suspense>
           <div className="flex flex-wrap items-center gap-3">
             <SurfaceFilter surfaces={knownSurfaces} />
@@ -102,7 +102,7 @@ export default async function TeamPage({
             <PeriodSelector />
           </div>
         </Suspense>
-      </div>
+      </PageHeader>
 
       <Card>
         <CardHeader>
