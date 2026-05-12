@@ -24,12 +24,13 @@ const MAX_BODY_BYTES = 1024 * 1024;
 // the daily_rollups insert pressure, not just a one-line edit.
 const RATE_LIMIT = { limit: 60, windowSeconds: 60 } as const;
 
-// Accept both v1 (pre-#741 daemons) and v2 (v8.4.3+ daemons that include
-// `surface` on rollup/session wire structs). v2 is a strict superset of v1:
-// `surface` is optional in the row builders, so older payloads remain valid.
-// See siropkin/budi#749 — bumping the daemon's schema_version without widening
-// the server's accepted set broke cloud sync for every v8.4.3 upgrader.
-const SUPPORTED_SCHEMA_VERSIONS = new Set([1, 2]);
+// Accept v1 (pre-#741 daemons), v2 (v8.4.3+ daemons that added `surface`), and
+// v3 (v8.5.0+ daemons that added session `title` per siropkin/budi#779). Each
+// bump is a strict superset of the previous one: every new field is optional
+// in the row builders, so older payloads remain valid. See siropkin/budi#749 —
+// bumping the daemon's schema_version without widening the server's accepted
+// set broke cloud sync for every v8.4.3 upgrader.
+const SUPPORTED_SCHEMA_VERSIONS = new Set([1, 2, 3]);
 
 // Cap the stored label so a malformed envelope can't flood the devices table.
 // 128 chars is comfortably above any sane hostname or user-chosen nickname.
