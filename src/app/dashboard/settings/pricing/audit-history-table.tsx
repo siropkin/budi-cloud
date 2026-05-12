@@ -153,7 +153,7 @@ export function AuditHistoryTable({
                 <th className="pb-2 font-medium">Triggered by</th>
                 <th className="pb-2 font-medium">Scope</th>
                 <th className="pb-2 text-right font-medium">Rows changed</th>
-                <th className="pb-2 font-medium">Before → After</th>
+                <th className="pb-2 pl-6 font-medium">Before → After</th>
                 <th className="pb-2 font-medium">Status</th>
               </tr>
             </thead>
@@ -209,7 +209,7 @@ export function AuditHistoryTable({
                       {run.rowsChanged ?? "—"}
                     </td>
                     <td
-                      className={`py-2 tabular-nums ${
+                      className={`py-2 pl-6 tabular-nums ${
                         delta.tone === "down"
                           ? "text-emerald-300"
                           : delta.tone === "up"
