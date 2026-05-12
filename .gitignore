@@ -52,3 +52,6 @@ next-env.d.ts
 
 # supabase local
 supabase/.temp/
+
+# local smoke-test screenshots
+.smoke-test/
