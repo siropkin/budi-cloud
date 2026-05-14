@@ -100,6 +100,17 @@ All dashboard pages live under `/dashboard`:
 - `src/proxy.ts` — Next.js 16 proxy (formerly middleware): refreshes the Supabase session and gates `/dashboard/*`
 - `supabase/migrations/` — Postgres schema migrations (apply in order)
 
+## Server actions vs route handlers
+
+Picking the wrong surface for a mutation or read drifts the boundary between in-app code and the daemon contract — so we pin the rule explicitly (#279):
+
+- **RSC reads → DAL directly.** Server Components import from `src/lib/dal.ts`. No HTTP hop, no route handler, no server action.
+- **In-app form mutations → server actions in `src/app/actions/`.** Anything called from a `<form action={…}>` or button in our own pages (org/team/pricing settings, sign-out, etc.) belongs here. Re-verify the caller's role on the server — JSX gating is not a security boundary (`pricing.ts`, `org.ts`).
+- **External callers → route handlers in `src/app/api/`.** "External" means anything that is not one of our own RSCs/forms: the budi daemon, the browser-side reporting APIs, our own client-side polling code. The versioned daemon contract lives under `/api/v1/*` (`ingest`, `ingest/status`, `pricing/active`, `whoami`) — bump the major when the wire shape changes; ADR-0083 §7 in the main repo is the source of truth. Unversioned local utilities sit at `/api/<name>` (`csp-report`, `freshness`).
+- **Fixed-URL protocol callbacks are the only exception** to "route handlers live under `/api/`". Supabase's OAuth round-trip lands on `/auth/callback`, so `src/app/auth/callback/route.ts` stays where the provider expects it.
+
+If a new file would violate this rule, move it before merging — don't bend the rule to fit a special case.
+
 ## Dev notes
 
 - **Read the privacy contract before adding fields**: every new column on an ingest table must be justified against ADR-0083. If it's a prompt, a file path, an email, or a raw payload, it does not belong here — stop and push back.
