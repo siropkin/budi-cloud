@@ -124,32 +124,18 @@ export async function deleteOrganization(
 
   const orgId = org.id as string;
 
-  // Pull ids we need to scope the leaf deletes. The device set is derived
-  // from the org's users so we never have to trust a caller-supplied list.
-  const { data: orgUsers } = await admin
-    .from("users")
-    .select("id")
-    .eq("org_id", orgId);
-  const userIds = (orgUsers ?? []).map((u) => u.id as string);
-
-  let deviceIds: string[] = [];
-  if (userIds.length > 0) {
-    const { data: orgDevices } = await admin
-      .from("devices")
-      .select("id")
-      .in("user_id", userIds);
-    deviceIds = (orgDevices ?? []).map((d) => d.id as string);
+  // The cascade runs server-side in a single transaction (`delete_org_cascade`
+  // in migration 024). Doing it in SQL avoids the original bug where six
+  // independent `supabase.from(...).delete()` calls swallowed FK violations
+  // and left the org half-deleted (#276): supabase-js returns `{ data, error
+  // }` instead of throwing, so any unchecked statement is a silent failure.
+  // Surface the RPC error to the UI rather than redirecting on it.
+  const { error: rpcError } = await admin.rpc("delete_org_cascade", {
+    p_org_id: orgId,
+  });
+  if (rpcError) {
+    return { error: `Failed to delete organization: ${rpcError.message}` };
   }
-
-  if (deviceIds.length > 0) {
-    await admin.from("session_summaries").delete().in("device_id", deviceIds);
-    await admin.from("daily_rollups").delete().in("device_id", deviceIds);
-    await admin.from("devices").delete().in("user_id", userIds);
-  }
-
-  await admin.from("invite_tokens").delete().eq("org_id", orgId);
-  await admin.from("users").delete().eq("org_id", orgId);
-  await admin.from("orgs").delete().eq("id", orgId);
 
   await supabase.auth.signOut();
   redirect("/login");
@@ -194,16 +180,46 @@ export async function leaveOrganization(): Promise<{ error: string } | void> {
     .eq("user_id", userId);
   const deviceIds = (myDevices ?? []).map((d) => d.id as string);
 
+  // Per-table deletes here (rather than an RPC) because the surface is small
+  // and bounded to the caller's own devices — but we still have to check
+  // `{ error }` on every statement. The original implementation in #276
+  // didn't, and that's what let `deleteOrganization` look successful while
+  // FK-violating against the price-list tables. Apply the same discipline
+  // here so a future column referencing `users(id)` doesn't repeat the bug
+  // for `leaveOrganization`.
   if (deviceIds.length > 0) {
-    await admin.from("session_summaries").delete().in("device_id", deviceIds);
-    await admin.from("daily_rollups").delete().in("device_id", deviceIds);
-    await admin.from("devices").delete().eq("user_id", userId);
+    const { error: sessionsError } = await admin
+      .from("session_summaries")
+      .delete()
+      .in("device_id", deviceIds);
+    if (sessionsError) {
+      return {
+        error: `Failed to leave organization: ${sessionsError.message}`,
+      };
+    }
+    const { error: rollupsError } = await admin
+      .from("daily_rollups")
+      .delete()
+      .in("device_id", deviceIds);
+    if (rollupsError) {
+      return { error: `Failed to leave organization: ${rollupsError.message}` };
+    }
+    const { error: devicesError } = await admin
+      .from("devices")
+      .delete()
+      .eq("user_id", userId);
+    if (devicesError) {
+      return { error: `Failed to leave organization: ${devicesError.message}` };
+    }
   }
 
-  await admin
+  const { error: updateError } = await admin
     .from("users")
     .update({ org_id: null, role: "member" })
     .eq("id", userId);
+  if (updateError) {
+    return { error: `Failed to leave organization: ${updateError.message}` };
+  }
 
   await supabase.auth.signOut();
   redirect("/login");
