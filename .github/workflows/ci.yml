@@ -41,6 +41,12 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Test (with coverage)
+        # Baseline established in #281. The summary is printed in PRs for visibility,
+        # but coverage is not yet a hard fail-gate beyond the floor configured in
+        # vitest.config.ts. Hard CI gates are handled in #290.
+        run: npm run test:coverage
+
       - name: Build
         run: npm run build
 

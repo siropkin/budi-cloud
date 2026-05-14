@@ -5,6 +5,28 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "text-summary", "html", "json-summary"],
+      reportsDirectory: "./coverage",
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: [
+        "src/**/*.test.ts",
+        "src/**/*.test.tsx",
+        "src/**/*.d.ts",
+        "src/test-utils/**",
+      ],
+      // Baseline floor captured in #281 — ratchet up only; never lower without filing a follow-up.
+      // Follow-ups #282/#283/#284 raise it. CI runs `test:coverage` informationally; fail-gate work
+      // belongs to #290. The floor is rounded down from the measured baseline so trivial fluctuation
+      // doesn't flake CI.
+      thresholds: {
+        lines: 59,
+        statements: 57,
+        functions: 52,
+        branches: 51,
+      },
+    },
   },
   resolve: {
     alias: {
