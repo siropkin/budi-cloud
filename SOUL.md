@@ -79,10 +79,11 @@ All dashboard pages live under `/dashboard`:
 
 - `/dashboard` — org-wide Overview (totals, trends, daily activity)
 - `/dashboard/team` — per-member spend (managers see the full org; members see only their own row)
+- `/dashboard/devices` — per-device fleet view (counts, cost-per-device)
 - `/dashboard/models` — breakdown by model / provider
 - `/dashboard/repos` — breakdown by repo / branch / ticket
-- `/dashboard/sessions` — session list with health signals
-- `/dashboard/settings` — org info, the viewer's API key, members list, and (managers) invite link generation
+- `/dashboard/sessions` — session list with health signals; `/dashboard/sessions/[id]` for a single-session drill-down
+- `/dashboard/settings` — org info, the viewer's API key, members list, and (managers) invite link generation; nested `/dashboard/settings/pricing` for the org's price-list overrides
 
 ## Window contract and local→cloud linking
 
@@ -100,7 +101,7 @@ All dashboard pages live under `/dashboard`:
 - `src/components/layout/` — dashboard chrome (sidebar, user menu, sync freshness, timezone sync)
 - `src/components/charts/` — chart primitives reused across surfaces (`cost-bar-chart`)
 - `src/components/ui/` — generic primitives (card)
-- `src/lib/dal.ts` — data access layer; every dashboard query routes through here
+- `src/lib/dal/` — data access layer split by domain (`overview.ts`, `team.ts`, `devices.ts`, `models.ts`, `repos.ts`, `sessions.ts`, `pricing.ts`, `sync.ts`, `user.ts`, `surfaces.ts`, `types.ts`); re-exports from `index.ts`. Every dashboard query routes through here — import `from "@/lib/dal"`
 - `src/lib/supabase/` — Supabase clients (anon, server, admin/service-role)
 - `src/proxy.ts` — Next.js 16 proxy (formerly middleware): refreshes the Supabase session and gates `/dashboard/*`
 - `supabase/migrations/` — Postgres schema migrations (apply in order)
