@@ -21,10 +21,10 @@ export default defineConfig({
       // belongs to #290. The floor is rounded down from the measured baseline so trivial fluctuation
       // doesn't flake CI.
       thresholds: {
-        lines: 59,
-        statements: 57,
-        functions: 52,
-        branches: 51,
+        lines: 60,
+        statements: 58,
+        functions: 53,
+        branches: 52,
       },
     },
   },
