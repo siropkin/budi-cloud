@@ -12,10 +12,89 @@ type Row = Record<string, unknown>;
 
 class FakeSupabase {
   tables = new Map<string, Row[]>();
+  /**
+   * Captures the most recent `rpc()` invocation. The real
+   * `delete_org_cascade` (migration 024) runs server-side as one
+   * transaction; in the fake we re-implement the same delete order so the
+   * test still observes the post-cascade state — but we also record the
+   * call so a regression that bypasses the RPC fails the existing tests.
+   */
+  lastRpc: { name: string; args: Record<string, unknown> } | null = null;
+  rpcErrors = new Map<string, { message: string }>();
 
   from(name: string) {
     if (!this.tables.has(name)) this.tables.set(name, []);
     return new FakeQuery(this.tables, name);
+  }
+
+  rpc(name: string, args: Record<string, unknown>) {
+    this.lastRpc = { name, args };
+    const error = this.rpcErrors.get(name);
+    if (error) return Promise.resolve({ data: null, error });
+
+    if (name === "delete_org_cascade") {
+      const orgId = args.p_org_id as string;
+      const userIds = this.rows("users")
+        .filter((u) => u.org_id === orgId)
+        .map((u) => u.id as string);
+      const deviceIds = this.rows("devices")
+        .filter((d) => userIds.includes(d.user_id as string))
+        .map((d) => d.id as string);
+      const listIds = this.rows("org_price_lists")
+        .filter((l) => l.org_id === orgId)
+        .map((l) => l.id as string | number);
+
+      this.tables.set(
+        "session_summaries",
+        this.rows("session_summaries").filter(
+          (r) => !deviceIds.includes(r.device_id as string)
+        )
+      );
+      this.tables.set(
+        "daily_rollups",
+        this.rows("daily_rollups").filter(
+          (r) => !deviceIds.includes(r.device_id as string)
+        )
+      );
+      this.tables.set(
+        "devices",
+        this.rows("devices").filter(
+          (r) => !userIds.includes(r.user_id as string)
+        )
+      );
+      this.tables.set(
+        "org_price_list_rows",
+        this.rows("org_price_list_rows").filter(
+          (r) => !listIds.includes(r.list_id as string | number)
+        )
+      );
+      this.tables.set(
+        "org_price_lists",
+        this.rows("org_price_lists").filter((r) => r.org_id !== orgId)
+      );
+      this.tables.set(
+        "org_pricing_defaults",
+        this.rows("org_pricing_defaults").filter((r) => r.org_id !== orgId)
+      );
+      this.tables.set(
+        "recalculation_runs",
+        this.rows("recalculation_runs").filter((r) => r.org_id !== orgId)
+      );
+      this.tables.set(
+        "invite_tokens",
+        this.rows("invite_tokens").filter((r) => r.org_id !== orgId)
+      );
+      const usersAfter = this.rows("users").filter((r) => r.org_id !== orgId);
+      const usersDeleted = this.rows("users").length - usersAfter.length;
+      this.tables.set("users", usersAfter);
+      this.tables.set(
+        "orgs",
+        this.rows("orgs").filter((r) => r.id !== orgId)
+      );
+      return Promise.resolve({ data: usersDeleted, error: null });
+    }
+
+    return Promise.resolve({ data: null, error: null });
   }
 
   seed(name: string, rows: Row[]) {
@@ -176,9 +255,15 @@ beforeEach(() => {
     "session_summaries",
     "invite_tokens",
     "invite_redemptions",
+    "org_price_lists",
+    "org_price_list_rows",
+    "org_pricing_defaults",
+    "recalculation_runs",
   ]) {
     fake.seed(t, []);
   }
+  fake.lastRpc = null;
+  fake.rpcErrors.clear();
   authUserId = null;
   signOut.mockClear();
   redirectMock.mockClear();
@@ -224,17 +309,22 @@ async function loadActions() {
 }
 
 describe("deleteOrganization", () => {
-  it("cascades through session summaries, rollups, devices, invites, users, then the org itself", async () => {
+  it("cascades through session summaries, rollups, devices, pricing, invites, users, then the org itself", async () => {
     seedSoloManagerWithData();
     const { deleteOrganization } = await loadActions();
     const { ORG_CASCADE_ORDER } = await import("@/app/actions/org-cascade");
 
     // Snapshot the declared order alongside the test so a change to one
-    // without the other fails loudly.
+    // without the other fails loudly. This must match the body of
+    // `delete_org_cascade` in `supabase/migrations/024_delete_org_cascade.sql`.
     expect(ORG_CASCADE_ORDER).toEqual([
       "session_summaries",
       "daily_rollups",
       "devices",
+      "org_price_list_rows",
+      "org_price_lists",
+      "org_pricing_defaults",
+      "recalculation_runs",
       "invite_tokens",
       "users",
       "orgs",
@@ -247,6 +337,9 @@ describe("deleteOrganization", () => {
       "__REDIRECT__"
     );
 
+    expect(fake.lastRpc?.name).toBe("delete_org_cascade");
+    expect(fake.lastRpc?.args).toEqual({ p_org_id: "org_acme" });
+
     expect(fake.rows("session_summaries")).toHaveLength(0);
     expect(fake.rows("daily_rollups")).toHaveLength(0);
     expect(fake.rows("devices")).toHaveLength(0);
@@ -255,6 +348,84 @@ describe("deleteOrganization", () => {
     expect(fake.rows("orgs")).toHaveLength(0);
     expect(signOut).toHaveBeenCalledOnce();
     expect(redirectMock).toHaveBeenCalledWith("/login");
+  });
+
+  it("also clears the org's pricing tables (#276 regression — the manager-uploaded-a-price-list path)", async () => {
+    seedSoloManagerWithData();
+    fake.seed("org_price_lists", [
+      {
+        id: 1,
+        org_id: "org_acme",
+        name: "Q4 2026",
+        effective_from: "2026-01-01",
+        status: "active",
+        uploaded_by: "usr_ivan",
+      },
+    ]);
+    fake.seed("org_price_list_rows", [
+      {
+        id: 1,
+        list_id: 1,
+        platform: "anthropic",
+        model_pattern: "claude-haiku-4-5",
+        token_type: "input",
+        sale_usd_per_mtok: 1.5,
+      },
+    ]);
+    fake.seed("org_pricing_defaults", [
+      {
+        org_id: "org_acme",
+        default_platform: "anthropic",
+        updated_by: "usr_ivan",
+      },
+    ]);
+    fake.seed("recalculation_runs", [
+      {
+        id: 1,
+        org_id: "org_acme",
+        status: "succeeded",
+        triggered_by: "usr_ivan",
+      },
+    ]);
+
+    const { deleteOrganization } = await loadActions();
+    const fd = new FormData();
+    fd.set("confirm", "Acme Co");
+
+    await expect(deleteOrganization(undefined, fd)).rejects.toThrow(
+      "__REDIRECT__"
+    );
+
+    // All four pricing surfaces must be wiped — these are exactly the rows
+    // that the original implementation left behind (#276) because the
+    // `DELETE FROM users` raised an FK violation against `updated_by` /
+    // `uploaded_by` / `triggered_by` and supabase-js never threw.
+    expect(fake.rows("org_price_list_rows")).toHaveLength(0);
+    expect(fake.rows("org_price_lists")).toHaveLength(0);
+    expect(fake.rows("org_pricing_defaults")).toHaveLength(0);
+    expect(fake.rows("recalculation_runs")).toHaveLength(0);
+    expect(fake.rows("users")).toHaveLength(0);
+    expect(fake.rows("orgs")).toHaveLength(0);
+  });
+
+  it("surfaces the RPC error to the UI instead of silently signing the user out", async () => {
+    seedSoloManagerWithData();
+    fake.rpcErrors.set("delete_org_cascade", {
+      message: "foreign key violation on org_price_lists",
+    });
+
+    const { deleteOrganization } = await loadActions();
+    const fd = new FormData();
+    fd.set("confirm", "Acme Co");
+
+    const result = await deleteOrganization(undefined, fd);
+    expect(result?.error).toMatch(/foreign key violation/i);
+    // Nothing else must change — the user should still be signed in and
+    // able to retry / report the failure.
+    expect(fake.rows("orgs")).toHaveLength(1);
+    expect(fake.rows("users")).toHaveLength(2);
+    expect(signOut).not.toHaveBeenCalled();
+    expect(redirectMock).not.toHaveBeenCalled();
   });
 
   it("rejects a non-manager caller without touching any data", async () => {
