@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildPreservedSearch } from "@/components/sidebar";
+import { buildPreservedSearch } from "@/components/layout/sidebar";
 
 function reader(record: Record<string, string>) {
   return (key: string) => record[key] ?? null;

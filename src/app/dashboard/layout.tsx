@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
-import { MobileSidebar, Sidebar } from "@/components/sidebar";
-import { UserMenu } from "@/components/user-menu";
-import { SyncFreshness } from "@/components/sync-freshness";
-import { TimeZoneSync } from "@/components/timezone-sync";
+import { MobileSidebar, Sidebar } from "@/components/layout/sidebar";
+import { UserMenu } from "@/components/layout/user-menu";
+import { SyncFreshness } from "@/components/layout/sync-freshness";
+import { TimeZoneSync } from "@/components/layout/timezone-sync";
 import { getCurrentUser, getSyncFreshness } from "@/lib/dal";
 import { getViewerTimeZone } from "@/lib/viewer-timezone";
 

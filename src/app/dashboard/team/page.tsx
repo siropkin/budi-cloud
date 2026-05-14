@@ -14,13 +14,13 @@ import { ALL_PERIOD_VALUE } from "@/lib/periods";
 import { parseUnit } from "@/lib/units";
 import { fmtCost, fmtNum } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
-import { PeriodSelector } from "@/components/period-selector";
-import { UnitsSelector } from "@/components/units-selector";
-import { SurfaceFilter } from "@/components/surface-filter";
+import { PeriodSelector } from "@/components/filters/period-selector";
+import { UnitsSelector } from "@/components/filters/units-selector";
+import { SurfaceFilter } from "@/components/filters/surface-filter";
 import { parseSurfaceParam } from "@/lib/surface";
 import { CostBarChart } from "@/components/charts/cost-bar-chart";
-import { TeamCountChart } from "@/components/charts/team-count-chart";
-import { CostPerPersonChart } from "@/components/charts/cost-per-person-chart";
+import { TeamCountChart } from "@/app/dashboard/team/_components/team-count-chart";
+import { CostPerPersonChart } from "@/app/dashboard/team/_components/cost-per-person-chart";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
@@ -32,7 +32,7 @@ export default async function TeamPage({
   const params = await searchParams;
   const user = await getCurrentUser();
   if (!user?.org_id) return null;
-  // Defense-in-depth alongside the sidebar gating in `components/sidebar.tsx`:
+  // Defense-in-depth alongside the sidebar gating in `components/layout/sidebar.tsx`:
   // the page is scoped to the viewer's own devices (ADR-0083 §6), so for a
   // member it can only ever show themselves — send them back to Overview (#64).
   if (user.role !== "manager") redirect("/dashboard");

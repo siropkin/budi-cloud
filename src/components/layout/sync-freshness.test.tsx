@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatRelative } from "@/components/sync-freshness";
+import { formatRelative } from "@/components/layout/sync-freshness";
 
 describe("formatRelative (sync freshness label)", () => {
   const now = Date.parse("2026-04-18T12:00:00Z");

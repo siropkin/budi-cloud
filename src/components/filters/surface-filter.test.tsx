@@ -16,7 +16,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(""),
 }));
 
-import { SurfaceFilter } from "@/components/surface-filter";
+import { SurfaceFilter } from "@/components/filters/surface-filter";
 
 describe("SurfaceFilter empty-state guards (#227)", () => {
   it("renders nothing when `surfaces` is empty (no rollups visible to viewer)", () => {
