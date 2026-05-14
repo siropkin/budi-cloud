@@ -94,11 +94,27 @@ All dashboard pages live under `/dashboard`:
 
 - `src/app/` — Next.js App Router pages, route handlers, and server actions
 - `src/app/api/v1/ingest/` — ingest + status route handlers
-- `src/components/` — UI components (Tailwind)
+- `src/app/dashboard/<surface>/_components/` — components owned by a single dashboard surface (see "Where do new components go?" below)
+- `src/components/` — primitives reused across two or more surfaces
+- `src/components/filters/` — shared filter/control chips (period, units, surface, user)
+- `src/components/layout/` — dashboard chrome (sidebar, user menu, sync freshness, timezone sync)
+- `src/components/charts/` — chart primitives reused across surfaces (`cost-bar-chart`)
+- `src/components/ui/` — generic primitives (card)
 - `src/lib/dal.ts` — data access layer; every dashboard query routes through here
 - `src/lib/supabase/` — Supabase clients (anon, server, admin/service-role)
 - `src/proxy.ts` — Next.js 16 proxy (formerly middleware): refreshes the Supabase session and gates `/dashboard/*`
 - `supabase/migrations/` — Postgres schema migrations (apply in order)
+
+## Where do new components go? (#280)
+
+The same flat-vs-by-surface question keeps coming up, so we pin the rule:
+
+- **One consumer → live next to that consumer.** If a component is imported from exactly one page (or one page-group like `sessions/[id]`), put it in that page's `_components/` directory: `src/app/dashboard/<surface>/_components/<name>.tsx`. Charts that only one surface uses (e.g. `device-count-chart`) belong here, not in `src/components/charts/`.
+- **Two or more consumers → `src/components/`.** Primitives reused across surfaces stay flat (`page-header`, `responsive-table`, `stat-card`, `cost-bar-chart`).
+- **Group by role inside `src/components/`** — `filters/` for URL-driven query chips, `layout/` for the dashboard shell, `charts/` for shared chart primitives, `ui/` for generic primitives. Resist adding a fifth bucket; if a component doesn't fit, it's probably surface-specific (move it under `_components/`).
+- **Don't reach across surface boundaries.** A file under `src/app/dashboard/devices/_components/` is private to the devices surface. If another surface starts importing it, that's the signal to promote it to `src/components/` — not to import from a sibling `_components/`.
+
+If you can't decide between "shared primitive" and "surface-owned", start in `_components/` — promoting later is cheaper than untangling cross-surface coupling.
 
 ## Server actions vs route handlers
 

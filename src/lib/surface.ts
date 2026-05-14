@@ -1,6 +1,6 @@
 /**
  * Pure helpers for the surface dimension. Lives outside the
- * `"use client"` chip in `components/surface-filter.tsx` so server
+ * `"use client"` chip in `components/filters/surface-filter.tsx` so server
  * components can call these without Next.js treating them as client
  * references (which threw `Attempted to call …() from the server but
  * … is on the client` after #187 shipped).

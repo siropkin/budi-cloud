@@ -20,18 +20,18 @@ import {
   formatProvider,
 } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
-import { PeriodSelector } from "@/components/period-selector";
-import { UnitsSelector } from "@/components/units-selector";
-import { UserFilter } from "@/components/user-filter";
-import { SurfaceFilter } from "@/components/surface-filter";
+import { PeriodSelector } from "@/components/filters/period-selector";
+import { UnitsSelector } from "@/components/filters/units-selector";
+import { UserFilter } from "@/components/filters/user-filter";
+import { SurfaceFilter } from "@/components/filters/surface-filter";
 import {
   formatSurface,
   isAllUnknownSurface,
   parseSurfaceParam,
 } from "@/lib/surface";
 import { CostBarChart } from "@/components/charts/cost-bar-chart";
-import { ModelCountChart } from "@/components/charts/model-count-chart";
-import { CostPerModelChart } from "@/components/charts/cost-per-model-chart";
+import { ModelCountChart } from "@/app/dashboard/models/_components/model-count-chart";
+import { CostPerModelChart } from "@/app/dashboard/models/_components/cost-per-model-chart";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 

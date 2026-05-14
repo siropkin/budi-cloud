@@ -5,7 +5,7 @@ import {
   getSessionDetail,
   getSessionDetailBySessionId,
 } from "@/lib/dal";
-import { SessionTokenComposition } from "@/components/session-token-composition";
+import { SessionTokenComposition } from "@/app/dashboard/sessions/[id]/_components/session-token-composition";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
   buildCostCellTooltip,

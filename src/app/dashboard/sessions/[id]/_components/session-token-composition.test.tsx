@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { ReactElement } from "react";
-import { SessionTokenComposition } from "@/components/session-token-composition";
+import { SessionTokenComposition } from "@/app/dashboard/sessions/[id]/_components/session-token-composition";
 
 /**
  * Unit tests for the per-session input-vs-output bar (#215). Pins the three

@@ -26,10 +26,10 @@ import {
   repoName,
 } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
-import { PeriodSelector } from "@/components/period-selector";
-import { UnitsSelector } from "@/components/units-selector";
-import { UserFilter } from "@/components/user-filter";
-import { SurfaceFilter } from "@/components/surface-filter";
+import { PeriodSelector } from "@/components/filters/period-selector";
+import { UnitsSelector } from "@/components/filters/units-selector";
+import { UserFilter } from "@/components/filters/user-filter";
+import { SurfaceFilter } from "@/components/filters/surface-filter";
 import { parseSurfaceParam } from "@/lib/surface";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {

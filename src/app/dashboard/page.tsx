@@ -29,24 +29,24 @@ import {
 } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
-import { TopBreakdownCard } from "@/components/top-breakdown-card";
-import { PeriodSelector } from "@/components/period-selector";
-import { UnitsSelector } from "@/components/units-selector";
-import { UserFilter } from "@/components/user-filter";
-import { SurfaceFilter } from "@/components/surface-filter";
+import { TopBreakdownCard } from "@/app/dashboard/_components/top-breakdown-card";
+import { PeriodSelector } from "@/components/filters/period-selector";
+import { UnitsSelector } from "@/components/filters/units-selector";
+import { UserFilter } from "@/components/filters/user-filter";
+import { SurfaceFilter } from "@/components/filters/surface-filter";
 import {
   formatSurface,
   isAllUnknownSurface,
   parseSurfaceParam,
 } from "@/lib/surface";
-import { ActivityChart } from "@/components/charts/activity-chart";
-import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
+import { ActivityChart } from "@/app/dashboard/_components/activity-chart";
+import { ActivityHeatmap } from "@/app/dashboard/_components/activity-heatmap";
 import { CostBarChart } from "@/components/charts/cost-bar-chart";
-import { CostLensToggle } from "@/components/cost-lens-toggle";
+import { CostLensToggle } from "@/app/dashboard/_components/cost-lens-toggle";
 import {
   LinkDaemonBanner,
   FirstSyncInProgressBanner,
-} from "@/components/link-daemon-banner";
+} from "@/app/dashboard/_components/link-daemon-banner";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 export default async function OverviewPage({
