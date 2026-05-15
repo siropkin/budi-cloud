@@ -162,7 +162,7 @@ describe("/auth/callback — invite-link round-trip (#62)", () => {
     // they just got handed.
     expect(admin.rows).toHaveLength(1);
     expect(admin.rows[0].role).toBe("manager");
-    expect(admin.rows[0].workspace_id).toMatch(/^org_/);
+    expect(admin.rows[0].workspace_id).toMatch(/^ws_/);
     const orgs = admin.tables.workspaces ?? [];
     expect(orgs).toHaveLength(1);
     expect(orgs[0].name).toBe("Your workspace");
@@ -174,7 +174,7 @@ describe("/auth/callback — invite-link round-trip (#62)", () => {
 
     const location = await runCallback("?code=abc");
     expect(location).toBe(`${ORIGIN}/dashboard`);
-    expect(admin.rows[0].workspace_id).toMatch(/^org_/);
+    expect(admin.rows[0].workspace_id).toMatch(/^ws_/);
     const orgs = admin.tables.workspaces ?? [];
     expect(orgs).toHaveLength(1);
     expect(orgs[0].name).toBe("Your workspace");
