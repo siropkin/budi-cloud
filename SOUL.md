@@ -138,4 +138,17 @@ If a new file would violate this rule, move it before merging — don't bend the
 - **Lockfile**: commit `package-lock.json`. Deploys must be reproducible.
 - **Deployment**: Vercel for the app; GitHub Actions for the database. Production environment variables are set in the Vercel dashboard; local uses `.env.local`. Never commit real Supabase service-role keys.
 - **Migrations ship via CI, not by hand**: `.github/workflows/db-push.yml` runs `supabase db push --include-all` against the linked production project on every push to `main` that touches `supabase/migrations/**`. PRs that add a migration are dry-run against a fresh Postgres in `.github/workflows/ci.yml` to catch syntax / dependency errors at review time. Do **not** apply migrations through the Supabase SQL editor — that re-introduces the drift that broke the dashboard in #92/#94. If you must hand-apply (incident recovery), run `supabase migration repair` afterwards so `supabase migration list` shows `Local == Remote` again. Required GitHub Actions secrets: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF`.
+- **New `public.*` tables must bake in explicit GRANTs** (#306): Supabase is flipping the Data API default on **2026-10-30** — after that, any new table in the `public` schema is invisible to `supabase-js`, PostgREST (`/rest/v1/`) and GraphQL (`/graphql/v1/`) until grants are issued (PostgREST returns `42501`). Existing tables keep their current grants — this is forward-only. Every new `CREATE TABLE public.<table>` migration must include the boilerplate below (drop the verbs the table doesn't need), plus `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` and policies if the table is reachable from end users:
+
+  ```sql
+  grant select on public.<table> to anon;
+  grant select, insert, update, delete on public.<table> to authenticated;
+  grant select, insert, update, delete on public.<table> to service_role;
+
+  alter table public.<table> enable row level security;
+  -- + policies as needed
+  ```
+
+  CI enforces this in `.github/workflows/ci.yml` via `supabase/check-grants.sh`, which fails the PR if any `CREATE TABLE public.<table>` lacks a matching `GRANT ... ON public.<table>` in the same migration. The check only fires when the explicit `public.` prefix is used, so existing un-prefixed migrations are grandfathered. Before the 2026-10-30 enforcement date, run the Supabase **Security Advisor** once and confirm no existing tables are missing intended grants.
+
 - **Error surfaces**: when ingest is rejected (bad key, org mismatch, schema drift), surface a clear error in the dashboard's Settings page — the daemon will simply stop syncing on 401 and the dashboard is the only place a user will see why.

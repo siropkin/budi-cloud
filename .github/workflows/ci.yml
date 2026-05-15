@@ -93,3 +93,9 @@ jobs:
             echo "applying $f"
             psql -v ON_ERROR_STOP=1 -f "$f"
           done
+
+      - name: Check public.* tables include GRANTs (#306)
+        # Supabase flips the Data API default on 2026-10-30; new public-schema
+        # tables become invisible to supabase-js/PostgREST/GraphQL without
+        # explicit grants. See SOUL.md and supabase/check-grants.sh.
+        run: bash supabase/check-grants.sh
