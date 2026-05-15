@@ -37,14 +37,19 @@ async function requireManager(): Promise<
     .eq("id", authUser.id)
     .single();
 
-  if (!me?.workspace_id) return { ok: false, error: "Not a member of any workspace" };
+  if (!me?.workspace_id)
+    return { ok: false, error: "Not a member of any workspace" };
   if (me.role !== "manager") {
     return { ok: false, error: "Only managers can manage pricing" };
   }
 
   return {
     ok: true,
-    me: { id: me.id as string, workspace_id: me.workspace_id as string, role: "manager" },
+    me: {
+      id: me.id as string,
+      workspace_id: me.workspace_id as string,
+      role: "manager",
+    },
   };
 }
 

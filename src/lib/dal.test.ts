@@ -584,7 +584,10 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
     ]);
 
     const { getSyncFreshness } = await loadDal();
-    const snap = await getSyncFreshness({ ...baseUser, workspace_id: "org_team" });
+    const snap = await getSyncFreshness({
+      ...baseUser,
+      workspace_id: "org_team",
+    });
     expect(snap.lastSessionAt).toBe("2026-04-26T17:00:00Z");
   });
 
@@ -628,7 +631,10 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
     ]);
 
     const { getSyncFreshness } = await loadDal();
-    const snap = await getSyncFreshness({ ...baseUser, workspace_id: "org_team" });
+    const snap = await getSyncFreshness({
+      ...baseUser,
+      workspace_id: "org_team",
+    });
 
     expect(snap.deviceCount).toBe(1); // own devices only — teammate's doesn't count
     expect(snap.lastSeenAt).toBe("2026-04-18T10:00:00Z"); // mine, not teammate's
@@ -660,7 +666,10 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
     ]);
 
     const { getSyncFreshness } = await loadDal();
-    const snap = await getSyncFreshness({ ...baseUser, workspace_id: "org_team" });
+    const snap = await getSyncFreshness({
+      ...baseUser,
+      workspace_id: "org_team",
+    });
     expect(snap).toEqual({
       deviceCount: 0,
       lastSeenAt: null,

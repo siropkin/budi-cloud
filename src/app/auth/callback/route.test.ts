@@ -181,14 +181,18 @@ describe("/auth/callback — invite-link round-trip (#62)", () => {
   });
 
   it("sends an existing user with a workspace to ?next when it's safe", async () => {
-    admin.seed([{ id: "user_abc", workspace_id: "org_1", display_name: "Bon" }]);
+    admin.seed([
+      { id: "user_abc", workspace_id: "org_1", display_name: "Bon" },
+    ]);
 
     const location = await runCallback("?code=abc&next=%2Fdashboard%2Fteam");
     expect(location).toBe(`${ORIGIN}/dashboard/team`);
   });
 
   it("ignores an open-redirect attempt in next and falls through to /dashboard", async () => {
-    admin.seed([{ id: "user_abc", workspace_id: "org_1", display_name: "Bon" }]);
+    admin.seed([
+      { id: "user_abc", workspace_id: "org_1", display_name: "Bon" },
+    ]);
 
     // `next=https://evil.example` is rejected by the safety whitelist —
     // the callback falls back to /dashboard.

@@ -79,16 +79,22 @@ export default async function InvitePage({
     // Cross-workspace click: surface an explicit switch path (#72). A manager
     // switching out would orphan their current workspace, so they get a
     // refusal instead of a switch button.
-    const [{ data: currentWorkspace }, { data: targetWorkspace }] = await Promise.all([
-      admin
-        .from("workspaces")
-        .select("id, name")
-        .eq("id", existingUser.workspace_id)
-        .single(),
-      admin.from("workspaces").select("id, name").eq("id", invite.workspace_id).single(),
-    ]);
+    const [{ data: currentWorkspace }, { data: targetWorkspace }] =
+      await Promise.all([
+        admin
+          .from("workspaces")
+          .select("id, name")
+          .eq("id", existingUser.workspace_id)
+          .single(),
+        admin
+          .from("workspaces")
+          .select("id, name")
+          .eq("id", invite.workspace_id)
+          .single(),
+      ]);
 
-    const currentWorkspaceName = currentWorkspace?.name ?? existingUser.workspace_id;
+    const currentWorkspaceName =
+      currentWorkspace?.name ?? existingUser.workspace_id;
     const targetWorkspaceName = targetWorkspace?.name ?? invite.workspace_id;
 
     if (existingUser.role === "manager") {
@@ -99,10 +105,10 @@ export default async function InvitePage({
               Already in a Workspace
             </h1>
             <p className="mt-3 text-sm text-zinc-300">
-              You manage <strong>{currentWorkspaceName}</strong>, so you can&rsquo;t
-              switch into <strong>{targetWorkspaceName}</strong> directly. Delete{" "}
-              <strong>{currentWorkspaceName}</strong> first (or hand off ownership),
-              then re-click this invite.
+              You manage <strong>{currentWorkspaceName}</strong>, so you
+              can&rsquo;t switch into <strong>{targetWorkspaceName}</strong>{" "}
+              directly. Delete <strong>{currentWorkspaceName}</strong> first (or
+              hand off ownership), then re-click this invite.
             </p>
             <a
               href="/dashboard"

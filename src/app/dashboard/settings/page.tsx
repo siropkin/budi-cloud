@@ -66,7 +66,10 @@ export default async function SettingsPage() {
               <dt className="text-zinc-400">Workspace ID</dt>
               <dd className="flex items-center gap-1 font-mono text-xs text-zinc-400">
                 <span>{user.workspace_id}</span>
-                <CopyButton value={user.workspace_id} label="Copy Workspace ID" />
+                <CopyButton
+                  value={user.workspace_id}
+                  label="Copy Workspace ID"
+                />
               </dd>
             </div>
           </dl>

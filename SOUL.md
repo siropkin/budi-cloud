@@ -59,13 +59,13 @@ The daemon pushes **pre-aggregated daily rollups and session summaries** — num
 
 ## Team model (v1)
 
-| Aspect          | Detail                                                                                    |
-| --------------- | ----------------------------------------------------------------------------------------- |
-| **Roles**       | `manager` (view all workspace data, manage members) and `member` (sync own data, view own data) |
-| **Granularity** | Daily aggregates; no per-message, per-hour, or real-time views                            |
-| **Retention**   | 90 days                                                                                   |
-| **Multi-workspace** | One user, one workspace (no multi-tenancy per user in v1)                             |
-| **SSO / SAML**  | Not supported in v1                                                                       |
+| Aspect              | Detail                                                                                          |
+| ------------------- | ----------------------------------------------------------------------------------------------- |
+| **Roles**           | `manager` (view all workspace data, manage members) and `member` (sync own data, view own data) |
+| **Granularity**     | Daily aggregates; no per-message, per-hour, or real-time views                                  |
+| **Retention**       | 90 days                                                                                         |
+| **Multi-workspace** | One user, one workspace (no multi-tenancy per user in v1)                                       |
+| **SSO / SAML**      | Not supported in v1                                                                             |
 
 ## Ingest API contract
 

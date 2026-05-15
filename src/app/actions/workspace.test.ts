@@ -88,9 +88,7 @@ class FakeSupabase {
       );
       this.tables.set(
         "invite_tokens",
-        this.rows("invite_tokens").filter(
-          (r) => r.workspace_id !== workspaceId
-        )
+        this.rows("invite_tokens").filter((r) => r.workspace_id !== workspaceId)
       );
       const usersAfter = this.rows("users").filter(
         (r) => r.workspace_id !== workspaceId
@@ -322,7 +320,8 @@ describe("deleteWorkspace", () => {
   it("cascades through session summaries, rollups, devices, pricing, invites, users, then the workspace itself", async () => {
     seedSoloManagerWithData();
     const { deleteWorkspace } = await loadActions();
-    const { WORKSPACE_CASCADE_ORDER } = await import("@/app/actions/workspace-cascade");
+    const { WORKSPACE_CASCADE_ORDER } =
+      await import("@/app/actions/workspace-cascade");
 
     // Snapshot the declared order alongside the test so a change to one
     // without the other fails loudly. This must match the body of
@@ -531,7 +530,12 @@ describe("leaveWorkspace", () => {
 
   it("rejects a caller who isn't in any org", async () => {
     fake.seed("users", [
-      { id: "usr_nobody", workspace_id: null, role: "member", api_key: "budi_z" },
+      {
+        id: "usr_nobody",
+        workspace_id: null,
+        role: "member",
+        api_key: "budi_z",
+      },
     ]);
     authUserId = "usr_nobody";
 
@@ -548,9 +552,24 @@ describe("updateMemberRole", () => {
       { id: "org_other", name: "Other Inc" },
     ]);
     fake.seed("users", [
-      { id: "usr_ivan", workspace_id: "org_acme", role: "manager", api_key: "k1" },
-      { id: "usr_pat", workspace_id: "org_acme", role: "member", api_key: "k2" },
-      { id: "usr_jess", workspace_id: "org_acme", role: "manager", api_key: "k3" },
+      {
+        id: "usr_ivan",
+        workspace_id: "org_acme",
+        role: "manager",
+        api_key: "k1",
+      },
+      {
+        id: "usr_pat",
+        workspace_id: "org_acme",
+        role: "member",
+        api_key: "k2",
+      },
+      {
+        id: "usr_jess",
+        workspace_id: "org_acme",
+        role: "manager",
+        api_key: "k3",
+      },
       // Cross-org user — must never be reachable from an Acme manager.
       {
         id: "usr_outsider",
@@ -589,9 +608,24 @@ describe("updateMemberRole", () => {
   it("refuses to demote the last remaining manager (other-demote)", async () => {
     fake.seed("workspaces", [{ id: "org_acme", name: "Acme Co" }]);
     fake.seed("users", [
-      { id: "usr_ivan", workspace_id: "org_acme", role: "manager", api_key: "k1" },
-      { id: "usr_pat", workspace_id: "org_acme", role: "member", api_key: "k2" },
-      { id: "usr_jess", workspace_id: "org_acme", role: "manager", api_key: "k3" },
+      {
+        id: "usr_ivan",
+        workspace_id: "org_acme",
+        role: "manager",
+        api_key: "k1",
+      },
+      {
+        id: "usr_pat",
+        workspace_id: "org_acme",
+        role: "member",
+        api_key: "k2",
+      },
+      {
+        id: "usr_jess",
+        workspace_id: "org_acme",
+        role: "manager",
+        api_key: "k3",
+      },
     ]);
     // Ivan demotes Jess first — now Ivan is the only manager.
     authUserId = "usr_ivan";
@@ -614,8 +648,18 @@ describe("updateMemberRole", () => {
   it("refuses self-demote when caller is the last manager", async () => {
     fake.seed("workspaces", [{ id: "org_acme", name: "Acme Co" }]);
     fake.seed("users", [
-      { id: "usr_ivan", workspace_id: "org_acme", role: "manager", api_key: "k1" },
-      { id: "usr_pat", workspace_id: "org_acme", role: "member", api_key: "k2" },
+      {
+        id: "usr_ivan",
+        workspace_id: "org_acme",
+        role: "manager",
+        api_key: "k1",
+      },
+      {
+        id: "usr_pat",
+        workspace_id: "org_acme",
+        role: "member",
+        api_key: "k2",
+      },
     ]);
     authUserId = "usr_ivan";
 
@@ -699,8 +743,18 @@ describe("switchWorkspace", () => {
       { id: "org_other", name: "Other Inc" },
     ]);
     fake.seed("users", [
-      { id: "usr_ivan", workspace_id: "org_other", role: "manager", api_key: "k1" },
-      { id: "usr_alice", workspace_id: "org_other", role: "member", api_key: "k2" },
+      {
+        id: "usr_ivan",
+        workspace_id: "org_other",
+        role: "manager",
+        api_key: "k1",
+      },
+      {
+        id: "usr_alice",
+        workspace_id: "org_other",
+        role: "member",
+        api_key: "k2",
+      },
       {
         id: "usr_acme_mgr",
         workspace_id: "org_acme",
@@ -740,7 +794,11 @@ describe("switchWorkspace", () => {
     await expect(
       switchWorkspace(
         undefined,
-        fd({ token: "tok_acme", targetWorkspaceId: "org_acme", confirm: "Acme Co" })
+        fd({
+          token: "tok_acme",
+          targetWorkspaceId: "org_acme",
+          confirm: "Acme Co",
+        })
       )
     ).rejects.toThrow("__REDIRECT__");
 
@@ -772,7 +830,11 @@ describe("switchWorkspace", () => {
     const { switchWorkspace } = await loadActions();
     const result = await switchWorkspace(
       undefined,
-      fd({ token: "tok_acme", targetWorkspaceId: "org_acme", confirm: "Acme Co" })
+      fd({
+        token: "tok_acme",
+        targetWorkspaceId: "org_acme",
+        confirm: "Acme Co",
+      })
     );
 
     expect(result?.error).toMatch(/Managers can't switch/i);
@@ -788,7 +850,11 @@ describe("switchWorkspace", () => {
     const { switchWorkspace } = await loadActions();
     const result = await switchWorkspace(
       undefined,
-      fd({ token: "tok_acme", targetWorkspaceId: "org_acme", confirm: "Acme Co" })
+      fd({
+        token: "tok_acme",
+        targetWorkspaceId: "org_acme",
+        confirm: "Acme Co",
+      })
     );
 
     expect(result).toEqual({ error: "Not authenticated" });
@@ -810,7 +876,11 @@ describe("switchWorkspace", () => {
     const { switchWorkspace } = await loadActions();
     const result = await switchWorkspace(
       undefined,
-      fd({ token: "tok_acme", targetWorkspaceId: "org_acme", confirm: "Acme Co" })
+      fd({
+        token: "tok_acme",
+        targetWorkspaceId: "org_acme",
+        confirm: "Acme Co",
+      })
     );
 
     expect(result).toEqual({ error: "Invite link has expired" });
@@ -825,7 +895,11 @@ describe("switchWorkspace", () => {
     const { switchWorkspace } = await loadActions();
     const result = await switchWorkspace(
       undefined,
-      fd({ token: "tok_nope", targetWorkspaceId: "org_acme", confirm: "Acme Co" })
+      fd({
+        token: "tok_nope",
+        targetWorkspaceId: "org_acme",
+        confirm: "Acme Co",
+      })
     );
 
     expect(result).toEqual({ error: "Invite link is invalid" });
@@ -838,7 +912,11 @@ describe("switchWorkspace", () => {
     const { switchWorkspace } = await loadActions();
     const result = await switchWorkspace(
       undefined,
-      fd({ token: "tok_acme", targetWorkspaceId: "org_other", confirm: "Acme Co" })
+      fd({
+        token: "tok_acme",
+        targetWorkspaceId: "org_other",
+        confirm: "Acme Co",
+      })
     );
 
     expect(result).toEqual({
@@ -855,7 +933,11 @@ describe("switchWorkspace", () => {
     const { switchWorkspace } = await loadActions();
     const result = await switchWorkspace(
       undefined,
-      fd({ token: "tok_acme", targetWorkspaceId: "org_acme", confirm: "acme co" })
+      fd({
+        token: "tok_acme",
+        targetWorkspaceId: "org_acme",
+        confirm: "acme co",
+      })
     );
 
     expect(result).toEqual({

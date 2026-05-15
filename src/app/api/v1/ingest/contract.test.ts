@@ -370,9 +370,9 @@ describe("POST /v1/ingest — daemon contract matrix (ADR-0083 §7)", () => {
       const { POST } = await import("./route");
 
       const res = await POST(
-        mkReq(envelopeWith({ workspace_id: "org_other" })) as unknown as Parameters<
-          typeof POST
-        >[0]
+        mkReq(
+          envelopeWith({ workspace_id: "org_other" })
+        ) as unknown as Parameters<typeof POST>[0]
       );
 
       expect(res.status).toBe(401);

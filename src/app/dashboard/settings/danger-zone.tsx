@@ -89,17 +89,18 @@ function DeleteWorkspaceButton({ workspaceName }: { workspaceName: string }) {
           onClose={close}
           description={
             <>
-              This will permanently remove <strong>{workspaceName}</strong>, every
-              member, and all synced data. Other members will be signed out the
-              next time they open the dashboard.
+              This will permanently remove <strong>{workspaceName}</strong>,
+              every member, and all synced data. Other members will be signed
+              out the next time they open the dashboard.
             </>
           }
           error={error}
         >
           <form action={submit} className="space-y-3">
             <label className="block text-xs text-zinc-400">
-              Type <span className="font-mono text-zinc-200">{workspaceName}</span> to
-              confirm:
+              Type{" "}
+              <span className="font-mono text-zinc-200">{workspaceName}</span>{" "}
+              to confirm:
             </label>
             <input
               type="text"
@@ -176,8 +177,8 @@ function LeaveWorkspaceButton({ workspaceName }: { workspaceName: string }) {
           description={
             <>
               This removes your devices and sync history from{" "}
-              <strong>{workspaceName}</strong>. Your sign-in account stays, so you can
-              rejoin or create a different workspace later.
+              <strong>{workspaceName}</strong>. Your sign-in account stays, so
+              you can rejoin or create a different workspace later.
             </>
           }
           error={error}

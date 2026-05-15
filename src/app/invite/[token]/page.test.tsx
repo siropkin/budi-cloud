@@ -151,7 +151,12 @@ vi.mock("next/navigation", () => ({
 vi.mock("server-only", () => ({}));
 
 beforeEach(() => {
-  for (const t of ["workspaces", "users", "invite_tokens", "invite_redemptions"]) {
+  for (const t of [
+    "workspaces",
+    "users",
+    "invite_tokens",
+    "invite_redemptions",
+  ]) {
     fake.seed(t, []);
   }
   authUser = null;
@@ -206,8 +211,12 @@ describe("invite/[token] page — multi-use redemption (#68)", () => {
     await expect(visit()).rejects.toThrow("__REDIRECT__:/dashboard");
 
     const users = fake.rows("users");
-    expect(users.find((u) => u.id === "usr_alice")?.workspace_id).toBe("org_acme");
-    expect(users.find((u) => u.id === "usr_bob")?.workspace_id).toBe("org_acme");
+    expect(users.find((u) => u.id === "usr_alice")?.workspace_id).toBe(
+      "org_acme"
+    );
+    expect(users.find((u) => u.id === "usr_bob")?.workspace_id).toBe(
+      "org_acme"
+    );
 
     const redemptions = fake.rows("invite_redemptions");
     expect(redemptions.map((r) => r.user_id).sort()).toEqual([
@@ -271,7 +280,9 @@ describe("invite/[token] page — multi-use redemption (#68)", () => {
       targetWorkspaceId: "org_acme",
       targetWorkspaceName: "Acme",
     });
-    expect(JSON.stringify(node)).not.toContain("multi-workspace is not supported");
+    expect(JSON.stringify(node)).not.toContain(
+      "multi-workspace is not supported"
+    );
     // The flip-to-Acme write only lands when the user submits the form, so a
     // pure render must not have moved them.
     const alice = fake.rows("users").find((u) => u.id === "usr_alice");

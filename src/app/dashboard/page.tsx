@@ -108,7 +108,9 @@ export default async function OverviewPage({
     getOverviewStats(user, range, scope),
     getDailyActivity(user, range, scope),
     getSyncFreshness(user),
-    user.role === "manager" ? getWorkspaceMembers(user.workspace_id) : Promise.resolve([]),
+    user.role === "manager"
+      ? getWorkspaceMembers(user.workspace_id)
+      : Promise.resolve([]),
     previousRange
       ? getOverviewStats(user, previousRange, scope)
       : Promise.resolve(null),

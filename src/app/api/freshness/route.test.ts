@@ -37,7 +37,10 @@ beforeEach(() => {
 
 describe("GET /api/freshness (#133)", () => {
   it("returns the freshness snapshot for the current user", async () => {
-    dal.getCurrentUser.mockResolvedValue({ id: "usr_a", workspace_id: "org_x" });
+    dal.getCurrentUser.mockResolvedValue({
+      id: "usr_a",
+      workspace_id: "org_x",
+    });
     dal.getSyncFreshness.mockResolvedValue({
       deviceCount: 1,
       lastSeenAt: "2026-05-05T22:00:00Z",

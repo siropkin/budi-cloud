@@ -50,7 +50,9 @@ export default async function DevicesPage({
   const [devices, deviceActivity, members, knownSurfaces] = await Promise.all([
     getCostByDevice(user, range, scope),
     getDeviceActivityByDay(user, range, scope),
-    user.role === "manager" ? getWorkspaceMembers(user.workspace_id) : Promise.resolve([]),
+    user.role === "manager"
+      ? getWorkspaceMembers(user.workspace_id)
+      : Promise.resolve([]),
     getKnownSurfaces(user, { scopedUserId: scope.scopedUserId }),
   ]);
 

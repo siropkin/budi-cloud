@@ -51,7 +51,9 @@ export default async function ReposPage({
     getCostByRepo(user, range, scope),
     getCostByBranch(user, range, scope),
     getCostByTicket(user, range, scope),
-    user.role === "manager" ? getWorkspaceMembers(user.workspace_id) : Promise.resolve([]),
+    user.role === "manager"
+      ? getWorkspaceMembers(user.workspace_id)
+      : Promise.resolve([]),
     getKnownSurfaces(user, { scopedUserId: scope.scopedUserId }),
   ]);
 

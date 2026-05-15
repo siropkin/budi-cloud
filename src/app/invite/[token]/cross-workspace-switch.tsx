@@ -65,8 +65,8 @@ export function CrossWorkspaceSwitch({
           <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-amber-200">
             If you switch, all of your devices, sessions, and cost history will
             move with you to <strong>{targetWorkspaceName}</strong>.{" "}
-            <strong>{currentWorkspaceName}</strong>&rsquo;s manager will no longer see
-            your usage.
+            <strong>{currentWorkspaceName}</strong>&rsquo;s manager will no
+            longer see your usage.
           </p>
         </div>
 
@@ -78,11 +78,17 @@ export function CrossWorkspaceSwitch({
 
         <form action={submit} className="mt-5 space-y-3">
           <input type="hidden" name="token" value={token} />
-          <input type="hidden" name="targetWorkspaceId" value={targetWorkspaceId} />
+          <input
+            type="hidden"
+            name="targetWorkspaceId"
+            value={targetWorkspaceId}
+          />
           <label className="block text-xs text-zinc-400">
             Type{" "}
-            <span className="font-mono text-zinc-200">{targetWorkspaceName}</span> to
-            confirm:
+            <span className="font-mono text-zinc-200">
+              {targetWorkspaceName}
+            </span>{" "}
+            to confirm:
           </label>
           <input
             type="text"

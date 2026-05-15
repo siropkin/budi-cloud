@@ -110,7 +110,11 @@ export async function getVisibleDeviceIds(
   options?: ScopeOptions
 ): Promise<string[]> {
   if (user.role === "manager") {
-    return getWorkspaceDeviceIds(admin, user.workspace_id!, options?.scopedUserId ?? null);
+    return getWorkspaceDeviceIds(
+      admin,
+      user.workspace_id!,
+      options?.scopedUserId ?? null
+    );
   }
   // Member: own devices only — `scopedUserId` is intentionally ignored.
   const { data: devices } = await admin
