@@ -175,4 +175,3 @@ export function deviceLabel(
   const suffix = id.replace(/^dev_/, "").slice(0, 8);
   return `device ${suffix || id}`;
 }
-
