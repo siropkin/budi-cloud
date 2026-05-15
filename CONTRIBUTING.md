@@ -82,6 +82,19 @@ npm run format:check && npm run lint && npm run typecheck && npm test
 
 If any of these fail in CI, the PR is blocked.
 
+### Optional: run the gates automatically on every commit
+
+If you'd like the four gates to run locally before every commit, drop the snippet below into `.git/hooks/pre-commit` and `chmod +x` it. The hook stays in your checkout only — we deliberately don't ship a husky-style framework so contributors can opt in (or out) per machine.
+
+```bash
+#!/usr/bin/env bash
+set -e
+npm run format:check
+npm run lint
+npm run typecheck
+npm test
+```
+
 ## Pull request conventions
 
 - **Branch off `main`.** No long-lived feature branches.
