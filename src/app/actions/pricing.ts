@@ -37,8 +37,7 @@ async function requireManager(): Promise<
     .eq("id", authUser.id)
     .single();
 
-  if (!me?.org_id)
-    return { ok: false, error: "Not a member of any organization" };
+  if (!me?.org_id) return { ok: false, error: "Not a member of any workspace" };
   if (me.role !== "manager") {
     return { ok: false, error: "Only managers can manage pricing" };
   }

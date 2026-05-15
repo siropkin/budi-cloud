@@ -76,12 +76,12 @@ async function render() {
 }
 
 describe("dashboard/settings /page", () => {
-  it("smoke: renders Organization, API Key, and Team Members sections with populated data", async () => {
+  it("smoke: renders Workspace, API Key, and Team Members sections with populated data", async () => {
     const node = await render();
     expect(node).toBeTruthy();
     const text = extractText(node);
     expect(text).toContain("Settings");
-    expect(text).toContain("Organization");
+    expect(text).toContain("Workspace");
     expect(text).toContain("Acme");
     // The team members section header includes the count — pin it so a
     // refactor that drops the count or the header is caught.

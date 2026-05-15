@@ -358,7 +358,7 @@ describe("dashboard /page (Overview)", () => {
     const node = await render();
     const text = extractText(node);
     expect(text).toContain("Spend by Surface");
-    expect(text).toContain("Single-surface org");
+    expect(text).toContain("Single-surface workspace");
   });
 
   it("surface chart: all-unknown period falls back to the empty-state with the daemon-version unlock copy, not a single self-tautological bar (#210)", async () => {
@@ -379,7 +379,7 @@ describe("dashboard /page (Overview)", () => {
     // The single-surface copy is for "one *named* surface" — must not fire
     // here, otherwise a viewer is told to wait for a second IDE when the
     // real unlock is a daemon upgrade.
-    expect(text).not.toContain("Single-surface org");
+    expect(text).not.toContain("Single-surface workspace");
   });
 
   it("savings strip is removed: never appears regardless of price-list/cost state", async () => {
@@ -490,6 +490,6 @@ describe("dashboard /page (Overview)", () => {
     // Mixed window must NOT trigger the all-unknown empty-state copy —
     // managers want to see how much spend is untagged in absolute terms.
     expect(text).not.toContain("every row in this window is tagged Unknown");
-    expect(text).not.toContain("Single-surface org");
+    expect(text).not.toContain("Single-surface workspace");
   });
 });

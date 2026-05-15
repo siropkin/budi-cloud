@@ -298,10 +298,10 @@ describe("invite/[token] page — multi-use redemption (#68)", () => {
 
     expect(redirectMock).not.toHaveBeenCalled();
     const html = JSON.stringify(node);
-    expect(html).toContain("Already in an Organization");
+    expect(html).toContain("Already in a Workspace");
     // The switch CTA must not be rendered for a manager — they'd orphan their
     // current org. Copy nudges them toward delete/hand-off instead.
-    expect(html).not.toContain("Switch organizations?");
+    expect(html).not.toContain("Switch workspaces?");
     expect(html).toContain("Delete");
     expect(fake.rows("invite_redemptions")).toHaveLength(0);
   });
