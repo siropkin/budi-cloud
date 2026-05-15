@@ -21,9 +21,9 @@
  * database round-trip.
  */
 
-export type TokenType = "input" | "output" | "cache_read" | "cache_write";
+type TokenType = "input" | "output" | "cache_read" | "cache_write";
 
-export type ParsedPriceRow = {
+type ParsedPriceRow = {
   /** 1-indexed row number in the source file (header is row 1). */
   lineNumber: number;
   platform: string;
@@ -38,7 +38,7 @@ export type ParsedPriceRow = {
   raw: Record<string, string>;
 };
 
-export type ParseError = {
+type ParseError = {
   lineNumber: number;
   message: string;
 };

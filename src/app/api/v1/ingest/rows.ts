@@ -45,7 +45,7 @@ export interface IngestDailyRollup {
  * when neither field is present so the validator surfaces the missing-field
  * 422 the same way it did before.
  */
-export function rollupIngestedCents(r: IngestDailyRollup): number | undefined {
+function rollupIngestedCents(r: IngestDailyRollup): number | undefined {
   if (r.cost_cents_ingested !== undefined) return r.cost_cents_ingested;
   return r.cost_cents;
 }
@@ -55,7 +55,7 @@ export function rollupIngestedCents(r: IngestDailyRollup): number | undefined {
  * explicitly; v1 envelopes only know about `cost_cents`, which by ADR-0094
  * §1 is identical to `_ingested` until a team price list rewrites it.
  */
-export function rollupEffectiveCents(r: IngestDailyRollup): number | undefined {
+function rollupEffectiveCents(r: IngestDailyRollup): number | undefined {
   if (r.cost_cents_effective !== undefined) return r.cost_cents_effective;
   return rollupIngestedCents(r);
 }
@@ -118,7 +118,7 @@ export const METRIC_CAPS = {
  * NaN/-Infinity/negative value triggers a 422 — that's the daemon-pause
  * signal documented in ADR-0083 §7 — rather than landing as a silent zero.
  */
-export function isValidNonNegativeNumber(raw: unknown): raw is number {
+function isValidNonNegativeNumber(raw: unknown): raw is number {
   return typeof raw === "number" && Number.isFinite(raw) && raw >= 0;
 }
 
