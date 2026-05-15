@@ -24,7 +24,7 @@ export const PAGE_SIZE = 50;
  * the recalc engine actually writes (#728 — `running` while in-flight,
  * `succeeded` on commit) plus `failed` as a forward-looking option so a
  * future change to the engine doesn't require revisiting this UI. */
-export const STATUS_FILTER_OPTIONS = [
+const STATUS_FILTER_OPTIONS = [
   "all",
   "running",
   "succeeded",
