@@ -10,6 +10,8 @@ Cloud dashboard and ingest API for [budi](https://github.com/siropkin/budi). Pro
 
 Built with Next.js 16, React 19, Supabase, and Tailwind CSS 4.
 
+New here? Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) for the dev workflow, then read [`SOUL.md`](SOUL.md) for the deeper architecture map.
+
 ## What data the cloud receives
 
 The budi daemon pushes **pre-aggregated daily rollups and session summaries** — numeric metrics only. The cloud never receives prompts, code, AI responses, file paths, email addresses, raw payloads, or tag values. There is no "full upload" mode.
