@@ -15,7 +15,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Each lint/format/type/test gate is its own job so branch protection can
+  # require them independently (#290). `fail-fast: false` means a single
+  # failure doesn't cancel the others — reviewers see every problem at once.
+  checks:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: format
+            command: format:check
+          - name: lint
+            command: lint
+          - name: typecheck
+            command: typecheck
+          - name: test
+            command: test:coverage
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ${{ matrix.name }}
+        # Coverage baseline established in #281. The summary is printed for
+        # visibility; coverage is not yet a hard fail-gate beyond the floor
+        # configured in vitest.config.ts.
+        run: npm run ${{ matrix.command }}
+
   build:
+    name: build
     runs-on: ubuntu-latest
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
@@ -28,24 +69,10 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "20"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Format check
-        run: npm run format:check
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Test (with coverage)
-        # Baseline established in #281. The summary is printed in PRs for visibility,
-        # but coverage is not yet a hard fail-gate beyond the floor configured in
-        # vitest.config.ts. Hard CI gates are handled in #290.
-        run: npm run test:coverage
 
       - name: Build
         run: npm run build
