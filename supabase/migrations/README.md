@@ -51,6 +51,29 @@ supabase db push --dry-run   # show what would change against the linked project
 
 Do **not** apply migrations through the Supabase SQL editor. That re-introduces the drift that broke the dashboard in #92/#94. If you must hand-apply during incident recovery, run `supabase migration repair` afterwards so `supabase migration list` shows `Local == Remote`.
 
+## When `db-push` fails on `main`
+
+If `.github/workflows/db-push.yml` fails after a merge, the live site is now running new code against an old schema — assume it is broken and act fast. Two paths:
+
+1. **Roll Vercel back first, repair after.** `vercel rollback` to the deployment immediately before the offending merge. The previous code matches the un-migrated schema, so authenticated requests start succeeding within ~30 seconds while you investigate.
+2. **Repair in place.** Diagnose the migration error from the action log, write an idempotent SQL repair, apply it with `supabase db query --linked --file repair.sql`, then re-run the migration with `supabase db query --linked --file supabase/migrations/NNN_*.sql`. Record the migration in the ledger so future runs skip it: `insert into supabase_migrations.schema_migrations (version, name, statements) values (…) on conflict do nothing`.
+
+Either way, after the dust settles: open a follow-up migration that brings prod back into structural alignment with what the ledger claims (the 2026-05-15 incident was caused by prod's `invite_redemptions` table never having been created despite migration 003 being recorded as applied — `supabase migration list` lied).
+
+## Detecting drift
+
+`supabase migration list --linked` only checks the ledger, not the actual schema. To verify prod matches what the migrations claim:
+
+```bash
+# Compare prod's live schema against a fresh apply of every migration.
+supabase db dump --linked --schema public > prod-schema.sql
+supabase db reset                                    # fresh local DB
+pg_dump --schema-only --schema=public ... > local-schema.sql
+diff prod-schema.sql local-schema.sql                # any diff is drift
+```
+
+The CI shadow-apply job (`.github/workflows/db-shadow.yml`) runs a lighter version of this on every migration PR: dump prod schema, restore into ephemeral Postgres, apply pending migrations. If the PR's migration cannot apply on top of live prod schema, the job fails before merge.
+
 ## RLS guarantees the table layer leans on
 
 The DAL (`src/lib/dal/`) reads via the service-role admin client and gates manager/member visibility in JS (see `getVisibleDeviceIds` and the `user.role === "manager"` branches). RLS is enabled on ingest tables as defense in depth, **but the dashboard does not require it to be correct.** When you add a new query, add the same JS-side scoping; do not depend on RLS to keep one org's rows out of another org's response.

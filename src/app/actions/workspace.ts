@@ -20,10 +20,9 @@ export async function createWorkspace(
   if (!user) return { error: "Not authenticated" };
 
   const admin = createAdminClient();
-  // ID prefix kept as `org_` for forward compatibility with the rows minted
-  // before #321; the rename moved the field name to `workspace_id` but the
-  // opaque value stays stable across the migration.
-  const workspaceId = `org_${randomBytes(12).toString("base64url")}`;
+  // New workspaces mint `ws_` IDs. Existing rows minted before this change
+  // keep their `org_` prefix — IDs are opaque, never reformatted in place.
+  const workspaceId = `ws_${randomBytes(12).toString("base64url")}`;
 
   // Create the workspace
   const { error: workspaceError } = await admin.from("workspaces").insert({

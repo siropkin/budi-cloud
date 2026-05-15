@@ -21,7 +21,7 @@ async function createDefaultWorkspace(
   admin: SupabaseClient,
   userId: string
 ): Promise<{ error: string | null }> {
-  const workspaceId = `org_${randomBytes(12).toString("base64url")}`;
+  const workspaceId = `ws_${randomBytes(12).toString("base64url")}`;
   const { error: workspaceError } = await admin.from("workspaces").insert({
     id: workspaceId,
     name: DEFAULT_WORKSPACE_NAME,
