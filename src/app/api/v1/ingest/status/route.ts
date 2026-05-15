@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
 
   const { data: user, error: userError } = await supabase
     .from("users")
-    .select("id, org_id")
+    .select("id, workspace_id")
     .eq("api_key", apiKey)
     .single();
 
@@ -57,16 +57,16 @@ export async function GET(request: NextRequest) {
   }
 
   // #274: defense-in-depth — a stale `users` row pointing at a deleted org
-  // must not keep authenticating status polls. `deleteOrganization` already
+  // must not keep authenticating status polls. `deleteWorkspace` already
   // wipes the user row, but a partial cascade shouldn't leak a "ready" badge
   // from a dead org.
-  if (user.org_id) {
-    const { data: org } = await supabase
-      .from("orgs")
+  if (user.workspace_id) {
+    const { data: workspace } = await supabase
+      .from("workspaces")
       .select("id")
-      .eq("id", user.org_id)
+      .eq("id", user.workspace_id)
       .single();
-    if (!org) {
+    if (!workspace) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
   }
@@ -81,9 +81,9 @@ export async function GET(request: NextRequest) {
   }
 
   // --- Verify device belongs to user's org ---
-  // Collapse "doesn't exist" and "belongs to another org" into the same 404
+  // Collapse "doesn't exist" and "belongs to another workspace" into the same 404
   // so a valid API key can't probe the global devices table for existence
-  // across the org boundary (mirrors the getSessionDetail precedent in dal.ts).
+  // across the workspace boundary (mirrors the getSessionDetail precedent in dal.ts).
   const notFound = () =>
     Response.json({ error: "Device not found" }, { status: 404 });
 
@@ -99,11 +99,11 @@ export async function GET(request: NextRequest) {
 
   const { data: deviceOwner } = await supabase
     .from("users")
-    .select("org_id")
+    .select("workspace_id")
     .eq("id", device.user_id)
     .single();
 
-  if (!deviceOwner || deviceOwner.org_id !== user.org_id) {
+  if (!deviceOwner || deviceOwner.workspace_id !== user.workspace_id) {
     return notFound();
   }
 

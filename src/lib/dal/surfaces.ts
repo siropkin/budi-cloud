@@ -70,7 +70,7 @@ interface SurfaceCostRow {
  * data so the day a JetBrains daemon first syncs the chip picks up
  * `jetbrains` automatically; no hardcoded enum to keep in sync with core.
  *
- * Deliberately not range-scoped: a surface that appeared in the org's
+ * Deliberately not range-scoped: a surface that appeared in the workspace's
  * history but not in the current period still belongs in the chip so the
  * "filter to JetBrains" path remains usable after the team migrates off it.
  * `unknown` is included when present so a manager investigating "rows

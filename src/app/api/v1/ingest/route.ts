@@ -36,22 +36,29 @@ const SUPPORTED_SCHEMA_VERSIONS = new Set([1, 2, 3]);
 // 128 chars is comfortably above any sane hostname or user-chosen nickname.
 const MAX_LABEL_LENGTH = 128;
 
-// Per-org cap on auto-registered devices. The daemon ships one device row per
-// machine, and even prolific orgs sit comfortably under this. The cap exists
-// to make device-id squatting (#181) economically uninteresting: an attacker
-// with a valid key can't pre-register an unbounded list of guessed ids.
-const MAX_DEVICES_PER_ORG = 50;
+// Per-workspace cap on auto-registered devices. The daemon ships one device
+// row per machine, and even prolific workspaces sit comfortably under this.
+// The cap exists to make device-id squatting (#181) economically
+// uninteresting: an attacker with a valid key can't pre-register an
+// unbounded list of guessed ids.
+const MAX_DEVICES_PER_WORKSPACE = 50;
 
 // Accept any RFC-9562 UUID (versions 1–8, including v4/v7 the daemon ships).
 // Rejecting non-UUID ids closes the squatting vector from #181: a caller can
-// no longer auto-register an arbitrary, predictable string under their org.
+// no longer auto-register an arbitrary, predictable string under their
+// workspace.
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 interface SyncEnvelope {
   schema_version: number;
   device_id: string;
-  org_id: string;
+  workspace_id: string;
+  // Legacy alias accepted during the #321 rename dual-emit window. Daemons
+  // predating the rename still send `org_id`; normalize() copies it into
+  // `workspace_id` before validation. Drops out once the daemon ships the
+  // workspace-aware build and ingest stops seeing the legacy field.
+  org_id?: string;
   synced_at: string;
   // User-controlled display name for this device. Daemon default is the OS
   // hostname, but the user can override (or blank) via `cloud.toml` — so this
@@ -62,6 +69,23 @@ interface SyncEnvelope {
     daily_rollups: IngestDailyRollup[];
     session_summaries: IngestSessionSummary[];
   };
+}
+
+/**
+ * Accept the legacy `org_id` envelope field as a synonym for `workspace_id`
+ * during the #321 rename window. If both are sent they must agree — a daemon
+ * that disagrees with itself is a bug, not a compat case, so reject loudly
+ * rather than silently picking one.
+ */
+function normalizeWorkspaceField(body: SyncEnvelope): string | null {
+  const legacy = typeof body.org_id === "string" ? body.org_id : undefined;
+  const current =
+    typeof body.workspace_id === "string" ? body.workspace_id : undefined;
+  if (legacy && current && legacy !== current) {
+    return "Envelope sent both org_id and workspace_id with different values";
+  }
+  if (!current && legacy) body.workspace_id = legacy;
+  return null;
 }
 
 /**
@@ -87,11 +111,12 @@ function normalizeLabel(raw: unknown): string | null | undefined {
  * Authenticate the request via Bearer token.
  * Returns the user row or null if auth fails.
  *
- * #274: when `org_id` is set we double-check that the org still exists.
- * `deleteOrganization` cascades through the `users` table, so in the normal
- * path the api_key lookup above already fails. The org-existence guard is
- * defense-in-depth: a partial cascade or stale user row pointing at a
- * vanished org must not keep landing new rollups under a deleted org_id.
+ * #274: when `workspace_id` is set we double-check that the workspace still
+ * exists. `deleteWorkspace` cascades through the `users` table, so in the
+ * normal path the api_key lookup above already fails. The workspace-
+ * existence guard is defense-in-depth: a partial cascade or stale user row
+ * pointing at a vanished workspace must not keep landing new rollups under a
+ * deleted workspace_id.
  */
 async function authenticateApiKey(
   supabase: ReturnType<typeof createAdminClient>,
@@ -104,19 +129,19 @@ async function authenticateApiKey(
 
   const { data, error } = await supabase
     .from("users")
-    .select("id, org_id, role")
+    .select("id, workspace_id, role")
     .eq("api_key", apiKey)
     .single();
 
   if (error || !data) return null;
 
-  if (data.org_id) {
-    const { data: org } = await supabase
-      .from("orgs")
+  if (data.workspace_id) {
+    const { data: workspace } = await supabase
+      .from("workspaces")
       .select("id")
-      .eq("id", data.org_id)
+      .eq("id", data.workspace_id)
       .single();
-    if (!org) return null;
+    if (!workspace) return null;
   }
 
   return data;
@@ -137,8 +162,8 @@ function validateEnvelope(body: SyncEnvelope): string | null {
   if (!UUID_RE.test(body.device_id)) {
     return "device_id must be a UUID";
   }
-  if (!body.org_id || typeof body.org_id !== "string") {
-    return "Missing or invalid org_id";
+  if (!body.workspace_id || typeof body.workspace_id !== "string") {
+    return "Missing or invalid workspace_id";
   }
   if (!body.payload) {
     return "Missing payload";
@@ -217,21 +242,27 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
+  // --- Normalize org_id → workspace_id (#321 dual-emit window) ---
+  const normalizeError = normalizeWorkspaceField(body);
+  if (normalizeError) {
+    return Response.json({ error: normalizeError }, { status: 422 });
+  }
+
   // --- Validate envelope ---
   const validationError = validateEnvelope(body);
   if (validationError) {
     return Response.json({ error: validationError }, { status: 422 });
   }
 
-  // --- Verify org ownership ---
-  if (body.org_id !== user.org_id) {
+  // --- Verify workspace ownership ---
+  if (body.workspace_id !== user.workspace_id) {
     return Response.json(
-      { error: "org_id does not match authenticated user's org" },
+      { error: "workspace_id does not match authenticated user's workspace" },
       { status: 401 }
     );
   }
 
-  // --- Verify device belongs to user's org ---
+  // --- Verify device belongs to user's workspace ---
   const { data: device, error: deviceError } = await supabase
     .from("devices")
     .select("id, user_id")
@@ -242,22 +273,23 @@ export async function POST(request: NextRequest) {
   const now = new Date().toISOString();
 
   if (deviceError || !device) {
-    // #181: cap auto-registration per org so a single compromised key can't
-    // bulk-squat device ids. Counting via a join through `users` keeps the
-    // limit at the org level — multiple users in the same org share the cap.
-    const { data: orgUserIds } = await supabase
+    // #181: cap auto-registration per workspace so a single compromised key
+    // can't bulk-squat device ids. Counting via a join through `users` keeps
+    // the limit at the workspace level — multiple users in the same
+    // workspace share the cap.
+    const { data: workspaceUserIds } = await supabase
       .from("users")
       .select("id")
-      .eq("org_id", user.org_id);
-    const userIds = (orgUserIds ?? []).map((u) => u.id as string);
-    const { count: orgDeviceCount } = await supabase
+      .eq("workspace_id", user.workspace_id);
+    const userIds = (workspaceUserIds ?? []).map((u) => u.id as string);
+    const { count: workspaceDeviceCount } = await supabase
       .from("devices")
       .select("id", { count: "exact", head: true })
       .in("user_id", userIds.length > 0 ? userIds : [user.id]);
-    if ((orgDeviceCount ?? 0) >= MAX_DEVICES_PER_ORG) {
+    if ((workspaceDeviceCount ?? 0) >= MAX_DEVICES_PER_WORKSPACE) {
       return Response.json(
         {
-          error: `Device cap reached: an org may auto-register at most ${MAX_DEVICES_PER_ORG} devices. Contact a manager to release unused ids.`,
+          error: `Device cap reached: a workspace may auto-register at most ${MAX_DEVICES_PER_WORKSPACE} devices. Contact a manager to release unused ids.`,
         },
         { status: 429 }
       );
@@ -281,16 +313,16 @@ export async function POST(request: NextRequest) {
       );
     }
   } else {
-    // Verify device belongs to a user in the same org
+    // Verify device belongs to a user in the same workspace
     const { data: deviceOwner } = await supabase
       .from("users")
-      .select("org_id")
+      .select("workspace_id")
       .eq("id", device.user_id)
       .single();
 
-    if (!deviceOwner || deviceOwner.org_id !== user.org_id) {
+    if (!deviceOwner || deviceOwner.workspace_id !== user.workspace_id) {
       return Response.json(
-        { error: "Device does not belong to your org" },
+        { error: "Device does not belong to your workspace" },
         { status: 401 }
       );
     }

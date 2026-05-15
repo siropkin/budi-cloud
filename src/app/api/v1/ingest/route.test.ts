@@ -18,7 +18,7 @@ class FakeSupabase {
   tables = new Map<string, Row[]>();
 
   constructor() {
-    this.tables.set("orgs", []);
+    this.tables.set("workspaces", []);
     this.tables.set("users", []);
     this.tables.set("devices", []);
     this.tables.set("daily_rollups", []);
@@ -267,7 +267,7 @@ vi.mock("server-only", () => ({}));
 
 beforeEach(() => {
   for (const t of [
-    "orgs",
+    "workspaces",
     "users",
     "devices",
     "daily_rollups",
@@ -279,11 +279,11 @@ beforeEach(() => {
 
 describe("POST /v1/ingest + dashboard read path (#14)", () => {
   it("persists session_summaries and both dashboards see all rows", async () => {
-    fake.seed("orgs", [{ id: "org_test", name: "test" }]);
+    fake.seed("workspaces", [{ id: "org_test", name: "test" }]);
     fake.seed("users", [
       {
         id: "usr_test",
-        org_id: "org_test",
+        workspace_id: "org_test",
         role: "manager",
         api_key: "budi_testkey",
         display_name: "Test User",
@@ -297,7 +297,7 @@ describe("POST /v1/ingest + dashboard read path (#14)", () => {
     const envelope = {
       schema_version: 1,
       device_id: "11111111-1111-4111-8111-111111111111",
-      org_id: "org_test",
+      workspace_id: "org_test",
       synced_at: "2026-04-15T12:00:00Z",
       payload: {
         daily_rollups: [
@@ -398,7 +398,7 @@ describe("POST /v1/ingest + dashboard read path (#14)", () => {
 
     const user = {
       id: "usr_test",
-      org_id: "org_test",
+      workspace_id: "org_test",
       role: "manager",
       api_key: "budi_testkey",
       display_name: "Test User",
@@ -424,11 +424,11 @@ describe("POST /v1/ingest + dashboard read path (#14)", () => {
   });
 
   it("second ingest of the same session with null started_at does not clobber", async () => {
-    fake.seed("orgs", [{ id: "org_test", name: "test" }]);
+    fake.seed("workspaces", [{ id: "org_test", name: "test" }]);
     fake.seed("users", [
       {
         id: "usr_test",
-        org_id: "org_test",
+        workspace_id: "org_test",
         role: "manager",
         api_key: "budi_testkey",
         display_name: "Test",
@@ -455,7 +455,7 @@ describe("POST /v1/ingest + dashboard read path (#14)", () => {
     type Envelope = {
       schema_version: number;
       device_id: string;
-      org_id: string;
+      workspace_id: string;
       synced_at: string;
       payload: {
         daily_rollups: never[];
@@ -465,7 +465,7 @@ describe("POST /v1/ingest + dashboard read path (#14)", () => {
     const baseEnvelope: Envelope = {
       schema_version: 1,
       device_id: "11111111-1111-4111-8111-111111111111",
-      org_id: "org_test",
+      workspace_id: "org_test",
       synced_at: "2026-04-15T12:00:00Z",
       payload: {
         daily_rollups: [],
@@ -531,11 +531,11 @@ describe("POST /v1/ingest + dashboard read path (#14)", () => {
 
 describe("POST /v1/ingest — device label persistence (#60)", () => {
   function seedUser() {
-    fake.seed("orgs", [{ id: "org_test", name: "test" }]);
+    fake.seed("workspaces", [{ id: "org_test", name: "test" }]);
     fake.seed("users", [
       {
         id: "usr_test",
-        org_id: "org_test",
+        workspace_id: "org_test",
         role: "manager",
         api_key: "budi_testkey",
         display_name: "Test",
@@ -558,7 +558,7 @@ describe("POST /v1/ingest — device label persistence (#60)", () => {
   const baseEnvelope = {
     schema_version: 1,
     device_id: "11111111-1111-4111-8111-111111111111",
-    org_id: "org_test",
+    workspace_id: "org_test",
     synced_at: "2026-04-15T12:00:00Z",
     payload: { daily_rollups: [], session_summaries: [] },
   };
@@ -672,11 +672,11 @@ describe("POST /v1/ingest — device label persistence (#60)", () => {
 
 describe("POST /v1/ingest — device_id squatting protections (#181)", () => {
   function seedUser() {
-    fake.seed("orgs", [{ id: "org_test", name: "test" }]);
+    fake.seed("workspaces", [{ id: "org_test", name: "test" }]);
     fake.seed("users", [
       {
         id: "usr_test",
-        org_id: "org_test",
+        workspace_id: "org_test",
         role: "manager",
         api_key: "budi_testkey",
         display_name: "Test",
@@ -699,7 +699,7 @@ describe("POST /v1/ingest — device_id squatting protections (#181)", () => {
   const baseEnvelope = {
     schema_version: 1,
     device_id: "11111111-1111-4111-8111-111111111111",
-    org_id: "org_test",
+    workspace_id: "org_test",
     synced_at: "2026-04-15T12:00:00Z",
     payload: { daily_rollups: [], session_summaries: [] },
   };
@@ -734,9 +734,9 @@ describe("POST /v1/ingest — device_id squatting protections (#181)", () => {
     expect(fake.rows("devices")).toHaveLength(1);
   });
 
-  it("returns 429 once the org hits the auto-register cap", async () => {
+  it("returns 429 once the workspace hits the auto-register cap", async () => {
     seedUser();
-    // Pre-seed 50 devices already owned by this org's user — the cap is
+    // Pre-seed 50 devices already owned by this workspace's user — the cap is
     // exclusive, so the 51st auto-register attempt must be rejected.
     const seed = Array.from({ length: 50 }, (_, i) => ({
       id: `aaaaaaaa-aaaa-4aaa-8aaa-${String(i).padStart(12, "0")}`,
@@ -795,11 +795,11 @@ describe("POST /v1/ingest — device_id squatting protections (#181)", () => {
 
 describe("POST /v1/ingest — numeric metric range guards (#178)", () => {
   function seedUser() {
-    fake.seed("orgs", [{ id: "org_test", name: "test" }]);
+    fake.seed("workspaces", [{ id: "org_test", name: "test" }]);
     fake.seed("users", [
       {
         id: "usr_test",
-        org_id: "org_test",
+        workspace_id: "org_test",
         role: "manager",
         api_key: "budi_testkey",
         display_name: "Test",
@@ -841,7 +841,7 @@ describe("POST /v1/ingest — numeric metric range guards (#178)", () => {
   const baseEnvelope = {
     schema_version: 1,
     device_id: "11111111-1111-4111-8111-111111111111",
-    org_id: "org_test",
+    workspace_id: "org_test",
     synced_at: "2026-04-15T12:00:00Z",
     payload: {
       daily_rollups: [baseRollup],
@@ -1139,11 +1139,11 @@ describe("POST /v1/ingest — numeric metric range guards (#178)", () => {
 // `normalizeSurface`, or shrinking the upsert column list) would fail loud.
 describe("POST /v1/ingest — surface round-trip (#204)", () => {
   function seedUser() {
-    fake.seed("orgs", [{ id: "org_test", name: "test" }]);
+    fake.seed("workspaces", [{ id: "org_test", name: "test" }]);
     fake.seed("users", [
       {
         id: "usr_test",
-        org_id: "org_test",
+        workspace_id: "org_test",
         role: "manager",
         api_key: "budi_testkey",
         display_name: "Test",
@@ -1182,7 +1182,7 @@ describe("POST /v1/ingest — surface round-trip (#204)", () => {
   const baseEnvelope = {
     schema_version: 1,
     device_id: "11111111-1111-4111-8111-111111111111",
-    org_id: "org_test",
+    workspace_id: "org_test",
     synced_at: "2026-04-15T12:00:00Z",
   };
 
@@ -1419,11 +1419,11 @@ describe("POST /v1/ingest — surface round-trip (#204)", () => {
 // that a future genuine wire break is caught loudly.
 describe("POST /v1/ingest — schema_version compatibility (#749)", () => {
   function seedUser() {
-    fake.seed("orgs", [{ id: "org_test", name: "test" }]);
+    fake.seed("workspaces", [{ id: "org_test", name: "test" }]);
     fake.seed("users", [
       {
         id: "usr_test",
-        org_id: "org_test",
+        workspace_id: "org_test",
         role: "manager",
         api_key: "budi_testkey",
         display_name: "Test",
@@ -1461,7 +1461,7 @@ describe("POST /v1/ingest — schema_version compatibility (#749)", () => {
 
   const envelopeShell = {
     device_id: "11111111-1111-4111-8111-111111111111",
-    org_id: "org_test",
+    workspace_id: "org_test",
     synced_at: "2026-04-15T12:00:00Z",
   };
 
@@ -1627,11 +1627,11 @@ describe("POST /v1/ingest — schema_version compatibility (#749)", () => {
 // NULL for older daemons / surfaces that don't emit it.
 describe("POST /v1/ingest — session title (#255)", () => {
   function seedUser() {
-    fake.seed("orgs", [{ id: "org_test", name: "test" }]);
+    fake.seed("workspaces", [{ id: "org_test", name: "test" }]);
     fake.seed("users", [
       {
         id: "usr_test",
-        org_id: "org_test",
+        workspace_id: "org_test",
         role: "manager",
         api_key: "budi_testkey",
         display_name: "Test",
@@ -1653,7 +1653,7 @@ describe("POST /v1/ingest — session title (#255)", () => {
 
   const envelopeShell = {
     device_id: "11111111-1111-4111-8111-111111111111",
-    org_id: "org_test",
+    workspace_id: "org_test",
     synced_at: "2026-04-15T12:00:00Z",
   };
 
@@ -1728,7 +1728,7 @@ describe("POST /v1/ingest — session title (#255)", () => {
 // the lookup above already fails. The org-existence guard is defense-in-depth
 // — if a future bug, partial cascade, or schema migration ever left a stale
 // `users` row pointing at a vanished org, ingest must still 401 so the local
-// daemon flips to AuthFailure and stops syncing into a dead org_id.
+// daemon flips to AuthFailure and stops syncing into a dead workspace_id.
 describe("POST /v1/ingest — orphan key after delete-org (#274)", () => {
   function mkReq(body: Record<string, unknown>): Request {
     return new Request("http://localhost/v1/ingest", {
@@ -1744,17 +1744,17 @@ describe("POST /v1/ingest — orphan key after delete-org (#274)", () => {
   const envelope = {
     schema_version: 1,
     device_id: "11111111-1111-4111-8111-111111111111",
-    org_id: "org_deleted",
+    workspace_id: "org_deleted",
     synced_at: "2026-04-15T12:00:00Z",
     payload: { daily_rollups: [], session_summaries: [] },
   };
 
   it("401s when the user's org no longer exists", async () => {
-    fake.seed("orgs", []); // org was deleted
+    fake.seed("workspaces", []); // org was deleted
     fake.seed("users", [
       {
         id: "usr_orphan",
-        org_id: "org_deleted",
+        workspace_id: "org_deleted",
         role: "manager",
         api_key: "budi_orphan",
       },
@@ -1768,7 +1768,7 @@ describe("POST /v1/ingest — orphan key after delete-org (#274)", () => {
     expect(res.status).toBe(401);
     expect((await res.json()).error).toBe("Unauthorized");
     // No rollup, session, or device row should have been created under the
-    // orphan org_id. The 401 must short-circuit before any write.
+    // orphan workspace_id. The 401 must short-circuit before any write.
     expect(fake.rows("daily_rollups")).toHaveLength(0);
     expect(fake.rows("session_summaries")).toHaveLength(0);
     expect(fake.rows("devices")).toHaveLength(0);

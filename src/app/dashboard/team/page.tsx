@@ -31,7 +31,7 @@ export default async function TeamPage({
 }) {
   const params = await searchParams;
   const user = await getCurrentUser();
-  if (!user?.org_id) return null;
+  if (!user?.workspace_id) return null;
   // Defense-in-depth alongside the sidebar gating in `components/layout/sidebar.tsx`:
   // the page is scoped to the viewer's own devices (ADR-0083 §6), so for a
   // member it can only ever show themselves — send them back to Overview (#64).

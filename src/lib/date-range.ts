@@ -63,7 +63,7 @@ export function dateRangeFromDays(
  * one-hour drift between the two windows.
  *
  * Returns `null` when no meaningful comparison exists — the lifetime
- * (`?days=all`) preset already starts at the org's earliest activity, so
+ * (`?days=all`) preset already starts at the workspace's earliest activity, so
  * "the period before that" is by definition empty.
  */
 export function previousDateRange(

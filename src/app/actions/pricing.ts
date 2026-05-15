@@ -13,13 +13,13 @@ import { recalculateEffectiveCost } from "@/lib/recalculate-effective-cost";
 /**
  * #232: Server actions backing the Settings → Pricing page.
  *
- * Every action that mutates org state re-verifies the caller's role on the
+ * Every action that mutates workspace state re-verifies the caller's role on the
  * server — the page itself already gates rendering to managers, but a crafted
  * POST against a server action bypasses the JSX guard, so we always re-check
- * (mirroring the pattern in `org.ts`).
+ * (mirroring the pattern in `workspace.ts`).
  */
 
-type Manager = { id: string; org_id: string; role: "manager" };
+type Manager = { id: string; workspace_id: string; role: "manager" };
 
 async function requireManager(): Promise<
   { ok: true; me: Manager } | { ok: false; error: string }
@@ -33,18 +33,18 @@ async function requireManager(): Promise<
   const admin = createAdminClient();
   const { data: me } = await admin
     .from("users")
-    .select("id, org_id, role")
+    .select("id, workspace_id, role")
     .eq("id", authUser.id)
     .single();
 
-  if (!me?.org_id) return { ok: false, error: "Not a member of any workspace" };
+  if (!me?.workspace_id) return { ok: false, error: "Not a member of any workspace" };
   if (me.role !== "manager") {
     return { ok: false, error: "Only managers can manage pricing" };
   }
 
   return {
     ok: true,
-    me: { id: me.id as string, org_id: me.org_id as string, role: "manager" },
+    me: { id: me.id as string, workspace_id: me.workspace_id as string, role: "manager" },
   };
 }
 
@@ -65,15 +65,15 @@ export async function savePricingDefaults(
     (formData.get("default_region") as string | null)?.trim() || null;
 
   const admin = createAdminClient();
-  const { error } = await admin.from("org_pricing_defaults").upsert(
+  const { error } = await admin.from("workspace_pricing_defaults").upsert(
     {
-      org_id: auth.me.org_id,
+      workspace_id: auth.me.workspace_id,
       default_platform: platform,
       default_region: region,
       updated_by: auth.me.id,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: "org_id" }
+    { onConflict: "workspace_id" }
   );
   if (error) return { error: "Failed to save defaults" };
 
@@ -83,20 +83,20 @@ export async function savePricingDefaults(
 
 /**
  * Build the alias dictionary used to map CSV rows. The "known models" hint
- * (issue #244) is sourced from the org's own `daily_rollups.model` set so the
+ * (issue #244) is sourced from the workspace's own `daily_rollups.model` set so the
  * vendor-display-name normalizer can confirm its guesses match real ingested
  * data — and so a freshly pasted daemon id still maps when `model_aliases` is
  * empty.
  */
 async function loadAliasDict(
   admin: ReturnType<typeof createAdminClient>,
-  orgId: string
+  workspaceId: string
 ) {
   const aliasRowsPromise = admin
     .from("model_aliases")
     .select("display_name, patterns");
 
-  const knownModelsPromise = loadKnownModels(admin, orgId);
+  const knownModelsPromise = loadKnownModels(admin, workspaceId);
 
   const [{ data: aliasRows }, knownModels] = await Promise.all([
     aliasRowsPromise,
@@ -113,18 +113,18 @@ async function loadAliasDict(
 }
 
 /**
- * Distinct `daily_rollups.model` values ever uploaded by any of the org's
- * devices. Two-step query mirrors the pattern in `org.ts` (users → devices →
+ * Distinct `daily_rollups.model` values ever uploaded by any of the workspace's
+ * devices. Two-step query mirrors the pattern in `workspace.ts` (users → devices →
  * rollups) to avoid relying on Supabase's nested-relation filter syntax.
  */
 async function loadKnownModels(
   admin: ReturnType<typeof createAdminClient>,
-  orgId: string
+  workspaceId: string
 ): Promise<string[]> {
   const { data: orgUsers } = await admin
     .from("users")
     .select("id")
-    .eq("org_id", orgId);
+    .eq("workspace_id", workspaceId);
   const userIds = (orgUsers ?? []).map((u) => u.id as string);
   if (userIds.length === 0) return [];
 
@@ -197,17 +197,17 @@ export async function previewPricingCsv(
   const text = await file.text();
   const admin = createAdminClient();
 
-  const aliases = await loadAliasDict(admin, auth.me.org_id);
+  const aliases = await loadAliasDict(admin, auth.me.workspace_id);
 
   const result = parsePricingCsv(text, aliases);
 
-  // Duplicate heuristic: same filename already uploaded for this org.
+  // Duplicate heuristic: same filename already uploaded for this workspace.
   let duplicateOfListName: string | null = null;
   if (file.name) {
     const { data: prior } = await admin
-      .from("org_price_lists")
+      .from("workspace_price_lists")
       .select("name, source_file_name")
-      .eq("org_id", auth.me.org_id)
+      .eq("workspace_id", auth.me.workspace_id)
       .eq("source_file_name", file.name)
       .order("uploaded_at", { ascending: false })
       .limit(1);
@@ -296,7 +296,7 @@ export async function commitPricingDraft(
   const text = await file.text();
   const admin = createAdminClient();
 
-  const aliases = await loadAliasDict(admin, auth.me.org_id);
+  const aliases = await loadAliasDict(admin, auth.me.workspace_id);
 
   const parsed = parsePricingCsv(text, aliases);
   if (parsed.rows.length === 0) {
@@ -304,9 +304,9 @@ export async function commitPricingDraft(
   }
 
   const { data: listInsert, error: listError } = await admin
-    .from("org_price_lists")
+    .from("workspace_price_lists")
     .insert({
-      org_id: auth.me.org_id,
+      workspace_id: auth.me.workspace_id,
       name,
       description,
       source_file_name: file.name || null,
@@ -333,12 +333,12 @@ export async function commitPricingDraft(
   }));
 
   const { error: rowsError } = await admin
-    .from("org_price_list_rows")
+    .from("workspace_price_list_rows")
     .insert(rowsToInsert);
   if (rowsError) {
     // Roll the draft back on row-insert failure so the UI doesn't show an
     // empty draft the manager can't recover.
-    await admin.from("org_price_lists").delete().eq("id", listId);
+    await admin.from("workspace_price_lists").delete().eq("id", listId);
     return { error: "Failed to save price list rows" };
   }
 
@@ -358,11 +358,11 @@ export async function activatePricingList(
 
   const admin = createAdminClient();
   const { data: list } = await admin
-    .from("org_price_lists")
-    .select("id, org_id, status, effective_from")
+    .from("workspace_price_lists")
+    .select("id, workspace_id, status, effective_from")
     .eq("id", listId)
     .single();
-  if (!list || list.org_id !== auth.me.org_id) {
+  if (!list || list.workspace_id !== auth.me.workspace_id) {
     return { error: "Price list not found" };
   }
   if (list.status === "active") {
@@ -374,26 +374,26 @@ export async function activatePricingList(
 
   const newEffectiveFrom = list.effective_from as string;
 
-  // Archive previously-active lists for this org. Their effective_to becomes
+  // Archive previously-active lists for this workspace. Their effective_to becomes
   // the new list's effective_from (one-day overlap is fine — recalc resolves
   // to the most-specific row, and the new list will outrank the old where
   // they tie because it has a higher id).
   const { data: priorActive } = await admin
-    .from("org_price_lists")
+    .from("workspace_price_lists")
     .select("id")
-    .eq("org_id", auth.me.org_id)
+    .eq("workspace_id", auth.me.workspace_id)
     .eq("status", "active");
 
   if (priorActive && priorActive.length > 0) {
     const priorIds = priorActive.map((r) => r.id as number);
     await admin
-      .from("org_price_lists")
+      .from("workspace_price_lists")
       .update({ status: "archived", effective_to: newEffectiveFrom })
       .in("id", priorIds);
   }
 
   const { error: activateError } = await admin
-    .from("org_price_lists")
+    .from("workspace_price_lists")
     .update({ status: "active" })
     .eq("id", listId);
   if (activateError) return { error: "Failed to activate list" };
@@ -403,7 +403,7 @@ export async function activatePricingList(
   const today = new Date().toISOString().slice(0, 10);
   try {
     await recalculateEffectiveCost({
-      orgId: auth.me.org_id,
+      workspaceId: auth.me.workspace_id,
       fromDate: newEffectiveFrom,
       toDate: today,
       triggeredBy: auth.me.id,
@@ -432,18 +432,18 @@ export async function discardPricingDraft(
 
   const admin = createAdminClient();
   const { data: list } = await admin
-    .from("org_price_lists")
-    .select("id, org_id, status")
+    .from("workspace_price_lists")
+    .select("id, workspace_id, status")
     .eq("id", listId)
     .single();
-  if (!list || list.org_id !== auth.me.org_id) {
+  if (!list || list.workspace_id !== auth.me.workspace_id) {
     return { error: "Price list not found" };
   }
   if (list.status !== "draft") {
     return { error: "Only drafts can be discarded" };
   }
 
-  await admin.from("org_price_lists").delete().eq("id", listId);
+  await admin.from("workspace_price_lists").delete().eq("id", listId);
   revalidatePath("/dashboard/settings/pricing");
   return { ok: true };
 }

@@ -1,10 +1,10 @@
 "use client";
 
 import { useActionState } from "react";
-import { createOrg } from "@/app/actions/org";
+import { createWorkspace } from "@/app/actions/workspace";
 
-export function OrgSetupForm() {
-  const [state, action, pending] = useActionState(createOrg, undefined);
+export function WorkspaceSetupForm() {
+  const [state, action, pending] = useActionState(createWorkspace, undefined);
 
   return (
     <form action={action} className="space-y-4">

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isInvitePath } from "@/lib/auth-redirect";
-import { OrgSetupForm } from "./form";
+import { WorkspaceSetupForm } from "./form";
 
 export const dynamic = "force-dynamic";
 
@@ -19,20 +19,20 @@ export default async function SetupPage({
   if (!user) redirect("/login");
 
   // If the user landed here while in the middle of accepting an invite,
-  // forward to the invite page so they join the inviter's org instead of
+  // forward to the invite page so they join the inviter's workspace instead of
   // creating their own (issue #62).
   const { next } = await searchParams;
   if (isInvitePath(next)) redirect(next);
 
-  // Check if user already has an org
+  // Check if user already has a workspace
   const admin = createAdminClient();
   const { data: budiUser } = await admin
     .from("users")
-    .select("org_id")
+    .select("workspace_id")
     .eq("id", user.id)
     .single();
 
-  if (budiUser?.org_id) redirect("/dashboard");
+  if (budiUser?.workspace_id) redirect("/dashboard");
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
@@ -43,7 +43,7 @@ export default async function SetupPage({
             Set up a workspace to start tracking team AI costs.
           </p>
         </div>
-        <OrgSetupForm />
+        <WorkspaceSetupForm />
       </div>
     </main>
   );

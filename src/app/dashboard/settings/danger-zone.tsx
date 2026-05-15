@@ -2,25 +2,26 @@
 
 import { useState, useTransition } from "react";
 import { clsx } from "clsx";
-import { deleteOrganization, leaveOrganization } from "@/app/actions/org";
+import { deleteWorkspace, leaveWorkspace } from "@/app/actions/workspace";
 
 /**
  * Destructive-action card shown at the bottom of /dashboard/settings.
  *
- * Managers see "Delete organization" (nukes the org + all synced data);
- * members see "Leave organization" (wipes only their own devices and
- * rollups). Both paths sign the caller out and bounce them to /login.
+ * Managers see "Delete workspace" (nukes the workspace + all synced data);
+ * members see "Leave workspace" (wipes only their own devices and rollups).
+ * Both paths sign the caller out and bounce them to /login.
  *
- * The delete flow requires typing the org name into a confirmation input —
- * the server re-verifies this, but guarding it client-side as well keeps the
- * destructive button disabled until the user has done the deliberate act.
+ * The delete flow requires typing the workspace name into a confirmation
+ * input — the server re-verifies this, but guarding it client-side as well
+ * keeps the destructive button disabled until the user has done the
+ * deliberate act.
  */
 export function DangerZone({
   userRole,
-  orgName,
+  workspaceName,
 }: {
   userRole: string;
-  orgName: string;
+  workspaceName: string;
 }) {
   const isManager = userRole === "manager";
 
@@ -38,22 +39,22 @@ export function DangerZone({
 
       <div className="mt-4">
         {isManager ? (
-          <DeleteOrgButton orgName={orgName} />
+          <DeleteWorkspaceButton workspaceName={workspaceName} />
         ) : (
-          <LeaveOrgButton orgName={orgName} />
+          <LeaveWorkspaceButton workspaceName={workspaceName} />
         )}
       </div>
     </section>
   );
 }
 
-function DeleteOrgButton({ orgName }: { orgName: string }) {
+function DeleteWorkspaceButton({ workspaceName }: { workspaceName: string }) {
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const canSubmit = confirm.trim() === orgName && !pending;
+  const canSubmit = confirm.trim() === workspaceName && !pending;
 
   function close() {
     if (pending) return;
@@ -65,7 +66,7 @@ function DeleteOrgButton({ orgName }: { orgName: string }) {
   function submit(formData: FormData) {
     setError(null);
     startTransition(async () => {
-      const result = await deleteOrganization(undefined, formData);
+      const result = await deleteWorkspace(undefined, formData);
       // A successful action redirects server-side and never resolves with a
       // return value. Anything we see here is an error path.
       if (result?.error) setError(result.error);
@@ -88,7 +89,7 @@ function DeleteOrgButton({ orgName }: { orgName: string }) {
           onClose={close}
           description={
             <>
-              This will permanently remove <strong>{orgName}</strong>, every
+              This will permanently remove <strong>{workspaceName}</strong>, every
               member, and all synced data. Other members will be signed out the
               next time they open the dashboard.
             </>
@@ -97,7 +98,7 @@ function DeleteOrgButton({ orgName }: { orgName: string }) {
         >
           <form action={submit} className="space-y-3">
             <label className="block text-xs text-zinc-400">
-              Type <span className="font-mono text-zinc-200">{orgName}</span> to
+              Type <span className="font-mono text-zinc-200">{workspaceName}</span> to
               confirm:
             </label>
             <input
@@ -139,7 +140,7 @@ function DeleteOrgButton({ orgName }: { orgName: string }) {
   );
 }
 
-function LeaveOrgButton({ orgName }: { orgName: string }) {
+function LeaveWorkspaceButton({ workspaceName }: { workspaceName: string }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -153,7 +154,7 @@ function LeaveOrgButton({ orgName }: { orgName: string }) {
   function submit() {
     setError(null);
     startTransition(async () => {
-      const result = await leaveOrganization();
+      const result = await leaveWorkspace();
       if (result?.error) setError(result.error);
     });
   }
@@ -175,7 +176,7 @@ function LeaveOrgButton({ orgName }: { orgName: string }) {
           description={
             <>
               This removes your devices and sync history from{" "}
-              <strong>{orgName}</strong>. Your sign-in account stays, so you can
+              <strong>{workspaceName}</strong>. Your sign-in account stays, so you can
               rejoin or create a different workspace later.
             </>
           }

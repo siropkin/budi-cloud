@@ -18,11 +18,12 @@ const RATE_LIMIT = { limit: 20, windowSeconds: 60 } as const;
  * `/v1/ingest/route.ts::authenticateApiKey`; intentionally duplicated so
  * each endpoint stays grep-able on its own.
  *
- * #274: when `org_id` is set we double-check that the org still exists.
- * `deleteOrganization` cascades through the `users` table, so in the normal
- * path the api_key lookup above already fails. The org-existence guard is
- * defense-in-depth: a partial cascade, future schema change, or stale row
- * pointing at a vanished org must not keep authenticating ingest.
+ * #274: when `workspace_id` is set we double-check that the workspace still
+ * exists. `deleteWorkspace` cascades through the `users` table, so in the
+ * normal path the api_key lookup above already fails. The workspace-
+ * existence guard is defense-in-depth: a partial cascade, future schema
+ * change, or stale row pointing at a vanished workspace must not keep
+ * authenticating ingest.
  */
 async function authenticateApiKey(
   supabase: ReturnType<typeof createAdminClient>,
@@ -35,19 +36,19 @@ async function authenticateApiKey(
 
   const { data, error } = await supabase
     .from("users")
-    .select("id, org_id")
+    .select("id, workspace_id")
     .eq("api_key", apiKey)
     .single();
 
   if (error || !data) return null;
 
-  if (data.org_id) {
-    const { data: org } = await supabase
-      .from("orgs")
+  if (data.workspace_id) {
+    const { data: workspace } = await supabase
+      .from("workspaces")
       .select("id")
-      .eq("id", data.org_id)
+      .eq("id", data.workspace_id)
       .single();
-    if (!org) return null;
+    if (!workspace) return null;
   }
 
   return data;
@@ -57,15 +58,18 @@ async function authenticateApiKey(
  * GET /v1/whoami
  *
  * Identifies the bearer of an API key so the CLI can auto-seed
- * `~/.config/budi/cloud.toml` with `org_id` without sending the user
+ * `~/.config/budi/cloud.toml` with `workspace_id` without sending the user
  * to the dashboard to hand-copy it. Paired with siropkin/budi#541 on
  * the CLI side.
  *
  * Auth: Authorization: Bearer budi_<key>
- * Response (200): { "org_id": string }
+ * Response (200): { "workspace_id": string, "org_id": string }
  * Response (401): { "error": "Unauthorized" }
  *
- * No request body; all identity data derives from the key.
+ * Dual-emit window (#321): `org_id` is the legacy field name kept for one
+ * release cycle so daemons predating the rename keep parsing the response.
+ * Both fields carry the same value; the legacy alias goes away after the
+ * daemon's workspace-aware build has soaked.
  */
 export async function GET(request: NextRequest) {
   // --- Pre-auth IP rate limit (#179) ---
@@ -86,5 +90,8 @@ export async function GET(request: NextRequest) {
   );
   if (!keyLimit.success) return rateLimitResponse(keyLimit.retryAfterSeconds);
 
-  return Response.json({ org_id: user.org_id });
+  return Response.json({
+    workspace_id: user.workspace_id,
+    org_id: user.workspace_id,
+  });
 }

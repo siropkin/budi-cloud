@@ -75,7 +75,7 @@ export interface DeviceCost {
 
 /**
  * Get cost breakdown by device.
- * Manager sees every device in the org; member sees only their own (ADR-0083 §6).
+ * Manager sees every device in the workspace; member sees only their own (ADR-0083 §6).
  *
  * Reuses `getVisibleDeviceIds` so the device set — and therefore the rollup
  * sum — matches Overview / Team for the same (user, range). For any visible

@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 /**
  * #182: `/v1/ingest/status` must not leak whether a device_id exists
- * in another org. Both "no such device anywhere" and "device belongs
- * to another org" must return identical responses (status + body).
+ * in another workspace. Both "no such device anywhere" and "device belongs
+ * to another workspace" must return identical responses (status + body).
  */
 
 type Row = Record<string, unknown>;
@@ -111,9 +111,9 @@ const callerOrg = "org_caller";
 const callerUserId = "usr_caller";
 
 function seedCaller() {
-  fake.seed("orgs", [{ id: callerOrg, name: "Caller Org" }]);
+  fake.seed("workspaces", [{ id: callerOrg, name: "Caller Org" }]);
   fake.seed("users", [
-    { id: callerUserId, org_id: callerOrg, api_key: callerKey },
+    { id: callerUserId, workspace_id: callerOrg, api_key: callerKey },
   ]);
 }
 
@@ -183,13 +183,13 @@ describe("GET /v1/ingest/status (#182)", () => {
     expect(body.total_session_records).toBe(1);
   });
 
-  it("returns identical 404 for unknown device and foreign-org device", async () => {
+  it("returns identical 404 for unknown device and foreign-workspace device", async () => {
     // Regression for #182: distinguishing these two cases lets a holder
     // of any valid API key probe the global devices table for existence.
     seedCaller();
     fake.seed("users", [
-      { id: callerUserId, org_id: callerOrg, api_key: callerKey },
-      { id: "usr_other", org_id: "org_other", api_key: "budi_other" },
+      { id: callerUserId, workspace_id: callerOrg, api_key: callerKey },
+      { id: "usr_other", workspace_id: "org_other", api_key: "budi_other" },
     ]);
     fake.seed("devices", [
       {
@@ -215,9 +215,9 @@ describe("GET /v1/ingest/status (#182)", () => {
     // at a vanished org must not keep the `status` endpoint reporting a
     // happy watermark. The local daemon needs an unambiguous 401 to flip
     // out of `ready` and surface a re-link prompt.
-    fake.seed("orgs", []); // org was deleted
+    fake.seed("workspaces", []); // org was deleted
     fake.seed("users", [
-      { id: callerUserId, org_id: callerOrg, api_key: callerKey },
+      { id: callerUserId, workspace_id: callerOrg, api_key: callerKey },
     ]);
 
     const res = await callStatus("dev_anything");

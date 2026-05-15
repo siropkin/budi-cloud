@@ -36,7 +36,7 @@ export default async function PricingSettingsPage({
   }>;
 }) {
   const user = await getCurrentUser();
-  if (!user?.org_id) return null;
+  if (!user?.workspace_id) return null;
   if (user.role !== "manager") notFound();
 
   const params = await searchParams;
@@ -49,18 +49,18 @@ export default async function PricingSettingsPage({
   const [{ data: defaultsRow }, { data: lists }, recalcRuns] =
     await Promise.all([
       admin
-        .from("org_pricing_defaults")
+        .from("workspace_pricing_defaults")
         .select("default_platform, default_region")
-        .eq("org_id", user.org_id)
+        .eq("workspace_id", user.workspace_id)
         .maybeSingle(),
       admin
-        .from("org_price_lists")
+        .from("workspace_price_lists")
         .select(
           "id, name, status, effective_from, effective_to, source_file_name, uploaded_at, uploaded_by"
         )
-        .eq("org_id", user.org_id)
+        .eq("workspace_id", user.workspace_id)
         .order("uploaded_at", { ascending: false }),
-      getRecalculationRuns(user.org_id, {
+      getRecalculationRuns(user.workspace_id, {
         status: recalcStatus === "all" ? null : recalcStatus,
         limit: PAGE_SIZE,
         offset: recalcOffset,

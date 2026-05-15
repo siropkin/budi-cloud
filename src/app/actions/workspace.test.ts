@@ -14,7 +14,7 @@ class FakeSupabase {
   tables = new Map<string, Row[]>();
   /**
    * Captures the most recent `rpc()` invocation. The real
-   * `delete_org_cascade` (migration 024) runs server-side as one
+   * `delete_workspace_cascade` (migration 024) runs server-side as one
    * transaction; in the fake we re-implement the same delete order so the
    * test still observes the post-cascade state — but we also record the
    * call so a regression that bypasses the RPC fails the existing tests.
@@ -32,16 +32,16 @@ class FakeSupabase {
     const error = this.rpcErrors.get(name);
     if (error) return Promise.resolve({ data: null, error });
 
-    if (name === "delete_org_cascade") {
-      const orgId = args.p_org_id as string;
+    if (name === "delete_workspace_cascade") {
+      const workspaceId = args.p_workspace_id as string;
       const userIds = this.rows("users")
-        .filter((u) => u.org_id === orgId)
+        .filter((u) => u.workspace_id === workspaceId)
         .map((u) => u.id as string);
       const deviceIds = this.rows("devices")
         .filter((d) => userIds.includes(d.user_id as string))
         .map((d) => d.id as string);
-      const listIds = this.rows("org_price_lists")
-        .filter((l) => l.org_id === orgId)
+      const listIds = this.rows("workspace_price_lists")
+        .filter((l) => l.workspace_id === workspaceId)
         .map((l) => l.id as string | number);
 
       this.tables.set(
@@ -63,33 +63,43 @@ class FakeSupabase {
         )
       );
       this.tables.set(
-        "org_price_list_rows",
-        this.rows("org_price_list_rows").filter(
+        "workspace_price_list_rows",
+        this.rows("workspace_price_list_rows").filter(
           (r) => !listIds.includes(r.list_id as string | number)
         )
       );
       this.tables.set(
-        "org_price_lists",
-        this.rows("org_price_lists").filter((r) => r.org_id !== orgId)
+        "workspace_price_lists",
+        this.rows("workspace_price_lists").filter(
+          (r) => r.workspace_id !== workspaceId
+        )
       );
       this.tables.set(
-        "org_pricing_defaults",
-        this.rows("org_pricing_defaults").filter((r) => r.org_id !== orgId)
+        "workspace_pricing_defaults",
+        this.rows("workspace_pricing_defaults").filter(
+          (r) => r.workspace_id !== workspaceId
+        )
       );
       this.tables.set(
         "recalculation_runs",
-        this.rows("recalculation_runs").filter((r) => r.org_id !== orgId)
+        this.rows("recalculation_runs").filter(
+          (r) => r.workspace_id !== workspaceId
+        )
       );
       this.tables.set(
         "invite_tokens",
-        this.rows("invite_tokens").filter((r) => r.org_id !== orgId)
+        this.rows("invite_tokens").filter(
+          (r) => r.workspace_id !== workspaceId
+        )
       );
-      const usersAfter = this.rows("users").filter((r) => r.org_id !== orgId);
+      const usersAfter = this.rows("users").filter(
+        (r) => r.workspace_id !== workspaceId
+      );
       const usersDeleted = this.rows("users").length - usersAfter.length;
       this.tables.set("users", usersAfter);
       this.tables.set(
-        "orgs",
-        this.rows("orgs").filter((r) => r.id !== orgId)
+        "workspaces",
+        this.rows("workspaces").filter((r) => r.id !== workspaceId)
       );
       return Promise.resolve({ data: usersDeleted, error: null });
     }
@@ -248,16 +258,16 @@ vi.mock("next/cache", () => ({
 
 beforeEach(() => {
   for (const t of [
-    "orgs",
+    "workspaces",
     "users",
     "devices",
     "daily_rollups",
     "session_summaries",
     "invite_tokens",
     "invite_redemptions",
-    "org_price_lists",
-    "org_price_list_rows",
-    "org_pricing_defaults",
+    "workspace_price_lists",
+    "workspace_price_list_rows",
+    "workspace_pricing_defaults",
     "recalculation_runs",
   ]) {
     fake.seed(t, []);
@@ -271,17 +281,17 @@ beforeEach(() => {
 });
 
 function seedSoloManagerWithData() {
-  fake.seed("orgs", [{ id: "org_acme", name: "Acme Co" }]);
+  fake.seed("workspaces", [{ id: "org_acme", name: "Acme Co" }]);
   fake.seed("users", [
     {
       id: "usr_ivan",
-      org_id: "org_acme",
+      workspace_id: "org_acme",
       role: "manager",
       api_key: "budi_x",
     },
     {
       id: "usr_pat",
-      org_id: "org_acme",
+      workspace_id: "org_acme",
       role: "member",
       api_key: "budi_y",
     },
@@ -299,70 +309,71 @@ function seedSoloManagerWithData() {
     { device_id: "dev_pat", session_id: "s2" },
   ]);
   fake.seed("invite_tokens", [
-    { id: "tok_1", org_id: "org_acme", created_by: "usr_ivan" },
+    { id: "tok_1", workspace_id: "org_acme", created_by: "usr_ivan" },
   ]);
   authUserId = "usr_ivan";
 }
 
 async function loadActions() {
-  return await import("@/app/actions/org");
+  return await import("@/app/actions/workspace");
 }
 
-describe("deleteOrganization", () => {
-  it("cascades through session summaries, rollups, devices, pricing, invites, users, then the org itself", async () => {
+describe("deleteWorkspace", () => {
+  it("cascades through session summaries, rollups, devices, pricing, invites, users, then the workspace itself", async () => {
     seedSoloManagerWithData();
-    const { deleteOrganization } = await loadActions();
-    const { ORG_CASCADE_ORDER } = await import("@/app/actions/org-cascade");
+    const { deleteWorkspace } = await loadActions();
+    const { WORKSPACE_CASCADE_ORDER } = await import("@/app/actions/workspace-cascade");
 
     // Snapshot the declared order alongside the test so a change to one
     // without the other fails loudly. This must match the body of
-    // `delete_org_cascade` in `supabase/migrations/024_delete_org_cascade.sql`.
-    expect(ORG_CASCADE_ORDER).toEqual([
+    // `delete_workspace_cascade` in
+    // `supabase/migrations/025_rename_org_to_workspace.sql`.
+    expect(WORKSPACE_CASCADE_ORDER).toEqual([
       "session_summaries",
       "daily_rollups",
       "devices",
-      "org_price_list_rows",
-      "org_price_lists",
-      "org_pricing_defaults",
+      "workspace_price_list_rows",
+      "workspace_price_lists",
+      "workspace_pricing_defaults",
       "recalculation_runs",
       "invite_tokens",
       "users",
-      "orgs",
+      "workspaces",
     ]);
 
     const fd = new FormData();
     fd.set("confirm", "Acme Co");
 
-    await expect(deleteOrganization(undefined, fd)).rejects.toThrow(
+    await expect(deleteWorkspace(undefined, fd)).rejects.toThrow(
       "__REDIRECT__"
     );
 
-    expect(fake.lastRpc?.name).toBe("delete_org_cascade");
-    expect(fake.lastRpc?.args).toEqual({ p_org_id: "org_acme" });
+    expect(fake.lastRpc?.name).toBe("delete_workspace_cascade");
+    expect(fake.lastRpc?.args).toEqual({ p_workspace_id: "org_acme" });
 
     expect(fake.rows("session_summaries")).toHaveLength(0);
     expect(fake.rows("daily_rollups")).toHaveLength(0);
     expect(fake.rows("devices")).toHaveLength(0);
     expect(fake.rows("invite_tokens")).toHaveLength(0);
     expect(fake.rows("users")).toHaveLength(0);
-    expect(fake.rows("orgs")).toHaveLength(0);
+    expect(fake.rows("workspaces")).toHaveLength(0);
     expect(signOut).toHaveBeenCalledOnce();
     expect(redirectMock).toHaveBeenCalledWith("/login");
   });
 
-  it("also clears the org's pricing tables (#276 regression — the manager-uploaded-a-price-list path)", async () => {
+  it("also clears the workspace's pricing tables (#276 regression — the manager-uploaded-a-price-list path)", async () => {
     seedSoloManagerWithData();
-    fake.seed("org_price_lists", [
+    fake.seed("workspace_price_lists", [
       {
         id: 1,
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         name: "Q4 2026",
         effective_from: "2026-01-01",
         status: "active",
         uploaded_by: "usr_ivan",
       },
     ]);
-    fake.seed("org_price_list_rows", [
+    fake.seed("workspace_price_list_rows", [
       {
         id: 1,
         list_id: 1,
@@ -372,9 +383,9 @@ describe("deleteOrganization", () => {
         sale_usd_per_mtok: 1.5,
       },
     ]);
-    fake.seed("org_pricing_defaults", [
+    fake.seed("workspace_pricing_defaults", [
       {
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         default_platform: "anthropic",
         updated_by: "usr_ivan",
       },
@@ -382,17 +393,17 @@ describe("deleteOrganization", () => {
     fake.seed("recalculation_runs", [
       {
         id: 1,
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         status: "succeeded",
         triggered_by: "usr_ivan",
       },
     ]);
 
-    const { deleteOrganization } = await loadActions();
+    const { deleteWorkspace } = await loadActions();
     const fd = new FormData();
     fd.set("confirm", "Acme Co");
 
-    await expect(deleteOrganization(undefined, fd)).rejects.toThrow(
+    await expect(deleteWorkspace(undefined, fd)).rejects.toThrow(
       "__REDIRECT__"
     );
 
@@ -400,29 +411,29 @@ describe("deleteOrganization", () => {
     // that the original implementation left behind (#276) because the
     // `DELETE FROM users` raised an FK violation against `updated_by` /
     // `uploaded_by` / `triggered_by` and supabase-js never threw.
-    expect(fake.rows("org_price_list_rows")).toHaveLength(0);
-    expect(fake.rows("org_price_lists")).toHaveLength(0);
-    expect(fake.rows("org_pricing_defaults")).toHaveLength(0);
+    expect(fake.rows("workspace_price_list_rows")).toHaveLength(0);
+    expect(fake.rows("workspace_price_lists")).toHaveLength(0);
+    expect(fake.rows("workspace_pricing_defaults")).toHaveLength(0);
     expect(fake.rows("recalculation_runs")).toHaveLength(0);
     expect(fake.rows("users")).toHaveLength(0);
-    expect(fake.rows("orgs")).toHaveLength(0);
+    expect(fake.rows("workspaces")).toHaveLength(0);
   });
 
   it("surfaces the RPC error to the UI instead of silently signing the user out", async () => {
     seedSoloManagerWithData();
-    fake.rpcErrors.set("delete_org_cascade", {
+    fake.rpcErrors.set("delete_workspace_cascade", {
       message: "foreign key violation on org_price_lists",
     });
 
-    const { deleteOrganization } = await loadActions();
+    const { deleteWorkspace } = await loadActions();
     const fd = new FormData();
     fd.set("confirm", "Acme Co");
 
-    const result = await deleteOrganization(undefined, fd);
+    const result = await deleteWorkspace(undefined, fd);
     expect(result?.error).toMatch(/foreign key violation/i);
     // Nothing else must change — the user should still be signed in and
     // able to retry / report the failure.
-    expect(fake.rows("orgs")).toHaveLength(1);
+    expect(fake.rows("workspaces")).toHaveLength(1);
     expect(fake.rows("users")).toHaveLength(2);
     expect(signOut).not.toHaveBeenCalled();
     expect(redirectMock).not.toHaveBeenCalled();
@@ -432,31 +443,31 @@ describe("deleteOrganization", () => {
     seedSoloManagerWithData();
     authUserId = "usr_pat"; // member
 
-    const { deleteOrganization } = await loadActions();
+    const { deleteWorkspace } = await loadActions();
     const fd = new FormData();
     fd.set("confirm", "Acme Co");
 
-    const result = await deleteOrganization(undefined, fd);
+    const result = await deleteWorkspace(undefined, fd);
     expect(result).toEqual({
       error: "Only managers can delete the workspace",
     });
-    expect(fake.rows("orgs")).toHaveLength(1);
+    expect(fake.rows("workspaces")).toHaveLength(1);
     expect(fake.rows("users")).toHaveLength(2);
     expect(signOut).not.toHaveBeenCalled();
   });
 
-  it("rejects when the typed confirmation does not match the org name", async () => {
+  it("rejects when the typed confirmation does not match the workspace name", async () => {
     seedSoloManagerWithData();
-    const { deleteOrganization } = await loadActions();
+    const { deleteWorkspace } = await loadActions();
 
     const fd = new FormData();
     fd.set("confirm", "acme co"); // wrong case
 
-    const result = await deleteOrganization(undefined, fd);
+    const result = await deleteWorkspace(undefined, fd);
     expect(result).toEqual({
       error: "Type the workspace name exactly to confirm",
     });
-    expect(fake.rows("orgs")).toHaveLength(1);
+    expect(fake.rows("workspaces")).toHaveLength(1);
     expect(fake.rows("daily_rollups")).toHaveLength(2);
     expect(signOut).not.toHaveBeenCalled();
   });
@@ -465,34 +476,34 @@ describe("deleteOrganization", () => {
     seedSoloManagerWithData();
     authUserId = null;
 
-    const { deleteOrganization } = await loadActions();
+    const { deleteWorkspace } = await loadActions();
     const fd = new FormData();
     fd.set("confirm", "Acme Co");
 
-    const result = await deleteOrganization(undefined, fd);
+    const result = await deleteWorkspace(undefined, fd);
     expect(result).toEqual({ error: "Not authenticated" });
-    expect(fake.rows("orgs")).toHaveLength(1);
+    expect(fake.rows("workspaces")).toHaveLength(1);
   });
 });
 
-describe("leaveOrganization", () => {
-  it("wipes the caller's devices and data, nulls their org_id, and signs them out", async () => {
+describe("leaveWorkspace", () => {
+  it("wipes the caller's devices and data, nulls their workspace_id, and signs them out", async () => {
     seedSoloManagerWithData();
     authUserId = "usr_pat"; // member
 
-    const { leaveOrganization } = await loadActions();
+    const { leaveWorkspace } = await loadActions();
 
-    await expect(leaveOrganization()).rejects.toThrow("__REDIRECT__");
+    await expect(leaveWorkspace()).rejects.toThrow("__REDIRECT__");
 
     const users = fake.rows("users");
     const pat = users.find((u) => u.id === "usr_pat");
     const ivan = users.find((u) => u.id === "usr_ivan");
 
-    expect(pat?.org_id).toBeNull();
+    expect(pat?.workspace_id).toBeNull();
     expect(pat?.role).toBe("member");
     // The org and its other members must be untouched.
-    expect(ivan?.org_id).toBe("org_acme");
-    expect(fake.rows("orgs")).toHaveLength(1);
+    expect(ivan?.workspace_id).toBe("org_acme");
+    expect(fake.rows("workspaces")).toHaveLength(1);
 
     // Only Pat's devices / data should be gone.
     const remainingDevices = fake.rows("devices");
@@ -510,9 +521,9 @@ describe("leaveOrganization", () => {
     seedSoloManagerWithData();
     authUserId = "usr_ivan"; // manager
 
-    const { leaveOrganization } = await loadActions();
+    const { leaveWorkspace } = await loadActions();
 
-    const result = await leaveOrganization();
+    const result = await leaveWorkspace();
     expect(result?.error).toMatch(/can't leave/i);
     expect(fake.rows("devices")).toHaveLength(2);
     expect(signOut).not.toHaveBeenCalled();
@@ -520,30 +531,30 @@ describe("leaveOrganization", () => {
 
   it("rejects a caller who isn't in any org", async () => {
     fake.seed("users", [
-      { id: "usr_nobody", org_id: null, role: "member", api_key: "budi_z" },
+      { id: "usr_nobody", workspace_id: null, role: "member", api_key: "budi_z" },
     ]);
     authUserId = "usr_nobody";
 
-    const { leaveOrganization } = await loadActions();
-    const result = await leaveOrganization();
+    const { leaveWorkspace } = await loadActions();
+    const result = await leaveWorkspace();
     expect(result).toEqual({ error: "Not a member of any workspace" });
   });
 });
 
 describe("updateMemberRole", () => {
   function seedTwoOrgs() {
-    fake.seed("orgs", [
+    fake.seed("workspaces", [
       { id: "org_acme", name: "Acme Co" },
       { id: "org_other", name: "Other Inc" },
     ]);
     fake.seed("users", [
-      { id: "usr_ivan", org_id: "org_acme", role: "manager", api_key: "k1" },
-      { id: "usr_pat", org_id: "org_acme", role: "member", api_key: "k2" },
-      { id: "usr_jess", org_id: "org_acme", role: "manager", api_key: "k3" },
+      { id: "usr_ivan", workspace_id: "org_acme", role: "manager", api_key: "k1" },
+      { id: "usr_pat", workspace_id: "org_acme", role: "member", api_key: "k2" },
+      { id: "usr_jess", workspace_id: "org_acme", role: "manager", api_key: "k3" },
       // Cross-org user — must never be reachable from an Acme manager.
       {
         id: "usr_outsider",
-        org_id: "org_other",
+        workspace_id: "org_other",
         role: "member",
         api_key: "k4",
       },
@@ -576,11 +587,11 @@ describe("updateMemberRole", () => {
   });
 
   it("refuses to demote the last remaining manager (other-demote)", async () => {
-    fake.seed("orgs", [{ id: "org_acme", name: "Acme Co" }]);
+    fake.seed("workspaces", [{ id: "org_acme", name: "Acme Co" }]);
     fake.seed("users", [
-      { id: "usr_ivan", org_id: "org_acme", role: "manager", api_key: "k1" },
-      { id: "usr_pat", org_id: "org_acme", role: "member", api_key: "k2" },
-      { id: "usr_jess", org_id: "org_acme", role: "manager", api_key: "k3" },
+      { id: "usr_ivan", workspace_id: "org_acme", role: "manager", api_key: "k1" },
+      { id: "usr_pat", workspace_id: "org_acme", role: "member", api_key: "k2" },
+      { id: "usr_jess", workspace_id: "org_acme", role: "manager", api_key: "k3" },
     ]);
     // Ivan demotes Jess first — now Ivan is the only manager.
     authUserId = "usr_ivan";
@@ -601,10 +612,10 @@ describe("updateMemberRole", () => {
   });
 
   it("refuses self-demote when caller is the last manager", async () => {
-    fake.seed("orgs", [{ id: "org_acme", name: "Acme Co" }]);
+    fake.seed("workspaces", [{ id: "org_acme", name: "Acme Co" }]);
     fake.seed("users", [
-      { id: "usr_ivan", org_id: "org_acme", role: "manager", api_key: "k1" },
-      { id: "usr_pat", org_id: "org_acme", role: "member", api_key: "k2" },
+      { id: "usr_ivan", workspace_id: "org_acme", role: "manager", api_key: "k1" },
+      { id: "usr_pat", workspace_id: "org_acme", role: "member", api_key: "k2" },
     ]);
     authUserId = "usr_ivan";
 
@@ -630,7 +641,7 @@ describe("updateMemberRole", () => {
     expect(pat?.role).toBe("member");
   });
 
-  it("refuses to touch a user from another org", async () => {
+  it("refuses to touch a user from another workspace", async () => {
     seedTwoOrgs();
     authUserId = "usr_ivan";
 
@@ -678,21 +689,21 @@ describe("updateMemberRole", () => {
   });
 });
 
-describe("switchOrganization", () => {
+describe("switchWorkspace", () => {
   const FUTURE = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   const PAST = new Date(Date.now() - 60 * 1000).toISOString();
 
   function seedSwitchableMember() {
-    fake.seed("orgs", [
+    fake.seed("workspaces", [
       { id: "org_acme", name: "Acme Co" },
       { id: "org_other", name: "Other Inc" },
     ]);
     fake.seed("users", [
-      { id: "usr_ivan", org_id: "org_other", role: "manager", api_key: "k1" },
-      { id: "usr_alice", org_id: "org_other", role: "member", api_key: "k2" },
+      { id: "usr_ivan", workspace_id: "org_other", role: "manager", api_key: "k1" },
+      { id: "usr_alice", workspace_id: "org_other", role: "member", api_key: "k2" },
       {
         id: "usr_acme_mgr",
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         role: "manager",
         api_key: "k3",
       },
@@ -707,7 +718,7 @@ describe("switchOrganization", () => {
     fake.seed("invite_tokens", [
       {
         id: "tok_acme",
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         role: "member",
         created_by: "usr_acme_mgr",
         expires_at: FUTURE,
@@ -721,23 +732,23 @@ describe("switchOrganization", () => {
     return f;
   }
 
-  it("flips the caller's org_id, leaves devices/data intact, and writes an audit row", async () => {
+  it("flips the caller's workspace_id, leaves devices/data intact, and writes an audit row", async () => {
     seedSwitchableMember();
     authUserId = "usr_alice";
 
-    const { switchOrganization } = await loadActions();
+    const { switchWorkspace } = await loadActions();
     await expect(
-      switchOrganization(
+      switchWorkspace(
         undefined,
-        fd({ token: "tok_acme", targetOrgId: "org_acme", confirm: "Acme Co" })
+        fd({ token: "tok_acme", targetWorkspaceId: "org_acme", confirm: "Acme Co" })
       )
     ).rejects.toThrow("__REDIRECT__");
 
     const alice = fake.rows("users").find((u) => u.id === "usr_alice");
-    expect(alice?.org_id).toBe("org_acme");
+    expect(alice?.workspace_id).toBe("org_acme");
     expect(alice?.role).toBe("member");
 
-    // Devices + synced data follow the user (FKs are user_id, not org_id).
+    // Devices + synced data follow the user (FKs are user_id, not workspace_id).
     expect(fake.rows("devices")).toHaveLength(1);
     expect(fake.rows("daily_rollups")).toHaveLength(1);
     expect(fake.rows("session_summaries")).toHaveLength(1);
@@ -758,15 +769,15 @@ describe("switchOrganization", () => {
     seedSwitchableMember();
     authUserId = "usr_ivan"; // manager of org_other
 
-    const { switchOrganization } = await loadActions();
-    const result = await switchOrganization(
+    const { switchWorkspace } = await loadActions();
+    const result = await switchWorkspace(
       undefined,
-      fd({ token: "tok_acme", targetOrgId: "org_acme", confirm: "Acme Co" })
+      fd({ token: "tok_acme", targetWorkspaceId: "org_acme", confirm: "Acme Co" })
     );
 
     expect(result?.error).toMatch(/Managers can't switch/i);
     const ivan = fake.rows("users").find((u) => u.id === "usr_ivan");
-    expect(ivan?.org_id).toBe("org_other");
+    expect(ivan?.workspace_id).toBe("org_other");
     expect(fake.rows("invite_redemptions")).toHaveLength(0);
   });
 
@@ -774,10 +785,10 @@ describe("switchOrganization", () => {
     seedSwitchableMember();
     authUserId = null;
 
-    const { switchOrganization } = await loadActions();
-    const result = await switchOrganization(
+    const { switchWorkspace } = await loadActions();
+    const result = await switchWorkspace(
       undefined,
-      fd({ token: "tok_acme", targetOrgId: "org_acme", confirm: "Acme Co" })
+      fd({ token: "tok_acme", targetWorkspaceId: "org_acme", confirm: "Acme Co" })
     );
 
     expect(result).toEqual({ error: "Not authenticated" });
@@ -788,7 +799,7 @@ describe("switchOrganization", () => {
     fake.seed("invite_tokens", [
       {
         id: "tok_acme",
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         role: "member",
         created_by: "usr_acme_mgr",
         expires_at: PAST,
@@ -796,61 +807,61 @@ describe("switchOrganization", () => {
     ]);
     authUserId = "usr_alice";
 
-    const { switchOrganization } = await loadActions();
-    const result = await switchOrganization(
+    const { switchWorkspace } = await loadActions();
+    const result = await switchWorkspace(
       undefined,
-      fd({ token: "tok_acme", targetOrgId: "org_acme", confirm: "Acme Co" })
+      fd({ token: "tok_acme", targetWorkspaceId: "org_acme", confirm: "Acme Co" })
     );
 
     expect(result).toEqual({ error: "Invite link has expired" });
     const alice = fake.rows("users").find((u) => u.id === "usr_alice");
-    expect(alice?.org_id).toBe("org_other");
+    expect(alice?.workspace_id).toBe("org_other");
   });
 
   it("refuses a missing/forged token", async () => {
     seedSwitchableMember();
     authUserId = "usr_alice";
 
-    const { switchOrganization } = await loadActions();
-    const result = await switchOrganization(
+    const { switchWorkspace } = await loadActions();
+    const result = await switchWorkspace(
       undefined,
-      fd({ token: "tok_nope", targetOrgId: "org_acme", confirm: "Acme Co" })
+      fd({ token: "tok_nope", targetWorkspaceId: "org_acme", confirm: "Acme Co" })
     );
 
     expect(result).toEqual({ error: "Invite link is invalid" });
   });
 
-  it("refuses a tampered targetOrgId that doesn't match the token", async () => {
+  it("refuses a tampered targetWorkspaceId that doesn't match the token", async () => {
     seedSwitchableMember();
     authUserId = "usr_alice";
 
-    const { switchOrganization } = await loadActions();
-    const result = await switchOrganization(
+    const { switchWorkspace } = await loadActions();
+    const result = await switchWorkspace(
       undefined,
-      fd({ token: "tok_acme", targetOrgId: "org_other", confirm: "Acme Co" })
+      fd({ token: "tok_acme", targetWorkspaceId: "org_other", confirm: "Acme Co" })
     );
 
     expect(result).toEqual({
       error: "Invite link does not match the target workspace",
     });
     const alice = fake.rows("users").find((u) => u.id === "usr_alice");
-    expect(alice?.org_id).toBe("org_other");
+    expect(alice?.workspace_id).toBe("org_other");
   });
 
   it("requires the typed confirmation to match the target org name", async () => {
     seedSwitchableMember();
     authUserId = "usr_alice";
 
-    const { switchOrganization } = await loadActions();
-    const result = await switchOrganization(
+    const { switchWorkspace } = await loadActions();
+    const result = await switchWorkspace(
       undefined,
-      fd({ token: "tok_acme", targetOrgId: "org_acme", confirm: "acme co" })
+      fd({ token: "tok_acme", targetWorkspaceId: "org_acme", confirm: "acme co" })
     );
 
     expect(result).toEqual({
       error: "Type the workspace name exactly to confirm",
     });
     const alice = fake.rows("users").find((u) => u.id === "usr_alice");
-    expect(alice?.org_id).toBe("org_other");
+    expect(alice?.workspace_id).toBe("org_other");
   });
 });

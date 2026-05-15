@@ -16,7 +16,7 @@ export default async function DashboardLayout({
   const user = await getCurrentUser();
 
   if (!user) redirect("/auth/error?reason=missing_user_record");
-  if (!user.org_id) redirect("/setup");
+  if (!user.workspace_id) redirect("/setup");
 
   // Fresh on every render because the layout is `force-dynamic`. Opening the
   // dashboard (especially via the local statusline link) therefore always

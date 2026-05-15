@@ -2,47 +2,49 @@
 
 import { useState, useTransition } from "react";
 import { clsx } from "clsx";
-import { switchOrganization } from "@/app/actions/org";
+import { switchWorkspace } from "@/app/actions/workspace";
 
 /**
- * Cross-org switch panel for `/invite/[token]` (#72).
+ * Cross-workspace switch panel for `/invite/[token]` (#72).
  *
- * Shown when an authenticated user clicks an invite for an org other than
- * the one they currently belong to. Replaces the old dead-end "Multi-org is
- * not supported yet" copy with an explicit, opt-in switch path.
+ * Shown when an authenticated user clicks an invite for a workspace other
+ * than the one they currently belong to. Replaces the old dead-end
+ * "Multi-workspace is not supported yet" copy with an explicit, opt-in
+ * switch path.
  *
- * The action is destructive from the *leaving* org's perspective (the user's
- * devices and history move with them and stop being visible to that org's
- * manager), so we mirror the typed-confirmation pattern from
- * `deleteOrganization` — the user has to type the target org's name. The
+ * The action is destructive from the *leaving* workspace's perspective (the
+ * user's devices and history move with them and stop being visible to that
+ * workspace's manager), so we mirror the typed-confirmation pattern from
+ * `deleteWorkspace` — the user has to type the target workspace's name. The
  * server re-validates this; the client gate just keeps the button inert
  * until the user has completed the deliberate act.
  *
  * Managers are blocked at the page level (not rendered here) because the
- * action would otherwise orphan their current org. If a manager somehow
- * reaches this UI, the server action refuses and we surface the error.
+ * action would otherwise orphan their current workspace. If a manager
+ * somehow reaches this UI, the server action refuses and we surface the
+ * error.
  */
-export function CrossOrgSwitch({
+export function CrossWorkspaceSwitch({
   token,
-  currentOrgName,
-  targetOrgId,
-  targetOrgName,
+  currentWorkspaceName,
+  targetWorkspaceId,
+  targetWorkspaceName,
 }: {
   token: string;
-  currentOrgName: string;
-  targetOrgId: string;
-  targetOrgName: string;
+  currentWorkspaceName: string;
+  targetWorkspaceId: string;
+  targetWorkspaceName: string;
 }) {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const canSubmit = confirm.trim() === targetOrgName && !pending;
+  const canSubmit = confirm.trim() === targetWorkspaceName && !pending;
 
   function submit(formData: FormData) {
     setError(null);
     startTransition(async () => {
-      const result = await switchOrganization(undefined, formData);
+      const result = await switchWorkspace(undefined, formData);
       if (result?.error) setError(result.error);
     });
   }
@@ -54,16 +56,16 @@ export function CrossOrgSwitch({
         <div className="mt-4 space-y-3 text-sm text-zinc-300">
           <p>
             You&rsquo;re currently a member of{" "}
-            <strong className="text-zinc-100">{currentOrgName}</strong>.
+            <strong className="text-zinc-100">{currentWorkspaceName}</strong>.
           </p>
           <p>
             This invite is for{" "}
-            <strong className="text-zinc-100">{targetOrgName}</strong>.
+            <strong className="text-zinc-100">{targetWorkspaceName}</strong>.
           </p>
           <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-amber-200">
             If you switch, all of your devices, sessions, and cost history will
-            move with you to <strong>{targetOrgName}</strong>.{" "}
-            <strong>{currentOrgName}</strong>&rsquo;s manager will no longer see
+            move with you to <strong>{targetWorkspaceName}</strong>.{" "}
+            <strong>{currentWorkspaceName}</strong>&rsquo;s manager will no longer see
             your usage.
           </p>
         </div>
@@ -76,10 +78,10 @@ export function CrossOrgSwitch({
 
         <form action={submit} className="mt-5 space-y-3">
           <input type="hidden" name="token" value={token} />
-          <input type="hidden" name="targetOrgId" value={targetOrgId} />
+          <input type="hidden" name="targetWorkspaceId" value={targetWorkspaceId} />
           <label className="block text-xs text-zinc-400">
             Type{" "}
-            <span className="font-mono text-zinc-200">{targetOrgName}</span> to
+            <span className="font-mono text-zinc-200">{targetWorkspaceName}</span> to
             confirm:
           </label>
           <input
@@ -100,7 +102,7 @@ export function CrossOrgSwitch({
                 pending && "pointer-events-none opacity-50"
               )}
             >
-              Stay in {currentOrgName}
+              Stay in {currentWorkspaceName}
             </a>
             <button
               type="submit"
@@ -112,7 +114,7 @@ export function CrossOrgSwitch({
                   : "cursor-not-allowed bg-blue-600/40 text-blue-200/60"
               )}
             >
-              {pending ? "Switching…" : `Switch to ${targetOrgName}`}
+              {pending ? "Switching…" : `Switch to ${targetWorkspaceName}`}
             </button>
           </div>
         </form>

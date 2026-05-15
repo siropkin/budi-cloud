@@ -5,7 +5,7 @@ import {
   getCostBySurface,
   getModelActivityByDay,
   getEarliestActivity,
-  getOrgMembers,
+  getWorkspaceMembers,
   getKnownSurfaces,
 } from "@/lib/dal";
 import { dateRangeFromDays } from "@/lib/date-range";
@@ -47,7 +47,7 @@ export default async function ModelsPage({
 }) {
   const params = await searchParams;
   const user = await getCurrentUser();
-  if (!user?.org_id) return null;
+  if (!user?.workspace_id) return null;
 
   const unit = parseUnit(params.units);
   const surfaces = parseSurfaceParam(params.surface);
@@ -63,7 +63,7 @@ export default async function ModelsPage({
       getCostByModel(user, range, scope),
       getModelActivityByDay(user, range, scope),
       user.role === "manager"
-        ? getOrgMembers(user.org_id)
+        ? getWorkspaceMembers(user.workspace_id)
         : Promise.resolve([]),
       getKnownSurfaces(user, { scopedUserId: scope.scopedUserId }),
       getCostBySurface(user, range, scope),

@@ -10,7 +10,7 @@
  */
 export type { DateRange, ScopeOptions } from "./types";
 
-export { getCurrentUser, getOrgMembers } from "./user";
+export { getCurrentUser, getWorkspaceMembers } from "./user";
 
 export {
   type OverviewStats,
@@ -59,6 +59,6 @@ export { getSyncFreshness } from "./sync";
 
 export {
   type RecalculationRunRow,
-  getOrgHasActivePriceList,
+  getWorkspaceHasActivePriceList,
   getRecalculationRuns,
 } from "./pricing";

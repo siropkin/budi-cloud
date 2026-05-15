@@ -27,7 +27,7 @@ export type RecalcSummary = {
 };
 
 export type RecalcInput = {
-  orgId: string;
+  workspaceId: string;
   /** Inclusive lower bound on `daily_rollups.bucket_day`. */
   fromDate: string; // YYYY-MM-DD
   /** Inclusive upper bound. */
@@ -57,7 +57,7 @@ export async function recalculateEffectiveCost(
 ): Promise<RecalcSummary> {
   const admin = createAdminClient();
   const { data, error } = await admin.rpc("recalculate_effective_cost", {
-    p_org_id: input.orgId,
+    p_workspace_id: input.workspaceId,
     p_from_date: input.fromDate,
     p_to_date: input.toDate,
     p_triggered_by: input.triggeredBy ?? null,

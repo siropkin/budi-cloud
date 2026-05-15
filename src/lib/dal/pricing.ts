@@ -2,22 +2,22 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
- * Whether the org has at least one `active` price list. Powers the
+ * Whether the workspace has at least one `active` price list. Powers the
  * conditional rendering of the savings strip and the Effective/List toggle
  * on the Overview (#235): when no list is active, the daemon-uploaded cost
  * is the only number that exists, so there is nothing to compare against
  * and the UI stays clean. Until the upload UI ships (#232) this returns
- * `false` for every org — and the Overview keeps rendering exactly as it
- * does today, which is the acceptance criterion for migration 019.
+ * `false` for every workspace — and the Overview keeps rendering exactly as
+ * it does today, which is the acceptance criterion for migration 019.
  */
-export async function getOrgHasActivePriceList(
-  orgId: string
+export async function getWorkspaceHasActivePriceList(
+  workspaceId: string
 ): Promise<boolean> {
   const admin = createAdminClient();
   const { data, error } = await admin
-    .from("org_price_lists")
+    .from("workspace_price_lists")
     .select("id")
-    .eq("org_id", orgId)
+    .eq("workspace_id", workspaceId)
     .eq("status", "active")
     .limit(1)
     .maybeSingle();
@@ -51,7 +51,7 @@ export interface RecalculationRunRow {
 }
 
 export async function getRecalculationRuns(
-  orgId: string,
+  workspaceId: string,
   options: { status: string | null; limit: number; offset: number }
 ): Promise<{ rows: RecalculationRunRow[]; total: number }> {
   const admin = createAdminClient();
@@ -61,7 +61,7 @@ export async function getRecalculationRuns(
       "id, started_at, finished_at, status, scope_from_date, scope_to_date, price_list_ids, rows_processed, rows_changed, before_total_cents, after_total_cents, triggered_by",
       { count: "exact" }
     )
-    .eq("org_id", orgId)
+    .eq("workspace_id", workspaceId)
     .order("started_at", { ascending: false })
     .range(options.offset, options.offset + options.limit - 1);
   if (options.status) query = query.eq("status", options.status);

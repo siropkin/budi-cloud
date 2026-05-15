@@ -43,7 +43,7 @@ export function buildPreservedSearch(
 
 // `managerOnly: true` means the link is rendered only for `role === "manager"`.
 // `/dashboard/team` is scoped to the viewer's own devices (ADR-0083 §6), so for
-// a member it can only ever show themselves — Settings already lists the org
+// a member it can only ever show themselves — Settings already lists the workspace
 // roster, so members never need this entry (#64).
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },

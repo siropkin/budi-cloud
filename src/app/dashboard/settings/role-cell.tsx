@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { clsx } from "clsx";
-import { updateMemberRole } from "@/app/actions/org";
+import { updateMemberRole } from "@/app/actions/workspace";
 
 /**
  * Role display + (for managers) inline editor for a single team-members row.

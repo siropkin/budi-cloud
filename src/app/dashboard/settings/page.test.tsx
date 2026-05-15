@@ -5,7 +5,7 @@ import { containsSuspense, extractText } from "@/test-utils/page-tree";
  * Page-level coverage for `/dashboard/settings` (#112).
  *
  * The settings page is the only dashboard page that bypasses the DAL for
- * one of its reads (`createAdminClient().from("orgs").select(...)`), so the
+ * one of its reads (`createAdminClient().from("workspaces").select(...)`), so the
  * mock surface here is split across `@/lib/dal` and `@/lib/supabase/admin`.
  */
 
@@ -21,7 +21,7 @@ vi.mock("next/navigation", () => ({
 
 const dal = {
   getCurrentUser: vi.fn(),
-  getOrgMembers: vi.fn(),
+  getWorkspaceMembers: vi.fn(),
 };
 vi.mock("@/lib/dal", () => dal);
 
@@ -41,7 +41,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 
 const MANAGER = {
   id: "usr_ivan",
-  org_id: "org_team",
+  workspace_id: "org_team",
   role: "manager",
   api_key: "budi_i",
   display_name: "Ivan",
@@ -50,7 +50,7 @@ const MANAGER = {
 
 beforeEach(() => {
   dal.getCurrentUser.mockReset().mockResolvedValue(MANAGER);
-  dal.getOrgMembers.mockReset().mockResolvedValue([
+  dal.getWorkspaceMembers.mockReset().mockResolvedValue([
     {
       id: "usr_ivan",
       display_name: "Ivan",
@@ -91,8 +91,8 @@ describe("dashboard/settings /page", () => {
     expect(text).toContain("Jane");
   });
 
-  it("empty: renders the 'No members yet' copy when the org has no members", async () => {
-    dal.getOrgMembers.mockResolvedValue([]);
+  it("empty: renders the 'No members yet' copy when the workspace has no members", async () => {
+    dal.getWorkspaceMembers.mockResolvedValue([]);
     const node = await render();
     expect(node).toBeTruthy();
     const text = extractText(node);
@@ -113,12 +113,12 @@ describe("dashboard/settings /page", () => {
   });
 
   it("error: a DAL fault propagates so the framework error boundary can render its fallback", async () => {
-    dal.getOrgMembers.mockRejectedValue(new Error("__DAL_BOOM__"));
+    dal.getWorkspaceMembers.mockRejectedValue(new Error("__DAL_BOOM__"));
     await expect(render()).rejects.toThrow("__DAL_BOOM__");
   });
 
-  it("returns null (no leak) when the viewer has no org_id yet", async () => {
-    dal.getCurrentUser.mockResolvedValue({ ...MANAGER, org_id: null });
+  it("returns null (no leak) when the viewer has no workspace_id yet", async () => {
+    dal.getCurrentUser.mockResolvedValue({ ...MANAGER, workspace_id: null });
     const node = await render();
     expect(node).toBeNull();
   });

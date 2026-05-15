@@ -13,7 +13,7 @@ import {
 const RATE_LIMIT = { limit: 60, windowSeconds: 60 } as const;
 
 // Server-side response freshness cap. Spec calls for a 5-min cache keyed by
-// (org_id, list_version); we expose it via Cache-Control so any intermediary
+// (workspace_id, list_version); we expose it via Cache-Control so any intermediary
 // can honour it and so the daemon sees a stable hint even when our internal
 // cache layer is bypassed.
 const CACHE_MAX_AGE_SECONDS = 300;
@@ -41,7 +41,7 @@ async function authenticateApiKey(
 
   const { data, error } = await supabase
     .from("users")
-    .select("id, org_id")
+    .select("id, workspace_id")
     .eq("api_key", apiKey)
     .single();
 
@@ -66,7 +66,7 @@ function parseSinceVersion(request: NextRequest): number | null {
 /**
  * GET /v1/pricing/active
  *
- * Hands the daemon the org's active price list so local recalc stays in
+ * Hands the daemon the workspace's active price list so local recalc stays in
  * lockstep with cloud math. Privacy-safe rows only — list (vendor-published)
  * price is procurement metadata and never leaves the cloud; the daemon needs
  * the sale price alone to compute `_effective`.
@@ -74,7 +74,7 @@ function parseSinceVersion(request: NextRequest): number | null {
  * Auth: Authorization: Bearer budi_<key>
  * Query: ?since_version=N (optional; daemon's last-seen version)
  *
- * Response (200): { org_id, list_version, effective_from, effective_to,
+ * Response (200): { workspace_id, list_version, effective_from, effective_to,
  *                   defaults: { platform, region }, rows: [...], generated_at }
  * Response (304): empty body — daemon is up to date
  * Response (404): { error: "No active price list" } — daemon treats as "no override"
@@ -111,9 +111,9 @@ export async function GET(request: NextRequest) {
   // recalc engine would do the same, so the daemon should not mirror it.
   const today = new Date().toISOString().slice(0, 10);
   const { data: lists, error: listsError } = await supabase
-    .from("org_price_lists")
+    .from("workspace_price_lists")
     .select("id, effective_from, effective_to")
-    .eq("org_id", user.org_id)
+    .eq("workspace_id", user.workspace_id)
     .eq("status", "active")
     .lte("effective_from", today);
 
@@ -175,7 +175,7 @@ export async function GET(request: NextRequest) {
   // --- Fetch the rows for every active-in-window list ---
   const listIds = inWindow.map((l) => l.id as number);
   const { data: rowData, error: rowsError } = await supabase
-    .from("org_price_list_rows")
+    .from("workspace_price_list_rows")
     .select("platform, model_pattern, region, token_type, sale_usd_per_mtok")
     .in("list_id", listIds);
 
@@ -198,9 +198,9 @@ export async function GET(request: NextRequest) {
   // Missing row → empty defaults object with null fields, matching the ADR
   // contract; the daemon's recalc treats nulls as "no preference".
   const { data: defaultsRow } = await supabase
-    .from("org_pricing_defaults")
+    .from("workspace_pricing_defaults")
     .select("default_platform, default_region")
-    .eq("org_id", user.org_id)
+    .eq("workspace_id", user.workspace_id)
     .maybeSingle();
 
   const defaults = {
@@ -210,7 +210,7 @@ export async function GET(request: NextRequest) {
 
   return Response.json(
     {
-      org_id: user.org_id,
+      workspace_id: user.workspace_id,
       list_version: listVersion,
       effective_from: effectiveFrom,
       effective_to: effectiveTo,

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getCurrentUser, getOrgMembers } from "@/lib/dal";
+import { getCurrentUser, getWorkspaceMembers } from "@/lib/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
@@ -14,16 +14,16 @@ import { RoleCell } from "./role-cell";
 
 export default async function SettingsPage() {
   const user = await getCurrentUser();
-  if (!user?.org_id) return null;
+  if (!user?.workspace_id) return null;
 
   const admin = createAdminClient();
-  const { data: org } = await admin
-    .from("orgs")
+  const { data: workspace } = await admin
+    .from("workspaces")
     .select("id, name")
-    .eq("id", user.org_id)
+    .eq("id", user.workspace_id)
     .single();
 
-  const members = await getOrgMembers(user.org_id);
+  const members = await getWorkspaceMembers(user.workspace_id);
   const canEditRoles = user.role === "manager";
   type Member = (typeof members)[number];
   const memberColumns: ResponsiveColumn<Member>[] = [
@@ -60,13 +60,13 @@ export default async function SettingsPage() {
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between">
               <dt className="text-zinc-400">Name</dt>
-              <dd className="text-zinc-200">{org?.name ?? "-"}</dd>
+              <dd className="text-zinc-200">{workspace?.name ?? "-"}</dd>
             </div>
             <div className="flex items-center justify-between">
               <dt className="text-zinc-400">Workspace ID</dt>
               <dd className="flex items-center gap-1 font-mono text-xs text-zinc-400">
-                <span>{user.org_id}</span>
-                <CopyButton value={user.org_id} label="Copy Workspace ID" />
+                <span>{user.workspace_id}</span>
+                <CopyButton value={user.workspace_id} label="Copy Workspace ID" />
               </dd>
             </div>
           </dl>
@@ -132,7 +132,7 @@ export default async function SettingsPage() {
         </Card>
       )}
 
-      <DangerZone userRole={user.role} orgName={org?.name ?? ""} />
+      <DangerZone userRole={user.role} workspaceName={workspace?.name ?? ""} />
     </div>
   );
 }

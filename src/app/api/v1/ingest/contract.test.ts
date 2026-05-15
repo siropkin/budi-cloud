@@ -41,7 +41,7 @@ class FakeSupabase {
 
   constructor() {
     for (const t of [
-      "orgs",
+      "workspaces",
       "users",
       "devices",
       "daily_rollups",
@@ -220,11 +220,11 @@ const DEVICE_ID = "11111111-1111-4111-8111-111111111111";
 const API_KEY = "budi_contracttestkey";
 
 function seedAuthedUser() {
-  fake.seed("orgs", [{ id: "org_test", name: "test" }]);
+  fake.seed("workspaces", [{ id: "org_test", name: "test" }]);
   fake.seed("users", [
     {
       id: "usr_test",
-      org_id: "org_test",
+      workspace_id: "org_test",
       role: "manager",
       api_key: API_KEY,
       display_name: "Test User",
@@ -270,7 +270,7 @@ function envelopeWith(overrides: Record<string, unknown> = {}) {
   return {
     schema_version: 1,
     device_id: DEVICE_ID,
-    org_id: "org_test",
+    workspace_id: "org_test",
     synced_at: "2026-04-15T12:00:00Z",
     payload: {
       daily_rollups: [baseRollup],
@@ -284,7 +284,7 @@ beforeEach(() => {
   fake.rateLimitAllowed = true;
   fake.rateLimitRetryAfter = 30;
   for (const t of [
-    "orgs",
+    "workspaces",
     "users",
     "devices",
     "daily_rollups",
@@ -365,12 +365,12 @@ describe("POST /v1/ingest — daemon contract matrix (ADR-0083 §7)", () => {
       expect(fake.rows("daily_rollups")).toHaveLength(0);
     });
 
-    it("returns 401 when org_id in the envelope does not match the key's org", async () => {
+    it("returns 401 when workspace_id in the envelope does not match the key's org", async () => {
       seedAuthedUser();
       const { POST } = await import("./route");
 
       const res = await POST(
-        mkReq(envelopeWith({ org_id: "org_other" })) as unknown as Parameters<
+        mkReq(envelopeWith({ workspace_id: "org_other" })) as unknown as Parameters<
           typeof POST
         >[0]
       );

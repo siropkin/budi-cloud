@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { randomBytes } from "crypto";
-import { CrossOrgSwitch } from "./cross-org-switch";
+import { CrossWorkspaceSwitch } from "./cross-workspace-switch";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +17,7 @@ export default async function InvitePage({
   // Validate the invite token
   const { data: invite } = await admin
     .from("invite_tokens")
-    .select("id, org_id, role, expires_at")
+    .select("id, workspace_id, role, expires_at")
     .eq("id", token)
     .single();
 
@@ -59,13 +59,13 @@ export default async function InvitePage({
   // Check if user already exists
   const { data: existingUser } = await admin
     .from("users")
-    .select("id, org_id, role")
+    .select("id, workspace_id, role")
     .eq("id", authUser.id)
     .single();
 
-  if (existingUser?.org_id) {
-    // User already in an org
-    if (existingUser.org_id === invite.org_id) {
+  if (existingUser?.workspace_id) {
+    // User already in a workspace
+    if (existingUser.workspace_id === invite.workspace_id) {
       // Re-click by an already-joined member is idempotent.
       await admin
         .from("invite_redemptions")
@@ -76,20 +76,20 @@ export default async function InvitePage({
       redirect("/dashboard");
     }
 
-    // Cross-org click: surface an explicit switch path (#72). A manager
-    // switching out would orphan their current org, so they get a refusal
-    // instead of a switch button.
-    const [{ data: currentOrg }, { data: targetOrg }] = await Promise.all([
+    // Cross-workspace click: surface an explicit switch path (#72). A manager
+    // switching out would orphan their current workspace, so they get a
+    // refusal instead of a switch button.
+    const [{ data: currentWorkspace }, { data: targetWorkspace }] = await Promise.all([
       admin
-        .from("orgs")
+        .from("workspaces")
         .select("id, name")
-        .eq("id", existingUser.org_id)
+        .eq("id", existingUser.workspace_id)
         .single(),
-      admin.from("orgs").select("id, name").eq("id", invite.org_id).single(),
+      admin.from("workspaces").select("id, name").eq("id", invite.workspace_id).single(),
     ]);
 
-    const currentOrgName = currentOrg?.name ?? existingUser.org_id;
-    const targetOrgName = targetOrg?.name ?? invite.org_id;
+    const currentWorkspaceName = currentWorkspace?.name ?? existingUser.workspace_id;
+    const targetWorkspaceName = targetWorkspace?.name ?? invite.workspace_id;
 
     if (existingUser.role === "manager") {
       return (
@@ -99,9 +99,9 @@ export default async function InvitePage({
               Already in a Workspace
             </h1>
             <p className="mt-3 text-sm text-zinc-300">
-              You manage <strong>{currentOrgName}</strong>, so you can&rsquo;t
-              switch into <strong>{targetOrgName}</strong> directly. Delete{" "}
-              <strong>{currentOrgName}</strong> first (or hand off ownership),
+              You manage <strong>{currentWorkspaceName}</strong>, so you can&rsquo;t
+              switch into <strong>{targetWorkspaceName}</strong> directly. Delete{" "}
+              <strong>{currentWorkspaceName}</strong> first (or hand off ownership),
               then re-click this invite.
             </p>
             <a
@@ -116,21 +116,21 @@ export default async function InvitePage({
     }
 
     return (
-      <CrossOrgSwitch
+      <CrossWorkspaceSwitch
         token={token}
-        currentOrgName={currentOrgName}
-        targetOrgId={invite.org_id}
-        targetOrgName={targetOrgName}
+        currentWorkspaceName={currentWorkspaceName}
+        targetWorkspaceId={invite.workspace_id}
+        targetWorkspaceName={targetWorkspaceName}
       />
     );
   }
 
-  // Join the org
+  // Join the workspace
   if (existingUser) {
-    // User exists but has no org
+    // User exists but has no workspace
     await admin
       .from("users")
-      .update({ org_id: invite.org_id, role: invite.role })
+      .update({ workspace_id: invite.workspace_id, role: invite.role })
       .eq("id", authUser.id);
   } else {
     // New user
@@ -143,7 +143,7 @@ export default async function InvitePage({
 
     await admin.from("users").insert({
       id: authUser.id,
-      org_id: invite.org_id,
+      workspace_id: invite.workspace_id,
       role: invite.role,
       api_key: apiKey,
       display_name: displayName,
