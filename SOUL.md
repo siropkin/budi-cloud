@@ -33,7 +33,7 @@ npm test                            # vitest
 npm run lint
 ```
 
-Database migrations live in `supabase/migrations/`. Apply them with the Supabase CLI before running against a fresh project.
+Database migrations live in `supabase/migrations/`. Apply them with the Supabase CLI before running against a fresh project. The forward-only policy and the per-migration checklist are in [`supabase/migrations/README.md`](supabase/migrations/README.md) — read it before editing anything in that directory.
 
 ## What data the cloud receives
 
