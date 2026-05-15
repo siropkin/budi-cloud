@@ -32,8 +32,8 @@ export function DangerZone({
       <h2 className="text-sm font-semibold text-red-300">Danger zone</h2>
       <p className="mt-1 text-sm text-zinc-400">
         {isManager
-          ? "Deleting the organization removes every member, device, and synced rollup. This cannot be undone."
-          : "Leaving removes your devices and sync history from this organization. Your account itself stays intact so you can rejoin or create a new org later."}
+          ? "Deleting the workspace removes every member, device, and synced rollup. This cannot be undone."
+          : "Leaving removes your devices and sync history from this workspace. Your account itself stays intact so you can rejoin or create a new workspace later."}
       </p>
 
       <div className="mt-4">
@@ -79,12 +79,12 @@ function DeleteOrgButton({ orgName }: { orgName: string }) {
         onClick={() => setOpen(true)}
         className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/20"
       >
-        Delete organization…
+        Delete workspace…
       </button>
 
       {open && (
         <ConfirmationModal
-          title="Delete organization"
+          title="Delete workspace"
           onClose={close}
           description={
             <>
@@ -129,7 +129,7 @@ function DeleteOrgButton({ orgName }: { orgName: string }) {
                     : "cursor-not-allowed bg-red-600/40 text-red-200/60"
                 )}
               >
-                {pending ? "Deleting…" : "Delete organization"}
+                {pending ? "Deleting…" : "Delete workspace"}
               </button>
             </div>
           </form>
@@ -165,18 +165,18 @@ function LeaveOrgButton({ orgName }: { orgName: string }) {
         onClick={() => setOpen(true)}
         className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/20"
       >
-        Leave organization…
+        Leave workspace…
       </button>
 
       {open && (
         <ConfirmationModal
-          title="Leave organization"
+          title="Leave workspace"
           onClose={close}
           description={
             <>
               This removes your devices and sync history from{" "}
               <strong>{orgName}</strong>. Your sign-in account stays, so you can
-              rejoin or create a different org later.
+              rejoin or create a different workspace later.
             </>
           }
           error={error}
@@ -196,7 +196,7 @@ function LeaveOrgButton({ orgName }: { orgName: string }) {
               disabled={pending}
               className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
             >
-              {pending ? "Leaving…" : "Leave organization"}
+              {pending ? "Leaving…" : "Leave workspace"}
             </button>
           </div>
         </ConfirmationModal>

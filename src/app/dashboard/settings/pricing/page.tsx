@@ -125,7 +125,7 @@ export default async function PricingSettingsPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Org defaults</CardTitle>
+          <CardTitle>Workspace defaults</CardTitle>
         </CardHeader>
         <CardContent>
           <DefaultsForm

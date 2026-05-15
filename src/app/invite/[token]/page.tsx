@@ -96,7 +96,7 @@ export default async function InvitePage({
         <main className="flex min-h-screen items-center justify-center bg-[#0a0a0a] p-4">
           <div className="w-full max-w-md rounded-xl border border-white/10 bg-zinc-950 p-6 text-center shadow-xl">
             <h1 className="text-xl font-bold text-white">
-              Already in an Organization
+              Already in a Workspace
             </h1>
             <p className="mt-3 text-sm text-zinc-300">
               You manage <strong>{currentOrgName}</strong>, so you can&rsquo;t

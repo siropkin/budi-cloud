@@ -251,7 +251,7 @@ export default async function ModelsPage({
               isAllUnknownSurface(surfaceShare)
                 ? "Per-surface breakdown not available — every row in this window is tagged Unknown. Update local Budi to v8.4.2+ to start emitting surface tags."
                 : knownSurfaces.length <= 1
-                  ? "Single-surface org — break out per-surface spend after a second IDE / CLI starts syncing."
+                  ? "Single-surface workspace — break out per-surface spend after a second IDE / CLI starts syncing."
                   : `No surface ${valueWord.toLowerCase()} data for this period`
             }
             unit={unit}

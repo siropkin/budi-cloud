@@ -40,7 +40,7 @@ export default async function SetupPage({
         <div className="text-center">
           <h1 className="text-xl font-bold text-white">Create Your Team</h1>
           <p className="mt-1 text-sm text-zinc-400">
-            Set up an organization to start tracking team AI costs.
+            Set up a workspace to start tracking team AI costs.
           </p>
         </div>
         <OrgSetupForm />

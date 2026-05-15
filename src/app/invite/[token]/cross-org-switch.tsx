@@ -50,7 +50,7 @@ export function CrossOrgSwitch({
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#0a0a0a] p-4">
       <div className="w-full max-w-md rounded-xl border border-white/10 bg-zinc-950 p-6 shadow-xl">
-        <h1 className="text-xl font-bold text-white">Switch organizations?</h1>
+        <h1 className="text-xl font-bold text-white">Switch workspaces?</h1>
         <div className="mt-4 space-y-3 text-sm text-zinc-300">
           <p>
             You&rsquo;re currently a member of{" "}

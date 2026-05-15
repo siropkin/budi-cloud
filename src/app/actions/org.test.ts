@@ -438,7 +438,7 @@ describe("deleteOrganization", () => {
 
     const result = await deleteOrganization(undefined, fd);
     expect(result).toEqual({
-      error: "Only managers can delete the organization",
+      error: "Only managers can delete the workspace",
     });
     expect(fake.rows("orgs")).toHaveLength(1);
     expect(fake.rows("users")).toHaveLength(2);
@@ -454,7 +454,7 @@ describe("deleteOrganization", () => {
 
     const result = await deleteOrganization(undefined, fd);
     expect(result).toEqual({
-      error: "Type the organization name exactly to confirm",
+      error: "Type the workspace name exactly to confirm",
     });
     expect(fake.rows("orgs")).toHaveLength(1);
     expect(fake.rows("daily_rollups")).toHaveLength(2);
@@ -526,7 +526,7 @@ describe("leaveOrganization", () => {
 
     const { leaveOrganization } = await loadActions();
     const result = await leaveOrganization();
-    expect(result).toEqual({ error: "Not a member of any organization" });
+    expect(result).toEqual({ error: "Not a member of any workspace" });
   });
 });
 
@@ -638,7 +638,7 @@ describe("updateMemberRole", () => {
     const result = await updateMemberRole("usr_outsider", "manager");
 
     expect(result).toEqual({
-      error: "User is not a member of your organization",
+      error: "User is not a member of your workspace",
     });
     const outsider = fake.rows("users").find((u) => u.id === "usr_outsider");
     expect(outsider?.role).toBe("member");
@@ -831,7 +831,7 @@ describe("switchOrganization", () => {
     );
 
     expect(result).toEqual({
-      error: "Invite link does not match the target organization",
+      error: "Invite link does not match the target workspace",
     });
     const alice = fake.rows("users").find((u) => u.id === "usr_alice");
     expect(alice?.org_id).toBe("org_other");
@@ -848,7 +848,7 @@ describe("switchOrganization", () => {
     );
 
     expect(result).toEqual({
-      error: "Type the organization name exactly to confirm",
+      error: "Type the workspace name exactly to confirm",
     });
     const alice = fake.rows("users").find((u) => u.id === "usr_alice");
     expect(alice?.org_id).toBe("org_other");

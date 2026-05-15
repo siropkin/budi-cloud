@@ -54,7 +54,7 @@ export default async function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Organization</CardTitle>
+          <CardTitle>Workspace</CardTitle>
         </CardHeader>
         <CardContent>
           <dl className="space-y-3 text-sm">
@@ -63,10 +63,10 @@ export default async function SettingsPage() {
               <dd className="text-zinc-200">{org?.name ?? "-"}</dd>
             </div>
             <div className="flex items-center justify-between">
-              <dt className="text-zinc-400">Org ID</dt>
+              <dt className="text-zinc-400">Workspace ID</dt>
               <dd className="flex items-center gap-1 font-mono text-xs text-zinc-400">
                 <span>{user.org_id}</span>
-                <CopyButton value={user.org_id} label="Copy Org ID" />
+                <CopyButton value={user.org_id} label="Copy Workspace ID" />
               </dd>
             </div>
           </dl>

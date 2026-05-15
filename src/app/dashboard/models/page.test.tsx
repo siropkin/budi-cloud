@@ -195,7 +195,7 @@ describe("dashboard/models /page", () => {
     const node = await render();
     const text = extractText(node);
     expect(text).toContain("Cost by Surface");
-    expect(text).toContain("Single-surface org");
+    expect(text).toContain("Single-surface workspace");
   });
 
   it("surface chart: all-unknown period falls back to the empty-state with the daemon-version unlock copy, not a single self-tautological bar (#210)", async () => {
@@ -213,6 +213,6 @@ describe("dashboard/models /page", () => {
     expect(text).toContain("Cost by Surface");
     expect(text).toContain("every row in this window is tagged Unknown");
     expect(text).toContain("v8.4.2");
-    expect(text).not.toContain("Single-surface org");
+    expect(text).not.toContain("Single-surface workspace");
   });
 });

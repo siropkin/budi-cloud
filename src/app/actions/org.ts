@@ -11,7 +11,7 @@ export async function createOrg(
   formData: FormData
 ) {
   const name = formData.get("name") as string;
-  if (!name?.trim()) return { error: "Org name is required" };
+  if (!name?.trim()) return { error: "Workspace name is required" };
 
   const supabase = await createClient();
   const {
@@ -27,14 +27,14 @@ export async function createOrg(
     id: orgId,
     name: name.trim(),
   });
-  if (orgError) return { error: "Failed to create org" };
+  if (orgError) return { error: "Failed to create workspace" };
 
   // Link user to org as manager
   const { error: userError } = await admin
     .from("users")
     .update({ org_id: orgId, role: "manager" })
     .eq("id", user.id);
-  if (userError) return { error: "Failed to link user to org" };
+  if (userError) return { error: "Failed to link user to workspace" };
 
   redirect("/dashboard");
 }
@@ -106,9 +106,9 @@ export async function deleteOrganization(
     .eq("id", authUser.id)
     .single();
 
-  if (!me?.org_id) return { error: "No organization to delete" };
+  if (!me?.org_id) return { error: "No workspace to delete" };
   if (me.role !== "manager") {
-    return { error: "Only managers can delete the organization" };
+    return { error: "Only managers can delete the workspace" };
   }
 
   const { data: org } = await admin
@@ -116,10 +116,10 @@ export async function deleteOrganization(
     .select("id, name")
     .eq("id", me.org_id)
     .single();
-  if (!org) return { error: "Organization not found" };
+  if (!org) return { error: "Workspace not found" };
 
   if (confirm.trim() !== org.name) {
-    return { error: "Type the organization name exactly to confirm" };
+    return { error: "Type the workspace name exactly to confirm" };
   }
 
   const orgId = org.id as string;
@@ -134,7 +134,7 @@ export async function deleteOrganization(
     p_org_id: orgId,
   });
   if (rpcError) {
-    return { error: `Failed to delete organization: ${rpcError.message}` };
+    return { error: `Failed to delete workspace: ${rpcError.message}` };
   }
 
   await supabase.auth.signOut();
@@ -165,11 +165,11 @@ export async function leaveOrganization(): Promise<{ error: string } | void> {
     .eq("id", authUser.id)
     .single();
 
-  if (!me?.org_id) return { error: "Not a member of any organization" };
+  if (!me?.org_id) return { error: "Not a member of any workspace" };
   if (me.role === "manager") {
     return {
       error:
-        "Managers can't leave an organization. Delete it instead, or hand off ownership first.",
+        "Managers can't leave a workspace. Delete it instead, or hand off ownership first.",
     };
   }
 
@@ -194,7 +194,7 @@ export async function leaveOrganization(): Promise<{ error: string } | void> {
       .in("device_id", deviceIds);
     if (sessionsError) {
       return {
-        error: `Failed to leave organization: ${sessionsError.message}`,
+        error: `Failed to leave workspace: ${sessionsError.message}`,
       };
     }
     const { error: rollupsError } = await admin
@@ -202,14 +202,14 @@ export async function leaveOrganization(): Promise<{ error: string } | void> {
       .delete()
       .in("device_id", deviceIds);
     if (rollupsError) {
-      return { error: `Failed to leave organization: ${rollupsError.message}` };
+      return { error: `Failed to leave workspace: ${rollupsError.message}` };
     }
     const { error: devicesError } = await admin
       .from("devices")
       .delete()
       .eq("user_id", userId);
     if (devicesError) {
-      return { error: `Failed to leave organization: ${devicesError.message}` };
+      return { error: `Failed to leave workspace: ${devicesError.message}` };
     }
   }
 
@@ -218,7 +218,7 @@ export async function leaveOrganization(): Promise<{ error: string } | void> {
     .update({ org_id: null, role: "member" })
     .eq("id", userId);
   if (updateError) {
-    return { error: `Failed to leave organization: ${updateError.message}` };
+    return { error: `Failed to leave workspace: ${updateError.message}` };
   }
 
   await supabase.auth.signOut();
@@ -266,11 +266,11 @@ export async function switchOrganization(
     .eq("id", authUser.id)
     .single();
 
-  if (!me?.org_id) return { error: "Not a member of any organization" };
+  if (!me?.org_id) return { error: "Not a member of any workspace" };
   if (me.role === "manager") {
     return {
       error:
-        "Managers can't switch organizations. Delete this org or hand off ownership first.",
+        "Managers can't switch workspaces. Delete this workspace or hand off ownership first.",
     };
   }
 
@@ -285,10 +285,10 @@ export async function switchOrganization(
     return { error: "Invite link has expired" };
   }
   if (invite.org_id !== targetOrgId) {
-    return { error: "Invite link does not match the target organization" };
+    return { error: "Invite link does not match the target workspace" };
   }
   if (invite.org_id === me.org_id) {
-    return { error: "You are already a member of that organization" };
+    return { error: "You are already a member of that workspace" };
   }
 
   const { data: targetOrg } = await admin
@@ -296,17 +296,17 @@ export async function switchOrganization(
     .select("id, name")
     .eq("id", invite.org_id as string)
     .single();
-  if (!targetOrg) return { error: "Target organization not found" };
+  if (!targetOrg) return { error: "Target workspace not found" };
 
   if (confirm.trim() !== (targetOrg.name as string)) {
-    return { error: "Type the organization name exactly to confirm" };
+    return { error: "Type the workspace name exactly to confirm" };
   }
 
   const { error: updateError } = await admin
     .from("users")
     .update({ org_id: invite.org_id, role: invite.role })
     .eq("id", me.id as string);
-  if (updateError) return { error: "Failed to switch organization" };
+  if (updateError) return { error: "Failed to switch workspace" };
 
   // Audit row, same shape as a fresh join. Idempotent on (token, user) so a
   // re-click after the switch is a no-op rather than a duplicate-key error.
@@ -366,7 +366,7 @@ export async function updateMemberRole(
     .single();
 
   if (!target || target.org_id !== me.org_id) {
-    return { error: "User is not a member of your organization" };
+    return { error: "User is not a member of your workspace" };
   }
 
   if (target.role === newRole) return { ok: true };
