@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { generateInviteToken } from "@/app/actions/org";
+import { generateInviteToken } from "@/app/actions/workspace";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 export function InviteSection() {

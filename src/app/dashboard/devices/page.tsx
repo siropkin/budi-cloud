@@ -4,7 +4,7 @@ import {
   getCostByDevice,
   getDeviceActivityByDay,
   getEarliestActivity,
-  getOrgMembers,
+  getWorkspaceMembers,
   getKnownSurfaces,
 } from "@/lib/dal";
 import { dateRangeFromDays } from "@/lib/date-range";
@@ -36,7 +36,7 @@ export default async function DevicesPage({
 }) {
   const params = await searchParams;
   const user = await getCurrentUser();
-  if (!user?.org_id) return null;
+  if (!user?.workspace_id) return null;
 
   const unit = parseUnit(params.units);
   const surfaces = parseSurfaceParam(params.surface);
@@ -50,7 +50,9 @@ export default async function DevicesPage({
   const [devices, deviceActivity, members, knownSurfaces] = await Promise.all([
     getCostByDevice(user, range, scope),
     getDeviceActivityByDay(user, range, scope),
-    user.role === "manager" ? getOrgMembers(user.org_id) : Promise.resolve([]),
+    user.role === "manager"
+      ? getWorkspaceMembers(user.workspace_id)
+      : Promise.resolve([]),
     getKnownSurfaces(user, { scopedUserId: scope.scopedUserId }),
   ]);
 

@@ -4,7 +4,7 @@
  *
  * The risk we are guarding against is the invite flow (`/invite/<token>`):
  * if `?next=` is dropped during the round-trip, a brand-new user gets
- * silently provisioned into a fresh personal org and the invite no-ops.
+ * silently provisioned into a fresh personal workspace and the invite no-ops.
  * See issue #62 for the original report.
  */
 
@@ -29,7 +29,7 @@ export function isSafeNextPath(
  * Returns true when `next` points at the invite-acceptance page. The
  * auth callback uses this to skip the `/setup` redirect for users who
  * came in via an invite link — the invite page provisions them into
- * the inviter's org instead.
+ * the inviter's workspace instead.
  */
 export function isInvitePath(next: string | null | undefined): next is string {
   return typeof next === "string" && next.startsWith("/invite/");

@@ -71,8 +71,8 @@ const dal = {
   getOverviewStats: vi.fn(),
   getDailyActivity: vi.fn(),
   getEarliestActivity: vi.fn(),
-  getOrgHasActivePriceList: vi.fn(),
-  getOrgMembers: vi.fn(),
+  getWorkspaceHasActivePriceList: vi.fn(),
+  getWorkspaceMembers: vi.fn(),
   getSyncFreshness: vi.fn(),
   getCostByModel: vi.fn(),
   getCostByRepo: vi.fn(),
@@ -88,7 +88,7 @@ vi.mock("@/lib/dal", () => ({
 
 const MANAGER = {
   id: "usr_ivan",
-  org_id: "org_team",
+  workspace_id: "org_team",
   role: "manager",
   api_key: "budi_i",
   display_name: "Ivan",
@@ -117,8 +117,8 @@ beforeEach(() => {
     },
   ]);
   dal.getEarliestActivity.mockResolvedValue("2026-04-01");
-  dal.getOrgHasActivePriceList.mockResolvedValue(false);
-  dal.getOrgMembers.mockResolvedValue([]);
+  dal.getWorkspaceHasActivePriceList.mockResolvedValue(false);
+  dal.getWorkspaceMembers.mockResolvedValue([]);
   dal.getSyncFreshness.mockResolvedValue({
     deviceCount: 1,
     lastSeenAt: "2026-04-15T10:00:00Z",
@@ -154,7 +154,7 @@ beforeEach(() => {
   dal.getActivityHeatmap.mockResolvedValue([
     { dow: 2, hour: 14, session_count: 3, cost_cents: 50_000 },
   ]);
-  // #187 surface dimension. Default fixture: a multi-surface org so the
+  // #187 surface dimension. Default fixture: a multi-surface workspace so the
   // chip renders and the "Spend by Surface" card has non-zero data;
   // single-surface coverage is in the dedicated test.
   dal.getKnownSurfaces.mockResolvedValue(["cursor", "vscode"]);
@@ -203,7 +203,7 @@ describe("dashboard /page (Overview)", () => {
     expect(text).not.toContain("Total Cost");
   });
 
-  it("empty: renders headline + zero-value stat cards (not a crash) when the org has no devices yet", async () => {
+  it("empty: renders headline + zero-value stat cards (not a crash) when the workspace has no devices yet", async () => {
     dal.getOverviewStats.mockResolvedValue({
       totalCostCents: 0,
       totalCostCentsIngested: 0,
@@ -224,7 +224,7 @@ describe("dashboard /page (Overview)", () => {
     expect(node).toBeTruthy();
     const text = extractText(node);
     // Page deliberately distinguishes "no devices" from "no data" — the
-    // empty-org case must still render the headline + stat cards (zero
+    // empty-workspace case must still render the headline + stat cards (zero
     // values), not throw.
     expect(text).toContain("Overview");
     expect(text).toContain("Total Cost");
@@ -256,8 +256,8 @@ describe("dashboard /page (Overview)", () => {
     expect(wrapping).toBeTruthy();
   });
 
-  it("returns null (no leak) when the viewer has no org_id yet", async () => {
-    dal.getCurrentUser.mockResolvedValue({ ...MANAGER, org_id: null });
+  it("returns null (no leak) when the viewer has no workspace_id yet", async () => {
+    dal.getCurrentUser.mockResolvedValue({ ...MANAGER, workspace_id: null });
     const node = await render();
     expect(node).toBeNull();
   });
@@ -345,7 +345,7 @@ describe("dashboard /page (Overview)", () => {
     // pipeline upstream of the chart.
   });
 
-  it("surface chart: single-surface org renders an empty-state copy that names the next-state condition (#187)", async () => {
+  it("surface chart: single-surface workspace renders an empty-state copy that names the next-state condition (#187)", async () => {
     dal.getKnownSurfaces.mockResolvedValue(["vscode"]);
     dal.getCostBySurface.mockResolvedValue([
       {
@@ -387,7 +387,7 @@ describe("dashboard /page (Overview)", () => {
     // CostLensToggle on the activity charts now does all the surfacing of
     // list-vs-effective deltas. Pin the absence so a revert that brings the
     // banner back trips the test.
-    dal.getOrgHasActivePriceList.mockResolvedValue(true);
+    dal.getWorkspaceHasActivePriceList.mockResolvedValue(true);
     dal.getOverviewStats.mockResolvedValue({
       totalCostCents: 352_777,
       totalCostCentsIngested: 481_520,
@@ -403,7 +403,7 @@ describe("dashboard /page (Overview)", () => {
   });
 
   it("cost-lens toggle: hidden when ingested == effective for every visible point (#235 acceptance)", async () => {
-    dal.getOrgHasActivePriceList.mockResolvedValue(true);
+    dal.getWorkspaceHasActivePriceList.mockResolvedValue(true);
     // Every row has equal ingested/effective — the toggle would be a no-op,
     // so it must collapse to keep the chrome quiet.
     dal.getDailyActivity.mockResolvedValue([
@@ -421,7 +421,7 @@ describe("dashboard /page (Overview)", () => {
   });
 
   it("cost-lens toggle: hidden when no active price list exists, even if mocked data carries a delta (#235)", async () => {
-    dal.getOrgHasActivePriceList.mockResolvedValue(false);
+    dal.getWorkspaceHasActivePriceList.mockResolvedValue(false);
     dal.getDailyActivity.mockResolvedValue([
       {
         bucket_day: "2026-04-15",
@@ -437,7 +437,7 @@ describe("dashboard /page (Overview)", () => {
   });
 
   it("cost-lens toggle: visible when any point has list ≠ effective and a price list is active (#235)", async () => {
-    dal.getOrgHasActivePriceList.mockResolvedValue(true);
+    dal.getWorkspaceHasActivePriceList.mockResolvedValue(true);
     dal.getDailyActivity.mockResolvedValue([
       {
         bucket_day: "2026-04-15",
@@ -453,7 +453,7 @@ describe("dashboard /page (Overview)", () => {
   });
 
   it("cost-lens toggle: hidden under ?units=tokens (the toggle only configures the dollar lens) (#235)", async () => {
-    dal.getOrgHasActivePriceList.mockResolvedValue(true);
+    dal.getWorkspaceHasActivePriceList.mockResolvedValue(true);
     dal.getDailyActivity.mockResolvedValue([
       {
         bucket_day: "2026-04-15",

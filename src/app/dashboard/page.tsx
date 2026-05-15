@@ -4,8 +4,8 @@ import {
   getOverviewStats,
   getDailyActivity,
   getEarliestActivity,
-  getOrgHasActivePriceList,
-  getOrgMembers,
+  getWorkspaceHasActivePriceList,
+  getWorkspaceMembers,
   getSyncFreshness,
   getCostByModel,
   getCostByRepo,
@@ -62,7 +62,7 @@ export default async function OverviewPage({
 }) {
   const params = await searchParams;
   const user = await getCurrentUser();
-  if (!user?.org_id) return null;
+  if (!user?.workspace_id) return null;
 
   const unit = parseUnit(params.units);
   const costLens = parseCostLens(params.lens);
@@ -80,7 +80,7 @@ export default async function OverviewPage({
   // earliest-activity" is empty by definition.
   const previousRange =
     params.days === ALL_PERIOD_VALUE ? null : previousDateRange(range, tz);
-  // Top contributor only renders for managers viewing the unfiltered org. With
+  // Top contributor only renders for managers viewing the unfiltered workspace. With
   // a `?user=` filter the rest of the page already narrows to one teammate, so
   // a "leader" card showing that same teammate at 100% would be noise.
   const showTopContributor = user.role === "manager" && !scopedUserId;
@@ -108,7 +108,9 @@ export default async function OverviewPage({
     getOverviewStats(user, range, scope),
     getDailyActivity(user, range, scope),
     getSyncFreshness(user),
-    user.role === "manager" ? getOrgMembers(user.org_id) : Promise.resolve([]),
+    user.role === "manager"
+      ? getWorkspaceMembers(user.workspace_id)
+      : Promise.resolve([]),
     previousRange
       ? getOverviewStats(user, previousRange, scope)
       : Promise.resolve(null),
@@ -126,10 +128,10 @@ export default async function OverviewPage({
     // still let the user widen out from a single-surface state.
     getKnownSurfaces(user, { scopedUserId }),
     getCostBySurface(user, range, scope),
-    getOrgHasActivePriceList(user.org_id),
+    getWorkspaceHasActivePriceList(user.workspace_id),
   ]);
 
-  // Effective/List toggle (#235): worth surfacing only when the org has an
+  // Effective/List toggle (#235): worth surfacing only when the workspace has an
   // active price list *and* at least one visible point has a list vs.
   // effective gap. Same gate covers the "no active price list" case because
   // without a list the recalc engine never diverges the two.

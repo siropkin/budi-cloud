@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 /**
  * #541: `/v1/whoami` — identifies the bearer of an API key so the CLI
- * can auto-seed `org_id` in `~/.config/budi/cloud.toml`.
+ * can auto-seed `workspace_id` in `~/.config/budi/cloud.toml`.
  *
  * Tests hit the real route handler against a minimal Supabase fake
  * that implements only the `from(tbl).select(cols).eq(col, v).single()`
@@ -16,7 +16,7 @@ class FakeSupabase {
 
   seed(rowsOrTable: Row[] | string, maybeRows?: Row[]) {
     // Overloaded for backward compatibility with the original single-table
-    // form (`seed(rows)` seeded `users`). New form `seed("orgs", rows)` is
+    // form (`seed(rows)` seeded `users`). New form `seed("workspaces", rows)` is
     // used by the #274 org-existence guard tests, which need both tables.
     if (typeof rowsOrTable === "string") {
       this.tables.set(rowsOrTable, [...(maybeRows ?? [])]);
@@ -75,18 +75,18 @@ vi.mock("@/lib/supabase/admin", () => ({
 
 beforeEach(() => {
   fake.seed("users", []);
-  fake.seed("orgs", []);
+  fake.seed("workspaces", []);
 });
 
 function seedUserWithOrg(user: Row, org: Row) {
   fake.seed("users", [user]);
-  fake.seed("orgs", [org]);
+  fake.seed("workspaces", [org]);
 }
 
 describe("GET /v1/whoami (#541)", () => {
-  it("returns the org_id for a valid budi_* key", async () => {
+  it("returns the workspace_id for a valid budi_* key", async () => {
     seedUserWithOrg(
-      { id: "usr_test", org_id: "org_xEvtA", api_key: "budi_testkey" },
+      { id: "usr_test", workspace_id: "org_xEvtA", api_key: "budi_testkey" },
       { id: "org_xEvtA", name: "Acme" }
     );
 
@@ -96,10 +96,10 @@ describe("GET /v1/whoami (#541)", () => {
       headers: { authorization: "Bearer budi_testkey" },
     });
     const res = await GET(req as unknown as Parameters<typeof GET>[0]);
-    const body = (await res.json()) as { org_id: string };
+    const body = (await res.json()) as { workspace_id: string };
 
     expect(res.status).toBe(200);
-    expect(body.org_id).toBe("org_xEvtA");
+    expect(body.workspace_id).toBe("org_xEvtA");
   });
 
   it("401s when the Authorization header is missing", async () => {
@@ -131,7 +131,7 @@ describe("GET /v1/whoami (#541)", () => {
 
   it("401s when the api_key has no matching user row", async () => {
     seedUserWithOrg(
-      { id: "usr_other", org_id: "org_other", api_key: "budi_other" },
+      { id: "usr_other", workspace_id: "org_other", api_key: "budi_other" },
       { id: "org_other", name: "Other" }
     );
 
@@ -147,12 +147,12 @@ describe("GET /v1/whoami (#541)", () => {
   it("401s when the user's org no longer exists (#274)", async () => {
     // Regression: after delete-org, a stale `users` row pointing at a
     // vanished org must not keep authenticating ingest. Even if the cascade
-    // somehow left the row behind, the org-existence guard returns 401 so
+    // somehow left the row behind, the workspace-existence guard returns 401 so
     // the local daemon flips to `AuthFailure` and stops syncing.
     fake.seed("users", [
-      { id: "usr_orphan", org_id: "org_deleted", api_key: "budi_orphan" },
+      { id: "usr_orphan", workspace_id: "org_deleted", api_key: "budi_orphan" },
     ]);
-    fake.seed("orgs", []); // org was deleted
+    fake.seed("workspaces", []); // org was deleted
 
     const { GET } = await import("./route");
     const req = new Request("http://localhost/v1/whoami", {
@@ -165,9 +165,9 @@ describe("GET /v1/whoami (#541)", () => {
 
   it("never echoes the api_key in the response", async () => {
     // Defense-in-depth: even an authenticated response should only
-    // surface `org_id`; the key itself must never come back on the wire.
+    // surface `workspace_id`; the key itself must never come back on the wire.
     seedUserWithOrg(
-      { id: "usr_test", org_id: "org_xEvtA", api_key: "budi_testkey" },
+      { id: "usr_test", workspace_id: "org_xEvtA", api_key: "budi_testkey" },
       { id: "org_xEvtA", name: "Acme" }
     );
 

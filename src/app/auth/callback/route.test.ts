@@ -4,8 +4,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
  * Regression coverage for issue #62 — invite-link round-trip.
  *
  * The bug: the Supabase auth callback redirected every brand-new (or
- * orgless) user to `/setup`, ignoring the `?next=/invite/<token>` query
- * param. That auto-provisioned a personal org for the invitee before the
+ * workspaceless) user to `/setup`, ignoring the `?next=/invite/<token>` query
+ * param. That auto-provisioned a personal workspace for the invitee before the
  * invite page ever ran, and the invite page then short-circuited with
  * "Already in an Organization".
  *
@@ -128,22 +128,22 @@ async function runCallback(query: string): Promise<string> {
 describe("/auth/callback — invite-link round-trip (#62)", () => {
   it("forwards a new user with ?next=/invite/<token> straight to the invite page", async () => {
     // No row in `users` yet — first sign-in. Without the fix, this would
-    // redirect to /setup and the invitee would create their own org before
+    // redirect to /setup and the invitee would create their own workspace before
     // the invite page ever ran.
     const location = await runCallback("?code=abc&next=%2Finvite%2Ftok_xyz");
 
     expect(location).toBe(`${ORIGIN}/invite/tok_xyz`);
     // The user row must still be created — the invite page expects to find
-    // it and just patch on the org_id.
+    // it and just patch on the workspace_id.
     expect(admin.rows).toHaveLength(1);
-    expect(admin.rows[0].org_id).toBeNull();
+    expect(admin.rows[0].workspace_id).toBeNull();
   });
 
-  it("forwards an existing orgless user with ?next=/invite/<token> to the invite page", async () => {
+  it("forwards an existing workspaceless user with ?next=/invite/<token> to the invite page", async () => {
     admin.seed([
       {
         id: "user_abc",
-        org_id: null,
+        workspace_id: null,
         display_name: "Bon",
       },
     ]);
@@ -157,38 +157,42 @@ describe("/auth/callback — invite-link round-trip (#62)", () => {
     const location = await runCallback("?code=abc");
     expect(location).toBe(`${ORIGIN}/dashboard`);
 
-    // The user row exists and is linked to a freshly-minted org named
-    // "Your workspace". Manager role is required so they can manage the org
+    // The user row exists and is linked to a freshly-minted workspace named
+    // "Your workspace". Manager role is required so they can manage the workspace
     // they just got handed.
     expect(admin.rows).toHaveLength(1);
     expect(admin.rows[0].role).toBe("manager");
-    expect(admin.rows[0].org_id).toMatch(/^org_/);
-    const orgs = admin.tables.orgs ?? [];
+    expect(admin.rows[0].workspace_id).toMatch(/^org_/);
+    const orgs = admin.tables.workspaces ?? [];
     expect(orgs).toHaveLength(1);
     expect(orgs[0].name).toBe("Your workspace");
-    expect(orgs[0].id).toBe(admin.rows[0].org_id);
+    expect(orgs[0].id).toBe(admin.rows[0].workspace_id);
   });
 
-  it("auto-creates a default workspace for an existing orgless user with no next (#314)", async () => {
-    admin.seed([{ id: "user_abc", org_id: null, display_name: "Bon" }]);
+  it("auto-creates a default workspace for an existing workspaceless user with no next (#314)", async () => {
+    admin.seed([{ id: "user_abc", workspace_id: null, display_name: "Bon" }]);
 
     const location = await runCallback("?code=abc");
     expect(location).toBe(`${ORIGIN}/dashboard`);
-    expect(admin.rows[0].org_id).toMatch(/^org_/);
-    const orgs = admin.tables.orgs ?? [];
+    expect(admin.rows[0].workspace_id).toMatch(/^org_/);
+    const orgs = admin.tables.workspaces ?? [];
     expect(orgs).toHaveLength(1);
     expect(orgs[0].name).toBe("Your workspace");
   });
 
-  it("sends an existing user with an org to ?next when it's safe", async () => {
-    admin.seed([{ id: "user_abc", org_id: "org_1", display_name: "Bon" }]);
+  it("sends an existing user with a workspace to ?next when it's safe", async () => {
+    admin.seed([
+      { id: "user_abc", workspace_id: "org_1", display_name: "Bon" },
+    ]);
 
     const location = await runCallback("?code=abc&next=%2Fdashboard%2Fteam");
     expect(location).toBe(`${ORIGIN}/dashboard/team`);
   });
 
   it("ignores an open-redirect attempt in next and falls through to /dashboard", async () => {
-    admin.seed([{ id: "user_abc", org_id: "org_1", display_name: "Bon" }]);
+    admin.seed([
+      { id: "user_abc", workspace_id: "org_1", display_name: "Bon" },
+    ]);
 
     // `next=https://evil.example` is rejected by the safety whitelist —
     // the callback falls back to /dashboard.

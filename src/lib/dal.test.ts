@@ -413,7 +413,7 @@ vi.mock("server-only", () => ({}));
 
 beforeEach(() => {
   for (const t of [
-    "orgs",
+    "workspaces",
     "users",
     "devices",
     "daily_rollups",
@@ -430,7 +430,7 @@ async function loadDal() {
 describe("getSyncFreshness (linking / freshness snapshot)", () => {
   const baseUser = {
     id: "usr_ivan",
-    org_id: "org_solo",
+    workspace_id: "org_solo",
     role: "manager" as const,
     api_key: "budi_x",
     display_name: "Ivan",
@@ -438,7 +438,7 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
   };
 
   it("reports not-linked when the account has no devices", async () => {
-    fake.seed("orgs", [{ id: "org_solo", name: "solo" }]);
+    fake.seed("workspaces", [{ id: "org_solo", name: "solo" }]);
     fake.seed("users", [{ ...baseUser }]);
     fake.seed("devices", []);
     fake.seed("daily_rollups", []);
@@ -454,7 +454,7 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
   });
 
   it("reports linked-but-no-rollups when devices exist but nothing has been ingested", async () => {
-    fake.seed("orgs", [{ id: "org_solo", name: "solo" }]);
+    fake.seed("workspaces", [{ id: "org_solo", name: "solo" }]);
     fake.seed("users", [{ ...baseUser }]);
     fake.seed("devices", [
       {
@@ -474,7 +474,7 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
   });
 
   it("reports the most recent rollup synced_at across the viewer's own devices", async () => {
-    fake.seed("orgs", [{ id: "org_solo", name: "solo" }]);
+    fake.seed("workspaces", [{ id: "org_solo", name: "solo" }]);
     fake.seed("users", [{ ...baseUser }]);
     fake.seed("devices", [
       {
@@ -509,7 +509,7 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
     // sessions stop ingesting (started_at frozen 3 days ago). Without the
     // session probe the header showed "Synced 2m ago" while the Sessions
     // page silently returned zero rows.
-    fake.seed("orgs", [{ id: "org_solo", name: "solo" }]);
+    fake.seed("workspaces", [{ id: "org_solo", name: "solo" }]);
     fake.seed("users", [{ ...baseUser }]);
     fake.seed("devices", [
       {
@@ -542,16 +542,16 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
     expect(snap.lastSessionAt).toBe("2026-04-26T17:07:00Z");
   });
 
-  it("(#84) lastSessionAt is scoped to the viewer's own devices, not the org", async () => {
+  it("(#84) lastSessionAt is scoped to the viewer's own devices, not the workspace", async () => {
     // Same self-trust contract as #74 for rollups: a manager whose own
     // daemon stopped sending sessions should see the divergence even when a
     // teammate's daemon is still pushing fresh sessions.
-    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("workspaces", [{ id: "org_team", name: "team" }]);
     fake.seed("users", [
-      { ...baseUser, org_id: "org_team" },
+      { ...baseUser, workspace_id: "org_team" },
       {
         id: "usr_teammate",
-        org_id: "org_team",
+        workspace_id: "org_team",
         role: "member",
         api_key: "budi_t",
         display_name: "Teammate",
@@ -584,7 +584,10 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
     ]);
 
     const { getSyncFreshness } = await loadDal();
-    const snap = await getSyncFreshness({ ...baseUser, org_id: "org_team" });
+    const snap = await getSyncFreshness({
+      ...baseUser,
+      workspace_id: "org_team",
+    });
     expect(snap.lastSessionAt).toBe("2026-04-26T17:00:00Z");
   });
 
@@ -594,12 +597,12 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
     // masking the fact that the manager's own daemon hadn't synced in 2h.
     // The freshness signal is read as self-trust ("is *my* daemon healthy");
     // teammate state belongs on /dashboard/devices, not in the header.
-    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("workspaces", [{ id: "org_team", name: "team" }]);
     fake.seed("users", [
-      { ...baseUser, org_id: "org_team" },
+      { ...baseUser, workspace_id: "org_team" },
       {
         id: "usr_teammate",
-        org_id: "org_team",
+        workspace_id: "org_team",
         role: "member",
         api_key: "budi_t",
         display_name: "Teammate",
@@ -615,7 +618,7 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
       {
         id: "dev_teammate_mac",
         user_id: "usr_teammate",
-        last_seen: "2026-04-18T11:57:00Z", // 3m ago — would win an org-wide MAX
+        last_seen: "2026-04-18T11:57:00Z", // 3m ago — would win a workspace-wide MAX
       },
     ]);
     fake.seed("daily_rollups", [
@@ -628,7 +631,10 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
     ]);
 
     const { getSyncFreshness } = await loadDal();
-    const snap = await getSyncFreshness({ ...baseUser, org_id: "org_team" });
+    const snap = await getSyncFreshness({
+      ...baseUser,
+      workspace_id: "org_team",
+    });
 
     expect(snap.deviceCount).toBe(1); // own devices only — teammate's doesn't count
     expect(snap.lastSeenAt).toBe("2026-04-18T10:00:00Z"); // mine, not teammate's
@@ -639,12 +645,12 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
     // The LinkDaemonBanner gating keys off deviceCount===0; previously a
     // manager who hadn't run `budi cloud init` themselves wouldn't see the
     // prompt because teammates had linked, masking their own missing setup.
-    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("workspaces", [{ id: "org_team", name: "team" }]);
     fake.seed("users", [
-      { ...baseUser, org_id: "org_team" },
+      { ...baseUser, workspace_id: "org_team" },
       {
         id: "usr_teammate",
-        org_id: "org_team",
+        workspace_id: "org_team",
         role: "member",
         api_key: "budi_t",
         display_name: "Teammate",
@@ -660,7 +666,10 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
     ]);
 
     const { getSyncFreshness } = await loadDal();
-    const snap = await getSyncFreshness({ ...baseUser, org_id: "org_team" });
+    const snap = await getSyncFreshness({
+      ...baseUser,
+      workspace_id: "org_team",
+    });
     expect(snap).toEqual({
       deviceCount: 0,
       lastSeenAt: null,
@@ -672,11 +681,11 @@ describe("getSyncFreshness (linking / freshness snapshot)", () => {
 
 describe("Overview ↔ Team reconciliation (#15)", () => {
   it("single-member org: org_total === sum(member_totals)", async () => {
-    fake.seed("orgs", [{ id: "org_solo", name: "solo" }]);
+    fake.seed("workspaces", [{ id: "org_solo", name: "solo" }]);
     fake.seed("users", [
       {
         id: "usr_ivan",
-        org_id: "org_solo",
+        workspace_id: "org_solo",
         role: "manager",
         api_key: "budi_x",
         display_name: "Ivan",
@@ -706,7 +715,7 @@ describe("Overview ↔ Team reconciliation (#15)", () => {
 
     const user = {
       id: "usr_ivan",
-      org_id: "org_solo",
+      workspace_id: "org_solo",
       role: "manager",
       api_key: "budi_x",
       display_name: "Ivan",
@@ -728,11 +737,11 @@ describe("Overview ↔ Team reconciliation (#15)", () => {
   });
 
   it("multi-member org still reconciles and keeps Unassigned (when present) last", async () => {
-    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("workspaces", [{ id: "org_team", name: "team" }]);
     fake.seed("users", [
       {
         id: "usr_ivan",
-        org_id: "org_team",
+        workspace_id: "org_team",
         role: "manager",
         api_key: "budi_i",
         display_name: "Ivan",
@@ -740,7 +749,7 @@ describe("Overview ↔ Team reconciliation (#15)", () => {
       },
       {
         id: "usr_jane",
-        org_id: "org_team",
+        workspace_id: "org_team",
         role: "member",
         api_key: "budi_j",
         display_name: "Jane",
@@ -760,7 +769,7 @@ describe("Overview ↔ Team reconciliation (#15)", () => {
 
     const manager = {
       id: "usr_ivan",
-      org_id: "org_team",
+      workspace_id: "org_team",
       role: "manager",
       api_key: "budi_i",
       display_name: "Ivan",
@@ -780,7 +789,7 @@ describe("Overview ↔ Team reconciliation (#15)", () => {
     // surfacing (they aren't in the member's visible device set by design).
     const jane = {
       id: "usr_jane",
-      org_id: "org_team",
+      workspace_id: "org_team",
       role: "member",
       api_key: "budi_j",
       display_name: "Jane",
@@ -813,11 +822,11 @@ describe("PostgREST 1000-row cap on chart and breakdown queries (#90)", () => {
   // were understated. Each query must now match the row-set sum from
   // `getOverviewStats`.
   function seedSoloOrgWith1200Rollups() {
-    fake.seed("orgs", [{ id: "org_solo", name: "solo" }]);
+    fake.seed("workspaces", [{ id: "org_solo", name: "solo" }]);
     fake.seed("users", [
       {
         id: "usr_ivan",
-        org_id: "org_solo",
+        workspace_id: "org_solo",
         role: "manager",
         api_key: "budi_x",
         display_name: "Ivan",
@@ -846,7 +855,7 @@ describe("PostgREST 1000-row cap on chart and breakdown queries (#90)", () => {
 
   const user = {
     id: "usr_ivan",
-    org_id: "org_solo",
+    workspace_id: "org_solo",
     role: "manager" as const,
     api_key: "budi_x",
     display_name: "Ivan",
@@ -919,11 +928,11 @@ describe("server-side aggregation (#92)", () => {
   // contributes one unit of cost, and the daily spread is bounded so we can
   // assert sums per-window without re-counting the fixture.
   function seedAtScale() {
-    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("workspaces", [{ id: "org_team", name: "team" }]);
     fake.seed("users", [
       {
         id: "usr_ivan",
-        org_id: "org_team",
+        workspace_id: "org_team",
         role: "manager",
         api_key: "budi_i",
         display_name: "Ivan",
@@ -931,7 +940,7 @@ describe("server-side aggregation (#92)", () => {
       },
       {
         id: "usr_jane",
-        org_id: "org_team",
+        workspace_id: "org_team",
         role: "member",
         api_key: "budi_j",
         display_name: "Jane",
@@ -966,7 +975,7 @@ describe("server-side aggregation (#92)", () => {
 
   const manager = {
     id: "usr_ivan",
-    org_id: "org_team",
+    workspace_id: "org_team",
     role: "manager" as const,
     api_key: "budi_i",
     display_name: "Ivan",
@@ -1106,7 +1115,7 @@ describe("Overview session count: bucket_day alignment (#155)", () => {
 
   const baseUser = {
     id: "usr_ivan",
-    org_id: "org_solo",
+    workspace_id: "org_solo",
     role: "manager" as const,
     api_key: "budi_x",
     display_name: "Ivan",
@@ -1114,7 +1123,7 @@ describe("Overview session count: bucket_day alignment (#155)", () => {
   };
 
   function seedOrg() {
-    fake.seed("orgs", [{ id: "org_solo", name: "solo" }]);
+    fake.seed("workspaces", [{ id: "org_solo", name: "solo" }]);
     fake.seed("users", [{ ...baseUser }]);
     fake.seed("devices", [{ id: "dev_laptop", user_id: "usr_ivan" }]);
   }
@@ -1177,11 +1186,11 @@ describe("Overview session count: bucket_day alignment (#155)", () => {
 
 describe("getCostByDevice", () => {
   it("manager sees every device, annotates owner, and reconciles with Overview", async () => {
-    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("workspaces", [{ id: "org_team", name: "team" }]);
     fake.seed("users", [
       {
         id: "usr_ivan",
-        org_id: "org_team",
+        workspace_id: "org_team",
         role: "manager",
         api_key: "budi_i",
         display_name: "Ivan",
@@ -1189,7 +1198,7 @@ describe("getCostByDevice", () => {
       },
       {
         id: "usr_jane",
-        org_id: "org_team",
+        workspace_id: "org_team",
         role: "member",
         api_key: "budi_j",
         display_name: "Jane",
@@ -1228,7 +1237,7 @@ describe("getCostByDevice", () => {
 
     const manager = {
       id: "usr_ivan",
-      org_id: "org_team",
+      workspace_id: "org_team",
       role: "manager",
       api_key: "budi_i",
       display_name: "Ivan",
@@ -1261,11 +1270,11 @@ describe("getCostByDevice", () => {
   });
 
   it("member only sees their own device and leaves owner_name unset", async () => {
-    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("workspaces", [{ id: "org_team", name: "team" }]);
     fake.seed("users", [
       {
         id: "usr_ivan",
-        org_id: "org_team",
+        workspace_id: "org_team",
         role: "manager",
         api_key: "budi_i",
         display_name: "Ivan",
@@ -1273,7 +1282,7 @@ describe("getCostByDevice", () => {
       },
       {
         id: "usr_jane",
-        org_id: "org_team",
+        workspace_id: "org_team",
         role: "member",
         api_key: "budi_j",
         display_name: "Jane",
@@ -1293,7 +1302,7 @@ describe("getCostByDevice", () => {
 
     const jane = {
       id: "usr_jane",
-      org_id: "org_team",
+      workspace_id: "org_team",
       role: "member",
       api_key: "budi_j",
       display_name: "Jane",
@@ -1320,16 +1329,16 @@ describe("getCostByDevice", () => {
 
 describe("per-user scoping (#80)", () => {
   // Three-org world so we can prove that an out-of-org id silently collapses
-  // to the org-wide view and never leaks the other org's data.
+  // to the workspace-wide view and never leaks the other workspace's data.
   function seedTwoOrgs() {
-    fake.seed("orgs", [
+    fake.seed("workspaces", [
       { id: "org_team", name: "team" },
       { id: "org_other", name: "other" },
     ]);
     fake.seed("users", [
       {
         id: "usr_ivan",
-        org_id: "org_team",
+        workspace_id: "org_team",
         role: "manager",
         api_key: "budi_i",
         display_name: "Ivan",
@@ -1337,7 +1346,7 @@ describe("per-user scoping (#80)", () => {
       },
       {
         id: "usr_jane",
-        org_id: "org_team",
+        workspace_id: "org_team",
         role: "member",
         api_key: "budi_j",
         display_name: "Jane",
@@ -1345,7 +1354,7 @@ describe("per-user scoping (#80)", () => {
       },
       {
         id: "usr_outsider",
-        org_id: "org_other",
+        workspace_id: "org_other",
         role: "manager",
         api_key: "budi_o",
         display_name: "Outsider",
@@ -1366,7 +1375,7 @@ describe("per-user scoping (#80)", () => {
 
   const manager = {
     id: "usr_ivan",
-    org_id: "org_team",
+    workspace_id: "org_team",
     role: "manager",
     api_key: "budi_i",
     display_name: "Ivan",
@@ -1424,7 +1433,7 @@ describe("per-user scoping (#80)", () => {
 
     const jane = {
       id: "usr_jane",
-      org_id: "org_team",
+      workspace_id: "org_team",
       role: "member",
       api_key: "budi_j",
       display_name: "Jane",
@@ -1519,7 +1528,7 @@ function splitTopLevel(s: string, sep: string): string[] {
 describe("getSessionDetail (#99)", () => {
   const manager = {
     id: "usr_ivan",
-    org_id: "org_team",
+    workspace_id: "org_team",
     role: "manager" as const,
     api_key: "budi_i",
     display_name: "Ivan",
@@ -1527,12 +1536,12 @@ describe("getSessionDetail (#99)", () => {
   };
 
   function seedSession(extras: Partial<Row> = {}) {
-    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("workspaces", [{ id: "org_team", name: "team" }]);
     fake.seed("users", [
       { ...manager },
       {
         id: "usr_jane",
-        org_id: "org_team",
+        workspace_id: "org_team",
         role: "member",
         api_key: "budi_j",
         display_name: "Jane",
@@ -1540,14 +1549,14 @@ describe("getSessionDetail (#99)", () => {
       },
       {
         id: "usr_outsider",
-        org_id: "org_other",
+        workspace_id: "org_other",
         role: "manager",
         api_key: "budi_o",
         display_name: "Outsider",
         email: "outsider@example.com",
       },
     ]);
-    fake.seed("orgs", [
+    fake.seed("workspaces", [
       { id: "org_team", name: "team" },
       { id: "org_other", name: "other" },
     ]);
@@ -1596,9 +1605,9 @@ describe("getSessionDetail (#99)", () => {
     expect(Number(detail?.total_cost_cents_ingested)).toBe(250);
   });
 
-  it("returns null for a foreign-org session — collapses with not-found", async () => {
+  it("returns null for a foreign-workspace session — collapses with not-found", async () => {
     // Per ADR-0083 §6: visibility branch must not leak existence of a session
-    // belonging to another org. A 404-equivalent (null) keeps that contract.
+    // belonging to another workspace. A 404-equivalent (null) keeps that contract.
     seedSession();
     const { getSessionDetail } = await loadDal();
 
@@ -1616,7 +1625,7 @@ describe("getSessionDetail (#99)", () => {
 
     const jane = {
       id: "usr_jane",
-      org_id: "org_team",
+      workspace_id: "org_team",
       role: "member" as const,
       api_key: "budi_j",
       display_name: "Jane",
@@ -1635,7 +1644,7 @@ describe("getSessionDetailBySessionId (#202 deep-link)", () => {
   // 404-on-bare-URL footgun the user hit on `app.getbudi.dev` is gone.
   const manager = {
     id: "usr_ivan",
-    org_id: "org_team",
+    workspace_id: "org_team",
     role: "manager" as const,
     api_key: "budi_i",
     display_name: "Ivan",
@@ -1643,7 +1652,7 @@ describe("getSessionDetailBySessionId (#202 deep-link)", () => {
   };
   const member = {
     id: "usr_jane",
-    org_id: "org_team",
+    workspace_id: "org_team",
     role: "member" as const,
     api_key: "budi_j",
     display_name: "Jane",
@@ -1651,7 +1660,7 @@ describe("getSessionDetailBySessionId (#202 deep-link)", () => {
   };
   const outsider = {
     id: "usr_outsider",
-    org_id: "org_other",
+    workspace_id: "org_other",
     role: "manager" as const,
     api_key: "budi_o",
     display_name: "Outsider",
@@ -1659,7 +1668,7 @@ describe("getSessionDetailBySessionId (#202 deep-link)", () => {
   };
 
   function seedDeepLink() {
-    fake.seed("orgs", [
+    fake.seed("workspaces", [
       { id: "org_team", name: "team" },
       { id: "org_other", name: "other" },
     ]);
@@ -1716,8 +1725,8 @@ describe("getSessionDetailBySessionId (#202 deep-link)", () => {
     expect(detail?.device_id).toBe("dev_jane");
   });
 
-  it("collapses foreign-org sessions with not-found rather than leaking existence", async () => {
-    // ADR-0083 §6: a viewer probing a session id from another org must get
+  it("collapses foreign-workspace sessions with not-found rather than leaking existence", async () => {
+    // ADR-0083 §6: a viewer probing a session id from another workspace must get
     // the same null response as a non-existent id.
     seedDeepLink();
     const { getSessionDetailBySessionId } = await loadDal();
@@ -1729,13 +1738,13 @@ describe("getSessionDetailBySessionId (#202 deep-link)", () => {
     // Seeded session lives on dev_jane; "Bob" is a same-org member on a
     // different device. Visibility scope must collapse the lookup to null
     // even though the session id technically exists in the table.
-    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("workspaces", [{ id: "org_team", name: "team" }]);
     fake.seed("users", [
       { ...manager },
       { ...member },
       {
         id: "usr_bob",
-        org_id: "org_team",
+        workspace_id: "org_team",
         role: "member",
         api_key: "budi_b",
         display_name: "Bob",
@@ -1756,7 +1765,7 @@ describe("getSessionDetailBySessionId (#202 deep-link)", () => {
     ]);
     const bob = {
       id: "usr_bob",
-      org_id: "org_team",
+      workspace_id: "org_team",
       role: "member" as const,
       api_key: "budi_b",
       display_name: "Bob",
@@ -1775,7 +1784,7 @@ describe("getSessionDetailBySessionId (#202 deep-link)", () => {
     // session_id (older daemon, custom build, …) could land on two devices.
     // The DAL must collapse that to not-found rather than silently render
     // whichever row sorted first.
-    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("workspaces", [{ id: "org_team", name: "team" }]);
     fake.seed("users", [{ ...manager }]);
     fake.seed("devices", [
       { id: "dev_a", user_id: "usr_ivan" },
@@ -1807,7 +1816,7 @@ describe("getSessions cursor pagination (#85)", () => {
 
   const manager = {
     id: "usr_ivan",
-    org_id: "org_team",
+    workspace_id: "org_team",
     role: "manager",
     api_key: "budi_i",
     display_name: "Ivan",
@@ -1815,7 +1824,7 @@ describe("getSessions cursor pagination (#85)", () => {
   };
 
   function seedSessions(n: number, deviceId = "dev_ivan") {
-    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("workspaces", [{ id: "org_team", name: "team" }]);
     fake.seed("users", [{ ...manager }]);
     fake.seed("devices", [{ id: deviceId, user_id: manager.id }]);
     // Newest first when we paginate. Index 0 == newest.
@@ -1898,7 +1907,7 @@ describe("getSessions cursor pagination (#85)", () => {
   it("breaks ties on session_id when two rows share the same started_at", async () => {
     // Composite cursor must keep tied rows in a deterministic order so the
     // walk neither skips one nor returns the same row twice.
-    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("workspaces", [{ id: "org_team", name: "team" }]);
     fake.seed("users", [{ ...manager }]);
     fake.seed("devices", [{ id: "dev_ivan", user_id: manager.id }]);
     const ts = "2026-04-15T10:00:00.000Z";
@@ -1958,12 +1967,12 @@ describe("getSessions cursor pagination (#85)", () => {
   it("respects the visible-device scope when paginating", async () => {
     // Member viewer must never see another teammate's sessions, regardless of
     // cursor — same self-only scope as everywhere else (ADR-0083 §6).
-    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("workspaces", [{ id: "org_team", name: "team" }]);
     fake.seed("users", [
       { ...manager },
       {
         id: "usr_jane",
-        org_id: "org_team",
+        workspace_id: "org_team",
         role: "member",
         api_key: "budi_j",
         display_name: "Jane",
@@ -2012,7 +2021,7 @@ describe("getSessions cursor pagination (#85)", () => {
     const { getSessions } = await loadDal();
     const jane = {
       id: "usr_jane",
-      org_id: "org_team",
+      workspace_id: "org_team",
       role: "member",
       api_key: "budi_j",
       display_name: "Jane",
@@ -2033,7 +2042,7 @@ describe("getSessions multi-provider visibility (#202)", () => {
 
   const manager = {
     id: "usr_ivan",
-    org_id: "org_team",
+    workspace_id: "org_team",
     role: "manager" as const,
     api_key: "budi_i",
     display_name: "Ivan",
@@ -2041,7 +2050,7 @@ describe("getSessions multi-provider visibility (#202)", () => {
   };
 
   function seedMixedProviders() {
-    fake.seed("orgs", [{ id: "org_team", name: "team" }]);
+    fake.seed("workspaces", [{ id: "org_team", name: "team" }]);
     fake.seed("users", [{ ...manager }]);
     fake.seed("devices", [{ id: "dev_ivan", user_id: "usr_ivan" }]);
     const base = {

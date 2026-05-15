@@ -151,7 +151,12 @@ vi.mock("next/navigation", () => ({
 vi.mock("server-only", () => ({}));
 
 beforeEach(() => {
-  for (const t of ["orgs", "users", "invite_tokens", "invite_redemptions"]) {
+  for (const t of [
+    "workspaces",
+    "users",
+    "invite_tokens",
+    "invite_redemptions",
+  ]) {
     fake.seed(t, []);
   }
   authUser = null;
@@ -162,11 +167,11 @@ const FUTURE = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 const PAST = new Date(Date.now() - 60 * 1000).toISOString();
 
 function seedInvite(overrides: Row = {}) {
-  fake.seed("orgs", [{ id: "org_acme", name: "Acme" }]);
+  fake.seed("workspaces", [{ id: "org_acme", name: "Acme" }]);
   fake.seed("invite_tokens", [
     {
       id: "tok_xyz",
-      org_id: "org_acme",
+      workspace_id: "org_acme",
       role: "member",
       created_by: "usr_manager",
       created_at: PAST,
@@ -190,7 +195,7 @@ describe("invite/[token] page — multi-use redemption (#68)", () => {
   it("lets two distinct authenticated users redeem the same token", async () => {
     seedInvite();
     fake.seed("users", [
-      { id: "usr_manager", org_id: "org_acme", role: "manager" },
+      { id: "usr_manager", workspace_id: "org_acme", role: "manager" },
     ]);
 
     // First teammate joins.
@@ -206,8 +211,12 @@ describe("invite/[token] page — multi-use redemption (#68)", () => {
     await expect(visit()).rejects.toThrow("__REDIRECT__:/dashboard");
 
     const users = fake.rows("users");
-    expect(users.find((u) => u.id === "usr_alice")?.org_id).toBe("org_acme");
-    expect(users.find((u) => u.id === "usr_bob")?.org_id).toBe("org_acme");
+    expect(users.find((u) => u.id === "usr_alice")?.workspace_id).toBe(
+      "org_acme"
+    );
+    expect(users.find((u) => u.id === "usr_bob")?.workspace_id).toBe(
+      "org_acme"
+    );
 
     const redemptions = fake.rows("invite_redemptions");
     expect(redemptions.map((r) => r.user_id).sort()).toEqual([
@@ -223,8 +232,8 @@ describe("invite/[token] page — multi-use redemption (#68)", () => {
   it("treats a re-click by an already-joined user as an idempotent dashboard redirect", async () => {
     seedInvite();
     fake.seed("users", [
-      { id: "usr_manager", org_id: "org_acme", role: "manager" },
-      { id: "usr_alice", org_id: "org_acme", role: "member" },
+      { id: "usr_manager", workspace_id: "org_acme", role: "manager" },
+      { id: "usr_alice", workspace_id: "org_acme", role: "member" },
     ]);
     // Pretend Alice already redeemed once.
     fake.seed("invite_redemptions", [
@@ -242,14 +251,14 @@ describe("invite/[token] page — multi-use redemption (#68)", () => {
     expect(fake.rows("invite_redemptions")).toHaveLength(1);
   });
 
-  it("renders the cross-org switch panel for a member already in another org (#72)", async () => {
+  it("renders the cross-workspace switch panel for a member already in another workspace (#72)", async () => {
     seedInvite();
-    fake.seed("orgs", [
+    fake.seed("workspaces", [
       { id: "org_acme", name: "Acme" },
       { id: "org_other", name: "Other Inc" },
     ]);
     fake.seed("users", [
-      { id: "usr_alice", org_id: "org_other", role: "member" },
+      { id: "usr_alice", workspace_id: "org_other", role: "member" },
     ]);
 
     authUser = {
@@ -260,33 +269,35 @@ describe("invite/[token] page — multi-use redemption (#68)", () => {
     const node = (await visit()) as { props: Record<string, unknown> };
 
     // Surfaces the explicit switch path — does NOT redirect, does NOT show the
-    // old "Multi-org is not supported yet" dead-end copy. The page hands a
-    // CrossOrgSwitch client component the four props it needs to render the
+    // old "multi-workspace is not supported yet" dead-end copy. The page hands a
+    // CrossWorkspaceSwitch client component the four props it needs to render the
     // confirmation flow; pin them all so the page<->component contract can't
     // drift silently.
     expect(redirectMock).not.toHaveBeenCalled();
     expect(node.props).toEqual({
       token: "tok_xyz",
-      currentOrgName: "Other Inc",
-      targetOrgId: "org_acme",
-      targetOrgName: "Acme",
+      currentWorkspaceName: "Other Inc",
+      targetWorkspaceId: "org_acme",
+      targetWorkspaceName: "Acme",
     });
-    expect(JSON.stringify(node)).not.toContain("Multi-org is not supported");
+    expect(JSON.stringify(node)).not.toContain(
+      "multi-workspace is not supported"
+    );
     // The flip-to-Acme write only lands when the user submits the form, so a
     // pure render must not have moved them.
     const alice = fake.rows("users").find((u) => u.id === "usr_alice");
-    expect(alice?.org_id).toBe("org_other");
+    expect(alice?.workspace_id).toBe("org_other");
     expect(fake.rows("invite_redemptions")).toHaveLength(0);
   });
 
   it("refuses a manager from a different org without rendering the switch UI", async () => {
     seedInvite();
-    fake.seed("orgs", [
+    fake.seed("workspaces", [
       { id: "org_acme", name: "Acme" },
       { id: "org_other", name: "Other Inc" },
     ]);
     fake.seed("users", [
-      { id: "usr_alice", org_id: "org_other", role: "manager" },
+      { id: "usr_alice", workspace_id: "org_other", role: "manager" },
     ]);
 
     authUser = {

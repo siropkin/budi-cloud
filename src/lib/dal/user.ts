@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { BudiUser } from "./types";
 
 /**
- * Get the current budi user and verify they have an org.
+ * Get the current budi user and verify they have a workspace.
  * Uses admin client because the auth→users mapping needs to bypass RLS
  * during the initial lookup.
  */
@@ -18,7 +18,7 @@ export async function getCurrentUser(): Promise<BudiUser | null> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("users")
-    .select("id, org_id, role, api_key, display_name, email")
+    .select("id, workspace_id, role, api_key, display_name, email")
     .eq("id", authUser.id)
     .single();
 
@@ -26,14 +26,14 @@ export async function getCurrentUser(): Promise<BudiUser | null> {
 }
 
 /**
- * Get org members list.
+ * Get workspace members list.
  */
-export async function getOrgMembers(orgId: string) {
+export async function getWorkspaceMembers(workspaceId: string) {
   const admin = createAdminClient();
   const { data } = await admin
     .from("users")
     .select("id, display_name, email, role, created_at")
-    .eq("org_id", orgId)
+    .eq("workspace_id", workspaceId)
     .order("created_at");
 
   return data ?? [];

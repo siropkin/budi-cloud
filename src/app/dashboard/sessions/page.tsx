@@ -4,7 +4,7 @@ import {
   getCurrentUser,
   getEarliestActivity,
   getKnownSurfaces,
-  getOrgMembers,
+  getWorkspaceMembers,
   getSessions,
   SESSIONS_PAGE_SIZE,
 } from "@/lib/dal";
@@ -72,7 +72,7 @@ export default async function SessionsPage({
 }) {
   const params = await searchParams;
   const user = await getCurrentUser();
-  if (!user?.org_id) return null;
+  if (!user?.workspace_id) return null;
 
   const unit = parseUnit(params.units);
   const isTokens = unit === "tokens";
@@ -91,7 +91,7 @@ export default async function SessionsPage({
   const [{ rows: sessions, nextCursor }, members, knownSurfaces] =
     await Promise.all([
       getSessions(user, range, scope, { cursor }),
-      isManager ? getOrgMembers(user.org_id) : Promise.resolve([]),
+      isManager ? getWorkspaceMembers(user.workspace_id) : Promise.resolve([]),
       getKnownSurfaces(user, { scopedUserId: scope.scopedUserId }),
     ]);
 

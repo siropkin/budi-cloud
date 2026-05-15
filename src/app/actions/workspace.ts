@@ -6,7 +6,7 @@ import { randomBytes } from "crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export async function createOrg(
+export async function createWorkspace(
   _prevState: { error: string } | undefined,
   formData: FormData
 ) {
@@ -20,19 +20,22 @@ export async function createOrg(
   if (!user) return { error: "Not authenticated" };
 
   const admin = createAdminClient();
-  const orgId = `org_${randomBytes(12).toString("base64url")}`;
+  // ID prefix kept as `org_` for forward compatibility with the rows minted
+  // before #321; the rename moved the field name to `workspace_id` but the
+  // opaque value stays stable across the migration.
+  const workspaceId = `org_${randomBytes(12).toString("base64url")}`;
 
-  // Create the org
-  const { error: orgError } = await admin.from("orgs").insert({
-    id: orgId,
+  // Create the workspace
+  const { error: workspaceError } = await admin.from("workspaces").insert({
+    id: workspaceId,
     name: name.trim(),
   });
-  if (orgError) return { error: "Failed to create workspace" };
+  if (workspaceError) return { error: "Failed to create workspace" };
 
-  // Link user to org as manager
+  // Link user to workspace as manager
   const { error: userError } = await admin
     .from("users")
-    .update({ org_id: orgId, role: "manager" })
+    .update({ workspace_id: workspaceId, role: "manager" })
     .eq("id", user.id);
   if (userError) return { error: "Failed to link user to workspace" };
 
@@ -49,11 +52,11 @@ export async function generateInviteToken() {
   const admin = createAdminClient();
   const { data: budiUser } = await admin
     .from("users")
-    .select("id, org_id, role")
+    .select("id, workspace_id, role")
     .eq("id", user.id)
     .single();
 
-  if (!budiUser?.org_id || budiUser.role !== "manager") {
+  if (!budiUser?.workspace_id || budiUser.role !== "manager") {
     return { error: "Only managers can create invite tokens" };
   }
 
@@ -62,7 +65,7 @@ export async function generateInviteToken() {
 
   const { error } = await admin.from("invite_tokens").insert({
     id: token,
-    org_id: budiUser.org_id,
+    workspace_id: budiUser.workspace_id,
     role: "member",
     created_by: budiUser.id,
     expires_at: expiresAt.toISOString(),
@@ -74,20 +77,21 @@ export async function generateInviteToken() {
 }
 
 /**
- * Manager-only: nuke an entire org and every piece of synced data tied to it.
+ * Manager-only: nuke an entire workspace and every piece of synced data tied
+ * to it.
  *
- * The caller must type the org name into `formData.confirm` — this is the
- * only typed-confirmation the settings UI requires for a destructive action,
- * mirroring the GitHub "type the name to continue" pattern. We re-verify
- * both the role and the confirmation text on the server so a crafted request
- * can't skip either check.
+ * The caller must type the workspace name into `formData.confirm` — this is
+ * the only typed-confirmation the settings UI requires for a destructive
+ * action, mirroring the GitHub "type the name to continue" pattern. We
+ * re-verify both the role and the confirmation text on the server so a
+ * crafted request can't skip either check.
  *
- * Deletion cascades in dependency order (see `ORG_CASCADE_ORDER` in
- * `./org-cascade.ts`). Supabase auth rows (`auth.users`) are intentionally
- * left intact so former members can still sign in and create/join a
- * different org.
+ * Deletion cascades in dependency order (see `WORKSPACE_CASCADE_ORDER` in
+ * `./workspace-cascade.ts`). Supabase auth rows (`auth.users`) are
+ * intentionally left intact so former members can still sign in and
+ * create/join a different workspace.
  */
-export async function deleteOrganization(
+export async function deleteWorkspace(
   _prevState: { error: string } | undefined,
   formData: FormData
 ): Promise<{ error: string } | void> {
@@ -102,36 +106,37 @@ export async function deleteOrganization(
   const admin = createAdminClient();
   const { data: me } = await admin
     .from("users")
-    .select("id, org_id, role")
+    .select("id, workspace_id, role")
     .eq("id", authUser.id)
     .single();
 
-  if (!me?.org_id) return { error: "No workspace to delete" };
+  if (!me?.workspace_id) return { error: "No workspace to delete" };
   if (me.role !== "manager") {
     return { error: "Only managers can delete the workspace" };
   }
 
-  const { data: org } = await admin
-    .from("orgs")
+  const { data: workspace } = await admin
+    .from("workspaces")
     .select("id, name")
-    .eq("id", me.org_id)
+    .eq("id", me.workspace_id)
     .single();
-  if (!org) return { error: "Workspace not found" };
+  if (!workspace) return { error: "Workspace not found" };
 
-  if (confirm.trim() !== org.name) {
+  if (confirm.trim() !== workspace.name) {
     return { error: "Type the workspace name exactly to confirm" };
   }
 
-  const orgId = org.id as string;
+  const workspaceId = workspace.id as string;
 
-  // The cascade runs server-side in a single transaction (`delete_org_cascade`
-  // in migration 024). Doing it in SQL avoids the original bug where six
-  // independent `supabase.from(...).delete()` calls swallowed FK violations
-  // and left the org half-deleted (#276): supabase-js returns `{ data, error
-  // }` instead of throwing, so any unchecked statement is a silent failure.
-  // Surface the RPC error to the UI rather than redirecting on it.
-  const { error: rpcError } = await admin.rpc("delete_org_cascade", {
-    p_org_id: orgId,
+  // The cascade runs server-side in a single transaction
+  // (`delete_workspace_cascade` in migration 025). Doing it in SQL avoids the
+  // original bug where six independent `supabase.from(...).delete()` calls
+  // swallowed FK violations and left the workspace half-deleted (#276):
+  // supabase-js returns `{ data, error }` instead of throwing, so any
+  // unchecked statement is a silent failure. Surface the RPC error to the UI
+  // rather than redirecting on it.
+  const { error: rpcError } = await admin.rpc("delete_workspace_cascade", {
+    p_workspace_id: workspaceId,
   });
   if (rpcError) {
     return { error: `Failed to delete workspace: ${rpcError.message}` };
@@ -142,16 +147,16 @@ export async function deleteOrganization(
 }
 
 /**
- * Member-only: leave the current org. Deletes the caller's devices and
- * sync data, then nulls their `org_id` so they survive as a user who can
- * join or create a different org on next sign-in.
+ * Member-only: leave the current workspace. Deletes the caller's devices and
+ * sync data, then nulls their `workspace_id` so they survive as a user who
+ * can join or create a different workspace on next sign-in.
  *
- * Managers are refused here to avoid orphaning an org with no one who can
- * invite or delete — they should use `deleteOrganization` instead (a lone
- * manager leaving is, functionally, an org deletion). Once we grow a
+ * Managers are refused here to avoid orphaning a workspace with no one who
+ * can invite or delete — they should use `deleteWorkspace` instead (a lone
+ * manager leaving is, functionally, a workspace deletion). Once we grow a
  * promote-to-manager flow this check can relax.
  */
-export async function leaveOrganization(): Promise<{ error: string } | void> {
+export async function leaveWorkspace(): Promise<{ error: string } | void> {
   const supabase = await createClient();
   const {
     data: { user: authUser },
@@ -161,11 +166,11 @@ export async function leaveOrganization(): Promise<{ error: string } | void> {
   const admin = createAdminClient();
   const { data: me } = await admin
     .from("users")
-    .select("id, org_id, role")
+    .select("id, workspace_id, role")
     .eq("id", authUser.id)
     .single();
 
-  if (!me?.org_id) return { error: "Not a member of any workspace" };
+  if (!me?.workspace_id) return { error: "Not a member of any workspace" };
   if (me.role === "manager") {
     return {
       error:
@@ -183,10 +188,10 @@ export async function leaveOrganization(): Promise<{ error: string } | void> {
   // Per-table deletes here (rather than an RPC) because the surface is small
   // and bounded to the caller's own devices — but we still have to check
   // `{ error }` on every statement. The original implementation in #276
-  // didn't, and that's what let `deleteOrganization` look successful while
+  // didn't, and that's what let `deleteWorkspace` look successful while
   // FK-violating against the price-list tables. Apply the same discipline
   // here so a future column referencing `users(id)` doesn't repeat the bug
-  // for `leaveOrganization`.
+  // for `leaveWorkspace` either.
   if (deviceIds.length > 0) {
     const { error: sessionsError } = await admin
       .from("session_summaries")
@@ -215,7 +220,7 @@ export async function leaveOrganization(): Promise<{ error: string } | void> {
 
   const { error: updateError } = await admin
     .from("users")
-    .update({ org_id: null, role: "member" })
+    .update({ workspace_id: null, role: "member" })
     .eq("id", userId);
   if (updateError) {
     return { error: `Failed to leave workspace: ${updateError.message}` };
@@ -226,31 +231,32 @@ export async function leaveOrganization(): Promise<{ error: string } | void> {
 }
 
 /**
- * Member-only: switch the caller from their current org to the org an invite
- * token belongs to. The opt-in alternative to the dead-end "Already in an
- * Organization" screen on `/invite/[token]` (#72).
+ * Member-only: switch the caller from their current workspace to the one an
+ * invite token belongs to. The opt-in alternative to the dead-end "Already
+ * in a Workspace" screen on `/invite/[token]` (#72).
  *
  * Devices, daily rollups, and session summaries are keyed off `user_id`
- * (transitively through `devices`), so flipping `users.org_id` is enough to
- * carry every piece of synced data with the user — there's no DELETE in this
- * action by design. The original org loses visibility on the caller's data
- * the moment the update commits.
+ * (transitively through `devices`), so flipping `users.workspace_id` is
+ * enough to carry every piece of synced data with the user — there's no
+ * DELETE in this action by design. The original workspace loses visibility
+ * on the caller's data the moment the update commits.
  *
- * Managers are refused for the same reason `leaveOrganization` refuses them:
- * a sole manager switching out would orphan the org with no one able to
- * invite, promote, or delete. They have to delete the org first (or, once
- * we ship one, hand off ownership).
+ * Managers are refused for the same reason `leaveWorkspace` refuses them: a
+ * sole manager switching out would orphan the workspace with no one able to
+ * invite, promote, or delete. They have to delete the workspace first (or,
+ * once we ship one, hand off ownership).
  *
- * The token is re-validated server-side. The form-supplied `targetOrgId` is
- * cross-checked against the token's `org_id` so a tampered request can't
- * land the user in an org the token wasn't issued for.
+ * The token is re-validated server-side. The form-supplied
+ * `targetWorkspaceId` is cross-checked against the token's `workspace_id` so
+ * a tampered request can't land the user in a workspace the token wasn't
+ * issued for.
  */
-export async function switchOrganization(
+export async function switchWorkspace(
   _prevState: { error: string } | undefined,
   formData: FormData
 ): Promise<{ error: string } | void> {
   const tokenId = String(formData.get("token") ?? "");
-  const targetOrgId = String(formData.get("targetOrgId") ?? "");
+  const targetWorkspaceId = String(formData.get("targetWorkspaceId") ?? "");
   const confirm = String(formData.get("confirm") ?? "");
 
   const supabase = await createClient();
@@ -262,11 +268,11 @@ export async function switchOrganization(
   const admin = createAdminClient();
   const { data: me } = await admin
     .from("users")
-    .select("id, org_id, role")
+    .select("id, workspace_id, role")
     .eq("id", authUser.id)
     .single();
 
-  if (!me?.org_id) return { error: "Not a member of any workspace" };
+  if (!me?.workspace_id) return { error: "Not a member of any workspace" };
   if (me.role === "manager") {
     return {
       error:
@@ -276,7 +282,7 @@ export async function switchOrganization(
 
   const { data: invite } = await admin
     .from("invite_tokens")
-    .select("id, org_id, role, expires_at")
+    .select("id, workspace_id, role, expires_at")
     .eq("id", tokenId)
     .single();
 
@@ -284,27 +290,27 @@ export async function switchOrganization(
   if (new Date(invite.expires_at as string) < new Date()) {
     return { error: "Invite link has expired" };
   }
-  if (invite.org_id !== targetOrgId) {
+  if (invite.workspace_id !== targetWorkspaceId) {
     return { error: "Invite link does not match the target workspace" };
   }
-  if (invite.org_id === me.org_id) {
+  if (invite.workspace_id === me.workspace_id) {
     return { error: "You are already a member of that workspace" };
   }
 
-  const { data: targetOrg } = await admin
-    .from("orgs")
+  const { data: targetWorkspace } = await admin
+    .from("workspaces")
     .select("id, name")
-    .eq("id", invite.org_id as string)
+    .eq("id", invite.workspace_id as string)
     .single();
-  if (!targetOrg) return { error: "Target workspace not found" };
+  if (!targetWorkspace) return { error: "Target workspace not found" };
 
-  if (confirm.trim() !== (targetOrg.name as string)) {
+  if (confirm.trim() !== (targetWorkspace.name as string)) {
     return { error: "Type the workspace name exactly to confirm" };
   }
 
   const { error: updateError } = await admin
     .from("users")
-    .update({ org_id: invite.org_id, role: invite.role })
+    .update({ workspace_id: invite.workspace_id, role: invite.role })
     .eq("id", me.id as string);
   if (updateError) return { error: "Failed to switch workspace" };
 
@@ -321,18 +327,18 @@ export async function switchOrganization(
 }
 
 /**
- * Manager-only: change another org member's role between `member` and
+ * Manager-only: change another workspace member's role between `member` and
  * `manager`. Self-edits go through the same path so the server's safety
  * guards (in particular the last-manager check) apply uniformly.
  *
  * The admin client bypasses RLS, so this action has to scope every read
- * and write to the caller's `org_id` itself — a manager from org A must
- * never be able to flip a user in org B.
+ * and write to the caller's `workspace_id` itself — a manager from workspace
+ * A must never be able to flip a user in workspace B.
  *
  * The "last manager" guard mirrors the invariant enforced by
- * `leaveOrganization`: an org must always have ≥1 manager. Without this
- * check a sole manager could demote themselves and orphan the org with
- * no one able to invite, promote, or delete it.
+ * `leaveWorkspace`: a workspace must always have ≥1 manager. Without this
+ * check a sole manager could demote themselves and orphan the workspace
+ * with no one able to invite, promote, or delete it.
  */
 export async function updateMemberRole(
   targetUserId: string,
@@ -351,21 +357,21 @@ export async function updateMemberRole(
   const admin = createAdminClient();
   const { data: me } = await admin
     .from("users")
-    .select("id, org_id, role")
+    .select("id, workspace_id, role")
     .eq("id", authUser.id)
     .single();
 
-  if (!me?.org_id || me.role !== "manager") {
+  if (!me?.workspace_id || me.role !== "manager") {
     return { error: "Only managers can change member roles" };
   }
 
   const { data: target } = await admin
     .from("users")
-    .select("id, org_id, role")
+    .select("id, workspace_id, role")
     .eq("id", targetUserId)
     .single();
 
-  if (!target || target.org_id !== me.org_id) {
+  if (!target || target.workspace_id !== me.workspace_id) {
     return { error: "User is not a member of your workspace" };
   }
 
@@ -375,7 +381,7 @@ export async function updateMemberRole(
     const { data: managers } = await admin
       .from("users")
       .select("id")
-      .eq("org_id", me.org_id)
+      .eq("workspace_id", me.workspace_id)
       .eq("role", "manager");
     if ((managers?.length ?? 0) <= 1) {
       return {

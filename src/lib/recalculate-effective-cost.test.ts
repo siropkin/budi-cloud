@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
  */
 
 type RpcArgs = {
-  p_org_id: string;
+  p_workspace_id: string;
   p_from_date: string;
   p_to_date: string;
   p_triggered_by: string | null;
@@ -59,7 +59,7 @@ describe("recalculateEffectiveCost", () => {
       await import("./recalculate-effective-cost");
 
     const result = await recalculateEffectiveCost({
-      orgId: "org_abc",
+      workspaceId: "org_abc",
       fromDate: "2026-01-01",
       toDate: "2026-01-31",
       triggeredBy: "usr_mgr",
@@ -67,7 +67,7 @@ describe("recalculateEffectiveCost", () => {
 
     expect(lastRpc?.name).toBe("recalculate_effective_cost");
     expect(lastRpc?.args).toEqual({
-      p_org_id: "org_abc",
+      p_workspace_id: "org_abc",
       p_from_date: "2026-01-01",
       p_to_date: "2026-01-31",
       p_triggered_by: "usr_mgr",
@@ -97,7 +97,7 @@ describe("recalculateEffectiveCost", () => {
       await import("./recalculate-effective-cost");
 
     await recalculateEffectiveCost({
-      orgId: "org_abc",
+      workspaceId: "org_abc",
       fromDate: "2026-05-10",
       toDate: "2026-05-10",
     });
@@ -123,7 +123,7 @@ describe("recalculateEffectiveCost", () => {
       await import("./recalculate-effective-cost");
 
     const result = await recalculateEffectiveCost({
-      orgId: "org_idem",
+      workspaceId: "org_idem",
       fromDate: "2026-01-01",
       toDate: "2026-01-31",
     });
@@ -148,7 +148,7 @@ describe("recalculateEffectiveCost", () => {
 
     await expect(
       recalculateEffectiveCost({
-        orgId: "org_abc",
+        workspaceId: "org_abc",
         fromDate: "2026-02-01",
         toDate: "2026-01-01",
       })
@@ -163,7 +163,7 @@ describe("recalculateEffectiveCost", () => {
 
     await expect(
       recalculateEffectiveCost({
-        orgId: "org_abc",
+        workspaceId: "org_abc",
         fromDate: "2026-01-01",
         toDate: "2026-01-31",
       })

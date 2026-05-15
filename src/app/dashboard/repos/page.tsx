@@ -5,7 +5,7 @@ import {
   getCostByBranch,
   getCostByTicket,
   getEarliestActivity,
-  getOrgMembers,
+  getWorkspaceMembers,
   getKnownSurfaces,
 } from "@/lib/dal";
 import { dateRangeFromDays } from "@/lib/date-range";
@@ -36,7 +36,7 @@ export default async function ReposPage({
 }) {
   const params = await searchParams;
   const user = await getCurrentUser();
-  if (!user?.org_id) return null;
+  if (!user?.workspace_id) return null;
 
   const unit = parseUnit(params.units);
   const surfaces = parseSurfaceParam(params.surface);
@@ -51,7 +51,9 @@ export default async function ReposPage({
     getCostByRepo(user, range, scope),
     getCostByBranch(user, range, scope),
     getCostByTicket(user, range, scope),
-    user.role === "manager" ? getOrgMembers(user.org_id) : Promise.resolve([]),
+    user.role === "manager"
+      ? getWorkspaceMembers(user.workspace_id)
+      : Promise.resolve([]),
     getKnownSurfaces(user, { scopedUserId: scope.scopedUserId }),
   ]);
 

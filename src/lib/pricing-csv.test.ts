@@ -171,8 +171,8 @@ describe("parsePricingCsv", () => {
     ]);
   });
 
-  it("maps daemon-emitted wire ids when known to the org (#244 regression)", () => {
-    // model_aliases empty, but the org has uploaded "claude-sonnet-4-5"
+  it("maps daemon-emitted wire ids when known to the workspace (#244 regression)", () => {
+    // model_aliases empty, but the workspace has uploaded "claude-sonnet-4-5"
     // rollups before — the known-models hint should still map the row.
     const aliases = buildAliasDict([], ["claude-sonnet-4-5"]);
 

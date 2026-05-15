@@ -24,14 +24,14 @@ const dal = {
   getCostByBranch: vi.fn(),
   getCostByTicket: vi.fn(),
   getEarliestActivity: vi.fn(),
-  getOrgMembers: vi.fn(),
+  getWorkspaceMembers: vi.fn(),
   getKnownSurfaces: vi.fn(),
 };
 vi.mock("@/lib/dal", () => dal);
 
 const MANAGER = {
   id: "usr_ivan",
-  org_id: "org_team",
+  workspace_id: "org_team",
   role: "manager",
   api_key: "budi_i",
   display_name: "Ivan",
@@ -66,7 +66,7 @@ beforeEach(() => {
     },
   ]);
   dal.getEarliestActivity.mockReset().mockResolvedValue("2026-04-01");
-  dal.getOrgMembers.mockReset().mockResolvedValue([]);
+  dal.getWorkspaceMembers.mockReset().mockResolvedValue([]);
   dal.getKnownSurfaces.mockReset().mockResolvedValue(["cursor", "vscode"]);
 });
 
@@ -121,8 +121,8 @@ describe("dashboard/repos /page", () => {
     await expect(render()).rejects.toThrow("__DAL_BOOM__");
   });
 
-  it("returns null (no leak) when the viewer has no org_id yet", async () => {
-    dal.getCurrentUser.mockResolvedValue({ ...MANAGER, org_id: null });
+  it("returns null (no leak) when the viewer has no workspace_id yet", async () => {
+    dal.getCurrentUser.mockResolvedValue({ ...MANAGER, workspace_id: null });
     const node = await render();
     expect(node).toBeNull();
   });

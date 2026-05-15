@@ -14,23 +14,23 @@ const DEFAULT_WORKSPACE_NAME = "Your workspace";
  * work the same (issue #314).
  *
  * Callers must ensure the user is not arriving via an invite link; in that
- * case the invite page assigns the org instead and short-circuiting here
+ * case the invite page assigns the workspace instead and short-circuiting here
  * would silently break the invite (issue #62).
  */
 async function createDefaultWorkspace(
   admin: SupabaseClient,
   userId: string
 ): Promise<{ error: string | null }> {
-  const orgId = `org_${randomBytes(12).toString("base64url")}`;
-  const { error: orgError } = await admin.from("orgs").insert({
-    id: orgId,
+  const workspaceId = `org_${randomBytes(12).toString("base64url")}`;
+  const { error: workspaceError } = await admin.from("workspaces").insert({
+    id: workspaceId,
     name: DEFAULT_WORKSPACE_NAME,
   });
-  if (orgError) return { error: orgError.message };
+  if (workspaceError) return { error: workspaceError.message };
 
   const { error: userError } = await admin
     .from("users")
-    .update({ org_id: orgId, role: "manager" })
+    .update({ workspace_id: workspaceId, role: "manager" })
     .eq("id", userId);
   if (userError) return { error: userError.message };
 
@@ -44,7 +44,7 @@ async function createDefaultWorkspace(
  * The `?next=<path>` query param is preserved across the auth round-trip
  * by `buildAuthCallbackUrl` on the login page. When `next` points at an
  * invite link, this handler must NOT auto-provision a workspace: the invite
- * page is responsible for joining the user to the inviter's org. Creating
+ * page is responsible for joining the user to the inviter's workspace. Creating
  * one here first would silently break the invite (issue #62).
  */
 export async function GET(request: Request) {
@@ -78,7 +78,7 @@ export async function GET(request: Request) {
   const admin = createAdminClient();
   const { data: existingUser } = await admin
     .from("users")
-    .select("id, org_id, display_name")
+    .select("id, workspace_id, display_name")
     .eq("id", user.id)
     .single();
 
@@ -93,7 +93,7 @@ export async function GET(request: Request) {
 
     const { error: insertError } = await admin.from("users").insert({
       id: user.id,
-      org_id: null, // Will be set when creating/joining an org
+      workspace_id: null, // Will be set when creating/joining a workspace
       role: "manager", // First user defaults to manager
       api_key: apiKey,
       display_name: displayName,
@@ -107,13 +107,13 @@ export async function GET(request: Request) {
       );
     }
 
-    // Came in via an invite link — let the invite page assign the org.
+    // Came in via an invite link — let the invite page assign the workspace.
     if (cameFromInvite) {
       return NextResponse.redirect(`${origin}${next}`);
     }
 
     // Auto-provision a default workspace so first-time users skip the
-    // org-creation step entirely (issue #314).
+    // workspace-creation step entirely (issue #314).
     const { error: workspaceError } = await createDefaultWorkspace(
       admin,
       user.id
@@ -143,10 +143,10 @@ export async function GET(request: Request) {
       .eq("id", user.id);
   }
 
-  // If user has no org, send them to the invite page when they came via
+  // If user has no workspace, send them to the invite page when they came via
   // one — otherwise auto-provision a default workspace so they never end up
   // stranded on a setup screen (issue #314).
-  if (!existingUser.org_id) {
+  if (!existingUser.workspace_id) {
     if (cameFromInvite) {
       return NextResponse.redirect(`${origin}${next}`);
     }

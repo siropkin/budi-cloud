@@ -207,10 +207,10 @@ export interface SessionRow {
 /**
  * Fetch a single session by `(device_id, session_id)` for the session-detail
  * page (#99). Returns `null` when the session does not exist *or* when it
- * exists but is not visible to the viewer (manager: anywhere in the org;
+ * exists but is not visible to the viewer (manager: anywhere in the workspace;
  * member: only on a device they own — same scoping as `getSessions`). The
  * "not visible" → `null` branch deliberately collapses with "not found" so
- * the URL parameter cannot be used to probe whether a foreign-org session
+ * the URL parameter cannot be used to probe whether a foreign-workspace session
  * exists.
  */
 export async function getSessionDetail(
@@ -248,7 +248,7 @@ export async function getSessionDetail(
  * not-found rather than guess and silently render the wrong row).
  *
  * Existence is collapsed with visibility — same privacy contract as
- * `getSessionDetail`: a foreign-org session never reveals its existence
+ * `getSessionDetail`: a foreign-workspace session never reveals its existence
  * via response shape or timing differences. Callers should `notFound()`
  * on a `null` return.
  */

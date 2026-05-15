@@ -45,7 +45,7 @@ vi.mock("@/lib/dal", async () => {
 
 const MANAGER = {
   id: "usr_ivan",
-  org_id: "org_team",
+  workspace_id: "org_team",
   role: "manager",
   api_key: "budi_i",
   display_name: "Ivan",
@@ -54,7 +54,7 @@ const MANAGER = {
 
 const MEMBER = {
   id: "usr_jane",
-  org_id: "org_team",
+  workspace_id: "org_team",
   role: "member",
   api_key: "budi_j",
   display_name: "Jane",
@@ -258,14 +258,14 @@ describe("dashboard/sessions/[id] /page", () => {
   it("404s on deep-link when the session_id resolves to nothing in the viewer's scope (#202)", async () => {
     // A session that doesn't exist OR isn't visible to the viewer collapses
     // into the same not-found shape so the URL parameter can't be used to
-    // probe foreign-org session existence (ADR-0083 §6).
+    // probe foreign-workspace session existence (ADR-0083 §6).
     dal.getSessionDetailBySessionId.mockResolvedValue(null);
     await expect(render("sess_v", {})).rejects.toThrow("__NOT_FOUND__");
     expect(notFoundMock).toHaveBeenCalled();
   });
 
   it("empty: 404s for a session not visible to the viewer (DAL returns null)", async () => {
-    // Per ADR-0083 §6: a foreign-org session collapses with not-found rather
+    // Per ADR-0083 §6: a foreign-workspace session collapses with not-found rather
     // than leaking existence. The page-level contract for that is `notFound()`.
     dal.getSessionDetail.mockResolvedValue(null);
     await expect(render()).rejects.toThrow("__NOT_FOUND__");
@@ -296,8 +296,8 @@ describe("dashboard/sessions/[id] /page", () => {
     await expect(render()).rejects.toThrow("__DAL_BOOM__");
   });
 
-  it("returns null (no leak) when the viewer has no org_id yet", async () => {
-    dal.getCurrentUser.mockResolvedValue({ ...MANAGER, org_id: null });
+  it("returns null (no leak) when the viewer has no workspace_id yet", async () => {
+    dal.getCurrentUser.mockResolvedValue({ ...MANAGER, workspace_id: null });
     const node = await render();
     expect(node).toBeNull();
   });

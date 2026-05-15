@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 /**
- * #234: `GET /v1/pricing/active` — hands the daemon the org's active price
+ * #234: `GET /v1/pricing/active` — hands the daemon the workspace's active price
  * list so local recalc stays in lockstep with cloud math.
  *
  * Tests drive the real route handler against a per-table fake Supabase that
@@ -108,7 +108,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 
 const USER = {
   id: "usr_test",
-  org_id: "org_acme",
+  workspace_id: "org_acme",
   api_key: "budi_testkey",
 };
 
@@ -150,39 +150,39 @@ describe("GET /v1/pricing/active (#234)", () => {
     expect(res.status).toBe(401);
   });
 
-  it("404s when the org has no active price list", async () => {
-    fake.seed("org_price_lists", []);
+  it("404s when the workspace has no active price list", async () => {
+    fake.seed("workspace_price_lists", []);
     const res = await call();
     expect(res.status).toBe(404);
     expect((await res.json()).error).toBe("No active price list");
   });
 
   it("404s when the only lists are draft / archived / future / past", async () => {
-    fake.seed("org_price_lists", [
+    fake.seed("workspace_price_lists", [
       {
         id: 1,
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         status: "draft",
         effective_from: PAST,
         effective_to: FUTURE,
       },
       {
         id: 2,
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         status: "archived",
         effective_from: PAST,
         effective_to: FUTURE,
       },
       {
         id: 3,
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         status: "active",
         effective_from: FUTURE,
         effective_to: null,
       },
       {
         id: 4,
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         status: "active",
         effective_from: "2010-01-01",
         effective_to: "2010-12-31",
@@ -193,16 +193,16 @@ describe("GET /v1/pricing/active (#234)", () => {
   });
 
   it("returns 200 with privacy-safe rows + list_version + ETag", async () => {
-    fake.seed("org_price_lists", [
+    fake.seed("workspace_price_lists", [
       {
         id: 7,
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         status: "active",
         effective_from: PAST,
         effective_to: null,
       },
     ]);
-    fake.seed("org_price_list_rows", [
+    fake.seed("workspace_price_list_rows", [
       {
         list_id: 7,
         platform: "bedrock",
@@ -224,9 +224,9 @@ describe("GET /v1/pricing/active (#234)", () => {
         list_usd_per_mtok: 30,
       },
     ]);
-    fake.seed("org_pricing_defaults", [
+    fake.seed("workspace_pricing_defaults", [
       {
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         default_platform: "bedrock",
         default_region: "global",
       },
@@ -238,7 +238,7 @@ describe("GET /v1/pricing/active (#234)", () => {
     expect(res.headers.get("cache-control")).toMatch(/max-age=300/);
 
     const body = (await res.json()) as {
-      org_id: string;
+      workspace_id: string;
       list_version: number;
       effective_from: string;
       effective_to: string | null;
@@ -247,7 +247,7 @@ describe("GET /v1/pricing/active (#234)", () => {
       generated_at: string;
     };
 
-    expect(body.org_id).toBe("org_acme");
+    expect(body.workspace_id).toBe("org_acme");
     expect(body.list_version).toBe(7);
     expect(body.effective_from).toBe(PAST);
     expect(body.effective_to).toBeNull();
@@ -261,16 +261,16 @@ describe("GET /v1/pricing/active (#234)", () => {
   });
 
   it("never echoes the api_key in the response", async () => {
-    fake.seed("org_price_lists", [
+    fake.seed("workspace_price_lists", [
       {
         id: 7,
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         status: "active",
         effective_from: PAST,
         effective_to: null,
       },
     ]);
-    fake.seed("org_price_list_rows", []);
+    fake.seed("workspace_price_list_rows", []);
     const res = await call();
     const text = await res.text();
     expect(text).not.toContain("budi_testkey");
@@ -278,16 +278,16 @@ describe("GET /v1/pricing/active (#234)", () => {
   });
 
   it("returns 304 when since_version matches current list_version", async () => {
-    fake.seed("org_price_lists", [
+    fake.seed("workspace_price_lists", [
       {
         id: 42,
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         status: "active",
         effective_from: PAST,
         effective_to: null,
       },
     ]);
-    fake.seed("org_price_list_rows", [
+    fake.seed("workspace_price_list_rows", [
       {
         list_id: 42,
         platform: "anthropic",
@@ -305,16 +305,16 @@ describe("GET /v1/pricing/active (#234)", () => {
   });
 
   it("returns full body when since_version is stale", async () => {
-    fake.seed("org_price_lists", [
+    fake.seed("workspace_price_lists", [
       {
         id: 42,
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         status: "active",
         effective_from: PAST,
         effective_to: null,
       },
     ]);
-    fake.seed("org_price_list_rows", []);
+    fake.seed("workspace_price_list_rows", []);
 
     const res = await call({ since: "41" });
     expect(res.status).toBe(200);
@@ -323,27 +323,27 @@ describe("GET /v1/pricing/active (#234)", () => {
   });
 
   it('honours If-None-Match: "<list_version>"', async () => {
-    fake.seed("org_price_lists", [
+    fake.seed("workspace_price_lists", [
       {
         id: 13,
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         status: "active",
         effective_from: PAST,
         effective_to: null,
       },
     ]);
-    fake.seed("org_price_list_rows", []);
+    fake.seed("workspace_price_list_rows", []);
 
     const res = await call({ ifNoneMatch: '"13"' });
     expect(res.status).toBe(304);
   });
 
-  it("scopes results to the authenticated user's org (cannot see other orgs)", async () => {
-    fake.seed("org_price_lists", [
+  it("scopes results to the authenticated user's org (cannot see other workspaces)", async () => {
+    fake.seed("workspace_price_lists", [
       // Foreign org's list — must be invisible.
       {
         id: 99,
-        org_id: "org_other",
+        workspace_id: "org_other",
         status: "active",
         effective_from: PAST,
         effective_to: null,
@@ -354,17 +354,17 @@ describe("GET /v1/pricing/active (#234)", () => {
   });
 
   it("returns null defaults when org_pricing_defaults is empty", async () => {
-    fake.seed("org_price_lists", [
+    fake.seed("workspace_price_lists", [
       {
         id: 1,
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         status: "active",
         effective_from: PAST,
         effective_to: null,
       },
     ]);
-    fake.seed("org_price_list_rows", []);
-    fake.seed("org_pricing_defaults", []);
+    fake.seed("workspace_price_list_rows", []);
+    fake.seed("workspace_pricing_defaults", []);
 
     const res = await call();
     const body = (await res.json()) as {
@@ -374,23 +374,23 @@ describe("GET /v1/pricing/active (#234)", () => {
   });
 
   it("merges multiple active lists into one envelope (union of rows, MAX(id) as list_version)", async () => {
-    fake.seed("org_price_lists", [
+    fake.seed("workspace_price_lists", [
       {
         id: 10,
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         status: "active",
         effective_from: "2026-01-01",
         effective_to: "2026-12-31",
       },
       {
         id: 12,
-        org_id: "org_acme",
+        workspace_id: "org_acme",
         status: "active",
         effective_from: "2026-03-01",
         effective_to: null,
       },
     ]);
-    fake.seed("org_price_list_rows", [
+    fake.seed("workspace_price_list_rows", [
       {
         list_id: 10,
         platform: "anthropic",

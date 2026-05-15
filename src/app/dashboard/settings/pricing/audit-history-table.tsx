@@ -7,7 +7,7 @@ import {
 } from "@/components/responsive-table";
 
 /**
- * Settings → Pricing → Audit history (#733). Renders the org's
+ * Settings → Pricing → Audit history (#733). Renders the workspace's
  * `recalculation_runs` audit trail with status filter + offset pagination
  * (50 rows/page). Server component: filter / page state lives in the URL
  * (`?recalc_status=`, `?recalc_page=`) so a deep-link to "show every failed

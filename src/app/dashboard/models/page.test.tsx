@@ -24,14 +24,14 @@ const dal = {
   getCostBySurface: vi.fn(),
   getModelActivityByDay: vi.fn(),
   getEarliestActivity: vi.fn(),
-  getOrgMembers: vi.fn(),
+  getWorkspaceMembers: vi.fn(),
   getKnownSurfaces: vi.fn(),
 };
 vi.mock("@/lib/dal", () => dal);
 
 const MANAGER = {
   id: "usr_ivan",
-  org_id: "org_team",
+  workspace_id: "org_team",
   role: "manager",
   api_key: "budi_i",
   display_name: "Ivan",
@@ -73,8 +73,8 @@ beforeEach(() => {
     },
   ]);
   dal.getEarliestActivity.mockReset().mockResolvedValue("2026-04-01");
-  dal.getOrgMembers.mockReset().mockResolvedValue([]);
-  // #187 surface filter chip — populates from known surfaces in the org.
+  dal.getWorkspaceMembers.mockReset().mockResolvedValue([]);
+  // #187 surface filter chip — populates from known surfaces in the workspace.
   dal.getKnownSurfaces.mockReset().mockResolvedValue(["cursor", "vscode"]);
   // #203 Cost-by-Surface card — mirrors the Overview chart on the Models page.
   dal.getCostBySurface.mockReset().mockResolvedValue([
@@ -149,8 +149,8 @@ describe("dashboard/models /page", () => {
     await expect(render()).rejects.toThrow("__DAL_BOOM__");
   });
 
-  it("returns null (no leak) when the viewer has no org_id yet", async () => {
-    dal.getCurrentUser.mockResolvedValue({ ...MANAGER, org_id: null });
+  it("returns null (no leak) when the viewer has no workspace_id yet", async () => {
+    dal.getCurrentUser.mockResolvedValue({ ...MANAGER, workspace_id: null });
     const node = await render();
     expect(node).toBeNull();
   });
@@ -182,7 +182,7 @@ describe("dashboard/models /page", () => {
     expect(text).not.toContain("Cost by Surface");
   });
 
-  it("surface chart: single-surface org renders an empty-state copy that names the next-state condition (#203)", async () => {
+  it("surface chart: single-surface workspace renders an empty-state copy that names the next-state condition (#203)", async () => {
     dal.getKnownSurfaces.mockResolvedValue(["vscode"]);
     dal.getCostBySurface.mockResolvedValue([
       {

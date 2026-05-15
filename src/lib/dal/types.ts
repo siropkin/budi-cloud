@@ -30,7 +30,7 @@ export interface DateRange {
 
 export interface BudiUser {
   id: string;
-  org_id: string | null;
+  workspace_id: string | null;
   role: string;
   api_key: string;
   display_name: string | null;
@@ -43,10 +43,10 @@ export interface BudiUser {
  * `scopedUserId` narrows the visible-device set to a single teammate's devices
  * — the manager-only header filter introduced in #80. It is silently ignored
  * for member viewers (their visibility is already self-only per ADR-0083 §6)
- * and silently falls back to the org-wide set when the id is unknown or
- * belongs to another org, mirroring the existing role branch in
+ * and silently falls back to the workspace-wide set when the id is unknown
+ * or belongs to another workspace, mirroring the existing role branch in
  * `getVisibleDeviceIds`. We deliberately do not surface a 4xx so an attacker
- * can't enumerate other-org user ids by probing this parameter.
+ * can't enumerate other-workspace user ids by probing this parameter.
  */
 export interface ScopeOptions {
   scopedUserId?: string | null;
@@ -94,14 +94,15 @@ export function postgrestQuoteLiteral(value: string): string {
 /**
  * Get device IDs visible to the current user.
  * Per ADR-0083 §6:
- *   - Manager: sees all devices in the org
+ *   - Manager: sees all devices in the workspace
  *   - Member: sees only their own devices
  *
  * `options.scopedUserId` (manager-only, #80) narrows the result further to a
  * single teammate's devices. If the id is missing, unknown, or belongs to
- * another org we silently fall back to the org-wide set rather than 4xxing,
- * so the URL parameter cannot be used to probe other orgs' user ids. Members
- * already collapse to themselves and ignore the option entirely.
+ * another workspace we silently fall back to the workspace-wide set rather
+ * than 4xxing, so the URL parameter cannot be used to probe other
+ * workspaces' user ids. Members already collapse to themselves and ignore
+ * the option entirely.
  */
 export async function getVisibleDeviceIds(
   admin: AdminClient,
@@ -109,7 +110,11 @@ export async function getVisibleDeviceIds(
   options?: ScopeOptions
 ): Promise<string[]> {
   if (user.role === "manager") {
-    return getOrgDeviceIds(admin, user.org_id!, options?.scopedUserId ?? null);
+    return getWorkspaceDeviceIds(
+      admin,
+      user.workspace_id!,
+      options?.scopedUserId ?? null
+    );
   }
   // Member: own devices only — `scopedUserId` is intentionally ignored.
   const { data: devices } = await admin
@@ -119,26 +124,27 @@ export async function getVisibleDeviceIds(
   return (devices ?? []).map((d) => d.id);
 }
 
-async function getOrgDeviceIds(
+async function getWorkspaceDeviceIds(
   admin: AdminClient,
-  orgId: string,
+  workspaceId: string,
   scopedUserId: string | null
 ): Promise<string[]> {
   const { data: users } = await admin
     .from("users")
     .select("id")
-    .eq("org_id", orgId);
+    .eq("workspace_id", workspaceId);
 
   if (!users?.length) return [];
 
-  const orgUserIds = users.map((u) => u.id as string);
+  const workspaceUserIds = users.map((u) => u.id as string);
   // Narrow to a single teammate when the manager picked one — but only if
-  // they're actually in the manager's org. Anything else collapses back to
-  // org-wide so an out-of-org id can't leak the existence of another org.
+  // they're actually in the manager's workspace. Anything else collapses back
+  // to workspace-wide so an out-of-workspace id can't leak the existence of
+  // another workspace.
   const userIds =
-    scopedUserId && orgUserIds.includes(scopedUserId)
+    scopedUserId && workspaceUserIds.includes(scopedUserId)
       ? [scopedUserId]
-      : orgUserIds;
+      : workspaceUserIds;
 
   const { data: devices } = await admin
     .from("devices")

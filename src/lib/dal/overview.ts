@@ -196,7 +196,7 @@ interface HeatmapRow {
 
 /**
  * Earliest day (`YYYY-MM-DD`) with a rollup for any device visible to the
- * viewer, or `null` if the org has never synced anything. Used to materialize
+ * viewer, or `null` if the workspace has never synced anything. Used to materialize
  * the `?days=all` sentinel into a concrete `from` before hitting the
  * range-scoped queries so their signatures stay unchanged.
  */
@@ -279,17 +279,17 @@ export async function getCostByUser(
     ownerIds.length > 0
       ? await admin
           .from("users")
-          .select("id, display_name, email, org_id")
+          .select("id, display_name, email, workspace_id")
           .in("id", ownerIds)
       : { data: [] as UserLookup[] };
 
   // Which owner IDs should surface by name to this viewer?
-  //   - Manager: every owner in their org
+  //   - Manager: every owner in their workspace
   //   - Member:  only themselves; anything else collapses into Unassigned
   const visibleOwnerIds = new Set<string>(
     user.role === "manager"
       ? (ownerUsers ?? [])
-          .filter((u) => u.org_id === user.org_id)
+          .filter((u) => u.workspace_id === user.workspace_id)
           .map((u) => u.id)
       : [user.id]
   );
@@ -354,5 +354,5 @@ interface UserLookup {
   id: string;
   display_name: string | null;
   email: string | null;
-  org_id: string | null;
+  workspace_id: string | null;
 }

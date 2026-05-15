@@ -41,7 +41,7 @@ vi.mock("@/lib/dal", () => dal);
 
 const MANAGER = {
   id: "usr_ivan",
-  org_id: "org_team",
+  workspace_id: "org_team",
   role: "manager",
   api_key: "budi_i",
   display_name: "Ivan",
@@ -173,8 +173,8 @@ describe("dashboard/team /page", () => {
     expect(redirectMock).toHaveBeenCalledWith("/dashboard");
   });
 
-  it("returns null (no leak) when the viewer has no org_id yet", async () => {
-    dal.getCurrentUser.mockResolvedValue({ ...MANAGER, org_id: null });
+  it("returns null (no leak) when the viewer has no workspace_id yet", async () => {
+    dal.getCurrentUser.mockResolvedValue({ ...MANAGER, workspace_id: null });
     const node = await render();
     expect(node).toBeNull();
   });

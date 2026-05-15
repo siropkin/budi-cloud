@@ -50,7 +50,7 @@ export default async function SessionDetailPage({
   }>;
 }) {
   const user = await getCurrentUser();
-  if (!user?.org_id) return null;
+  if (!user?.workspace_id) return null;
 
   const { id: sessionId } = await params;
   const sp = await searchParams;

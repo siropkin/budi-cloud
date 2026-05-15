@@ -12,7 +12,7 @@
  *             `Cache Read` → `cache_read`, `Cache Write` → `cache_write`.
  *   - `Region`: `Regional (Non-global)` → `regional`, `Global` → `global`,
  *               `US` → `us`.
- *   - `Platform`: lower-cased; preserved verbatim otherwise so an org running
+ *   - `Platform`: lower-cased; preserved verbatim otherwise so a workspace running
  *     Azure-OpenAI through a private vendor name still round-trips.
  *
  * Model alias resolution does NOT happen here — the parser only flags which
@@ -133,7 +133,7 @@ export type AliasDict = {
    * Wire-model ids actually observed in `daily_rollups.model` for the caller's
    * org. Used as a fallback when a CSV row carries a vendor display form
    * ("Claude Sonnet 4.5") that the model_aliases seed doesn't cover — issue
-   * #244. Empty when the org has no ingested rollups yet.
+   * #244. Empty when the workspace has no ingested rollups yet.
    */
   knownModels: Set<string>;
 };
@@ -288,7 +288,7 @@ export function parsePricingCsv(
     // Resolve canonical model. Resolution order:
     //   1. exact alias display-name match
     //   2. alias pattern lookup (canonicalizes to the display name)
-    //   3. wire id already present in the org's `daily_rollups` (handles a
+    //   3. wire id already present in the workspace's `daily_rollups` (handles a
     //      pasted daemon id even when model_aliases is empty)
     //   4. vendor display form ("Claude Sonnet 4.5") → wire id via
     //      `normalizeVendorClaudeModel`; accepted as mapped because the

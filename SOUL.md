@@ -59,13 +59,13 @@ The daemon pushes **pre-aggregated daily rollups and session summaries** — num
 
 ## Team model (v1)
 
-| Aspect          | Detail                                                                                    |
-| --------------- | ----------------------------------------------------------------------------------------- |
-| **Roles**       | `manager` (view all org data, manage members) and `member` (sync own data, view own data) |
-| **Granularity** | Daily aggregates; no per-message, per-hour, or real-time views                            |
-| **Retention**   | 90 days                                                                                   |
-| **Multi-org**   | One user, one org (no multi-tenancy per user in v1)                                       |
-| **SSO / SAML**  | Not supported in v1                                                                       |
+| Aspect              | Detail                                                                                          |
+| ------------------- | ----------------------------------------------------------------------------------------------- |
+| **Roles**           | `manager` (view all workspace data, manage members) and `member` (sync own data, view own data) |
+| **Granularity**     | Daily aggregates; no per-message, per-hour, or real-time views                                  |
+| **Retention**       | 90 days                                                                                         |
+| **Multi-workspace** | One user, one workspace (no multi-tenancy per user in v1)                                       |
+| **SSO / SAML**      | Not supported in v1                                                                             |
 
 ## Ingest API contract
 
@@ -77,17 +77,17 @@ The daemon pushes **pre-aggregated daily rollups and session summaries** — num
 
 All dashboard pages live under `/dashboard`:
 
-- `/dashboard` — org-wide Overview (totals, trends, daily activity)
-- `/dashboard/team` — per-member spend (managers see the full org; members see only their own row)
+- `/dashboard` — workspace-wide Overview (totals, trends, daily activity)
+- `/dashboard/team` — per-member spend (managers see the full workspace; members see only their own row)
 - `/dashboard/devices` — per-device fleet view (counts, cost-per-device)
 - `/dashboard/models` — breakdown by model / provider
 - `/dashboard/repos` — breakdown by repo / branch / ticket
 - `/dashboard/sessions` — session list with health signals; `/dashboard/sessions/[id]` for a single-session drill-down
-- `/dashboard/settings` — org info, the viewer's API key, members list, and (managers) invite link generation; nested `/dashboard/settings/pricing` for the org's price-list overrides
+- `/dashboard/settings` — workspace info, the viewer's API key, members list, and (managers) invite link generation; nested `/dashboard/settings/pricing` for the workspace's price-list overrides
 
 ## Window contract and local→cloud linking
 
-- **Time-window filters** — `1d` / `7d` / `30d` / `All` (default `7d`), matching the local Budi contract (ADR-0088 §7). `?days=<N>` accepts any positive integer; `?days=all` is a cloud-only lifetime preset backed by a per-org earliest-activity lookup. Presets and default live in `src/lib/periods.ts`.
+- **Time-window filters** — `1d` / `7d` / `30d` / `All` (default `7d`), matching the local Budi contract (ADR-0088 §7). `?days=<N>` accepts any positive integer; `?days=all` is a cloud-only lifetime preset backed by a per-workspace earliest-activity lookup. Presets and default live in `src/lib/periods.ts`.
 - **Local→cloud linking** is owned end-to-end here. The header badge (`getSyncFreshness`) reports `not_linked` / `linked_no_data` / `ok` / `stalled`; `LinkDaemonBanner` prompts brand-new accounts with a copyable `budi cloud init --api-key …`; `FirstSyncInProgressBanner` covers the gap between link and first ingest so a just-linked account is never indistinguishable from a broken one. Freshness is inferred from `daily_rollups.synced_at` — push-only, no callback (ADR-0083).
 - **Provider-scoped tiles** reuse the shared status contract (`docs/statusline-contract.md` in the main repo). Never blend multi-provider totals into a tile scoped to a single provider like "Cursor" or "Claude Code".
 
@@ -122,7 +122,7 @@ If you can't decide between "shared primitive" and "surface-owned", start in `_c
 Picking the wrong surface for a mutation or read drifts the boundary between in-app code and the daemon contract — so we pin the rule explicitly (#279):
 
 - **RSC reads → DAL directly.** Server Components import from `src/lib/dal.ts`. No HTTP hop, no route handler, no server action.
-- **In-app form mutations → server actions in `src/app/actions/`.** Anything called from a `<form action={…}>` or button in our own pages (org/team/pricing settings, sign-out, etc.) belongs here. Re-verify the caller's role on the server — JSX gating is not a security boundary (`pricing.ts`, `org.ts`).
+- **In-app form mutations → server actions in `src/app/actions/`.** Anything called from a `<form action={…}>` or button in our own pages (workspace/team/pricing settings, sign-out, etc.) belongs here. Re-verify the caller's role on the server — JSX gating is not a security boundary (`pricing.ts`, `workspace.ts`).
 - **External callers → route handlers in `src/app/api/`.** "External" means anything that is not one of our own RSCs/forms: the budi daemon, the browser-side reporting APIs, our own client-side polling code. The versioned daemon contract lives under `/api/v1/*` (`ingest`, `ingest/status`, `pricing/active`, `whoami`) — bump the major when the wire shape changes; ADR-0083 §7 in the main repo is the source of truth. Unversioned local utilities sit at `/api/<name>` (`csp-report`, `freshness`).
 - **Fixed-URL protocol callbacks are the only exception** to "route handlers live under `/api/`". Supabase's OAuth round-trip lands on `/auth/callback`, so `src/app/auth/callback/route.ts` stays where the provider expects it.
 
@@ -151,4 +151,4 @@ If a new file would violate this rule, move it before merging — don't bend the
 
   CI enforces this in `.github/workflows/ci.yml` via `supabase/check-grants.sh`, which fails the PR if any `CREATE TABLE public.<table>` lacks a matching `GRANT ... ON public.<table>` in the same migration. The check only fires when the explicit `public.` prefix is used, so existing un-prefixed migrations are grandfathered. Before the 2026-10-30 enforcement date, run the Supabase **Security Advisor** once and confirm no existing tables are missing intended grants.
 
-- **Error surfaces**: when ingest is rejected (bad key, org mismatch, schema drift), surface a clear error in the dashboard's Settings page — the daemon will simply stop syncing on 401 and the dashboard is the only place a user will see why.
+- **Error surfaces**: when ingest is rejected (bad key, workspace mismatch, schema drift), surface a clear error in the dashboard's Settings page — the daemon will simply stop syncing on 401 and the dashboard is the only place a user will see why.

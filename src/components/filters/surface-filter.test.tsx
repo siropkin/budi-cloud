@@ -20,7 +20,7 @@ import { SurfaceFilter } from "@/components/filters/surface-filter";
 
 describe("SurfaceFilter empty-state guards (#227)", () => {
   it("renders nothing when `surfaces` is empty (no rollups visible to viewer)", () => {
-    // Pre-existing contract from #187: an empty surface list means the org
+    // Pre-existing contract from #187: an empty surface list means the workspace
     // hasn't shipped any usage yet, so the dropdown has no signal to offer.
     expect(SurfaceFilter({ surfaces: [] })).toBeNull();
   });
