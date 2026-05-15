@@ -54,11 +54,6 @@ interface SyncEnvelope {
   schema_version: number;
   device_id: string;
   workspace_id: string;
-  // Legacy alias accepted during the #321 rename dual-emit window. Daemons
-  // predating the rename still send `org_id`; normalize() copies it into
-  // `workspace_id` before validation. Drops out once the daemon ships the
-  // workspace-aware build and ingest stops seeing the legacy field.
-  org_id?: string;
   synced_at: string;
   // User-controlled display name for this device. Daemon default is the OS
   // hostname, but the user can override (or blank) via `cloud.toml` — so this
@@ -69,23 +64,6 @@ interface SyncEnvelope {
     daily_rollups: IngestDailyRollup[];
     session_summaries: IngestSessionSummary[];
   };
-}
-
-/**
- * Accept the legacy `org_id` envelope field as a synonym for `workspace_id`
- * during the #321 rename window. If both are sent they must agree — a daemon
- * that disagrees with itself is a bug, not a compat case, so reject loudly
- * rather than silently picking one.
- */
-function normalizeWorkspaceField(body: SyncEnvelope): string | null {
-  const legacy = typeof body.org_id === "string" ? body.org_id : undefined;
-  const current =
-    typeof body.workspace_id === "string" ? body.workspace_id : undefined;
-  if (legacy && current && legacy !== current) {
-    return "Envelope sent both org_id and workspace_id with different values";
-  }
-  if (!current && legacy) body.workspace_id = legacy;
-  return null;
 }
 
 /**
@@ -240,12 +218,6 @@ export async function POST(request: NextRequest) {
     body = JSON.parse(text);
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  // --- Normalize org_id → workspace_id (#321 dual-emit window) ---
-  const normalizeError = normalizeWorkspaceField(body);
-  if (normalizeError) {
-    return Response.json({ error: normalizeError }, { status: 422 });
   }
 
   // --- Validate envelope ---
