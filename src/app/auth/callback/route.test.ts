@@ -16,15 +16,21 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 type Row = Record<string, unknown>;
 
 class FakeAdmin {
-  rows: Row[] = [];
+  tables: Record<string, Row[]> = {};
 
-  seed(rows: Row[]) {
-    this.rows = [...rows];
+  seed(rows: Row[], table: string = "users") {
+    this.tables[table] = [...rows];
   }
 
-  from(_table: string) {
-    void _table;
-    return new FakeQuery(this.rows);
+  from(table: string) {
+    if (!this.tables[table]) this.tables[table] = [];
+    return new FakeQuery(this.tables[table]);
+  }
+
+  // Backwards-compatible shorthand for the original tests that only ever
+  // inspected the `users` table directly.
+  get rows(): Row[] {
+    return this.tables.users ?? [];
   }
 }
 
@@ -101,7 +107,7 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("server-only", () => ({}));
 
 beforeEach(() => {
-  admin.seed([]);
+  admin.tables = {};
   mockUser = {
     id: "user_abc",
     email: "bon@example.com",
@@ -147,16 +153,31 @@ describe("/auth/callback — invite-link round-trip (#62)", () => {
     expect(location).toBe(`${ORIGIN}/invite/tok_xyz`);
   });
 
-  it("still sends a brand-new user with no next to /setup", async () => {
+  it("auto-creates a default workspace for a brand-new user with no next (#314)", async () => {
     const location = await runCallback("?code=abc");
-    expect(location).toBe(`${ORIGIN}/setup`);
+    expect(location).toBe(`${ORIGIN}/dashboard`);
+
+    // The user row exists and is linked to a freshly-minted org named
+    // "Your workspace". Manager role is required so they can manage the org
+    // they just got handed.
+    expect(admin.rows).toHaveLength(1);
+    expect(admin.rows[0].role).toBe("manager");
+    expect(admin.rows[0].org_id).toMatch(/^org_/);
+    const orgs = admin.tables.orgs ?? [];
+    expect(orgs).toHaveLength(1);
+    expect(orgs[0].name).toBe("Your workspace");
+    expect(orgs[0].id).toBe(admin.rows[0].org_id);
   });
 
-  it("still sends an existing orgless user with no next to /setup", async () => {
+  it("auto-creates a default workspace for an existing orgless user with no next (#314)", async () => {
     admin.seed([{ id: "user_abc", org_id: null, display_name: "Bon" }]);
 
     const location = await runCallback("?code=abc");
-    expect(location).toBe(`${ORIGIN}/setup`);
+    expect(location).toBe(`${ORIGIN}/dashboard`);
+    expect(admin.rows[0].org_id).toMatch(/^org_/);
+    const orgs = admin.tables.orgs ?? [];
+    expect(orgs).toHaveLength(1);
+    expect(orgs[0].name).toBe("Your workspace");
   });
 
   it("sends an existing user with an org to ?next when it's safe", async () => {

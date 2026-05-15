@@ -1,8 +1,41 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isInvitePath, isSafeNextPath } from "@/lib/auth-redirect";
 import { randomBytes } from "crypto";
+
+const DEFAULT_WORKSPACE_NAME = "Your workspace";
+
+/**
+ * Create a default workspace ("Your workspace") and link the user to it as
+ * manager. The workspace has no special flags — it's identical to one the
+ * user would create themselves through settings, so rename/delete/invite all
+ * work the same (issue #314).
+ *
+ * Callers must ensure the user is not arriving via an invite link; in that
+ * case the invite page assigns the org instead and short-circuiting here
+ * would silently break the invite (issue #62).
+ */
+async function createDefaultWorkspace(
+  admin: SupabaseClient,
+  userId: string
+): Promise<{ error: string | null }> {
+  const orgId = `org_${randomBytes(12).toString("base64url")}`;
+  const { error: orgError } = await admin.from("orgs").insert({
+    id: orgId,
+    name: DEFAULT_WORKSPACE_NAME,
+  });
+  if (orgError) return { error: orgError.message };
+
+  const { error: userError } = await admin
+    .from("users")
+    .update({ org_id: orgId, role: "manager" })
+    .eq("id", userId);
+  if (userError) return { error: userError.message };
+
+  return { error: null };
+}
 
 /**
  * OAuth callback handler for Supabase Auth.
@@ -10,10 +43,9 @@ import { randomBytes } from "crypto";
  *
  * The `?next=<path>` query param is preserved across the auth round-trip
  * by `buildAuthCallbackUrl` on the login page. When `next` points at an
- * invite link, this handler must NOT short-circuit to `/setup`: the invite
- * page is responsible for joining the user to the inviter's org. Sending
- * a brand-new user to `/setup` first would auto-provision a personal org
- * and silently break the invite (issue #62).
+ * invite link, this handler must NOT auto-provision a workspace: the invite
+ * page is responsible for joining the user to the inviter's org. Creating
+ * one here first would silently break the invite (issue #62).
  */
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -80,8 +112,20 @@ export async function GET(request: Request) {
       return NextResponse.redirect(`${origin}${next}`);
     }
 
-    // New user with no org — redirect to setup
-    return NextResponse.redirect(`${origin}/setup`);
+    // Auto-provision a default workspace so first-time users skip the
+    // org-creation step entirely (issue #314).
+    const { error: workspaceError } = await createDefaultWorkspace(
+      admin,
+      user.id
+    );
+    if (workspaceError) {
+      console.error("Failed to create default workspace:", workspaceError);
+      return NextResponse.redirect(
+        `${origin}/login?error=workspace_creation_failed`
+      );
+    }
+
+    return NextResponse.redirect(`${origin}${next}`);
   }
 
   // Existing user — update email/display_name if changed
@@ -100,12 +144,23 @@ export async function GET(request: Request) {
   }
 
   // If user has no org, send them to the invite page when they came via
-  // one — otherwise to setup so they can create their own org.
+  // one — otherwise auto-provision a default workspace so they never end up
+  // stranded on a setup screen (issue #314).
   if (!existingUser.org_id) {
     if (cameFromInvite) {
       return NextResponse.redirect(`${origin}${next}`);
     }
-    return NextResponse.redirect(`${origin}/setup`);
+    const { error: workspaceError } = await createDefaultWorkspace(
+      admin,
+      user.id
+    );
+    if (workspaceError) {
+      console.error("Failed to create default workspace:", workspaceError);
+      return NextResponse.redirect(
+        `${origin}/login?error=workspace_creation_failed`
+      );
+    }
+    return NextResponse.redirect(`${origin}${next}`);
   }
 
   return NextResponse.redirect(`${origin}${next}`);
