@@ -58,6 +58,17 @@ export default function LoginPage() {
           <p className="mt-1 text-sm text-zinc-400">
             Team-wide AI cost visibility
           </p>
+          <p className="mt-3 text-sm text-zinc-300">
+            Free, self-hosted, no signup needed.{" "}
+            <a
+              href="https://getbudi.dev"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-400 underline-offset-2 hover:text-blue-300 hover:underline"
+            >
+              Learn more
+            </a>
+          </p>
         </div>
 
         {error && (
