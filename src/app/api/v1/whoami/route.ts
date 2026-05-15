@@ -63,13 +63,8 @@ async function authenticateApiKey(
  * the CLI side.
  *
  * Auth: Authorization: Bearer budi_<key>
- * Response (200): { "workspace_id": string, "org_id": string }
+ * Response (200): { "workspace_id": string }
  * Response (401): { "error": "Unauthorized" }
- *
- * Dual-emit window (#321): `org_id` is the legacy field name kept for one
- * release cycle so daemons predating the rename keep parsing the response.
- * Both fields carry the same value; the legacy alias goes away after the
- * daemon's workspace-aware build has soaked.
  */
 export async function GET(request: NextRequest) {
   // --- Pre-auth IP rate limit (#179) ---
@@ -92,6 +87,5 @@ export async function GET(request: NextRequest) {
 
   return Response.json({
     workspace_id: user.workspace_id,
-    org_id: user.workspace_id,
   });
 }
