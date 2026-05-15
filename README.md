@@ -1,6 +1,6 @@
 # budi-cloud
 
-Cloud dashboard and ingest API for [budi](https://github.com/siropkin/budi). Provides team-wide AI cost visibility across users, repos, models, branches, and tickets.
+Cloud dashboard and ingest API for [budi](https://github.com/siropkin/budi). AI cost visibility for solo developers and teams across users, repos, models, branches, and tickets.
 
 ## Overview
 
@@ -28,7 +28,7 @@ See [ADR-0083](https://github.com/siropkin/budi/blob/main/docs/adr/0083-cloud-in
 
 ## Team model (cloud alpha)
 
-The cloud alpha supports small teams (1–20 developers):
+The cloud alpha works for solo developers and small teams (1–20 developers):
 
 | Aspect          | Detail                                                                                                               |
 | --------------- | -------------------------------------------------------------------------------------------------------------------- |
