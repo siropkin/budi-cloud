@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { buildAuthCallbackUrl } from "@/lib/auth-redirect";
 
@@ -10,9 +11,6 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Forward the `?next=<path>` query param through the auth round-trip so
-  // that an invite link (`/login?next=/invite/<token>`) lands the user back
-  // on the invite page after OAuth / magic-link, instead of `/dashboard`.
   function callbackUrl() {
     const next = new URLSearchParams(window.location.search).get("next");
     return buildAuthCallbackUrl(window.location.origin, next);
@@ -51,82 +49,144 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
-      <div className="w-full max-w-sm space-y-6 rounded-xl border border-white/10 bg-white/[0.02] p-8">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-white">Budi Cloud</h1>
-          <p className="mt-1 text-sm text-zinc-400">
-            Team-wide AI cost visibility
+    <main className="flex min-h-screen bg-[#0a0a0a]">
+      <div className="hidden w-1/2 flex-col justify-between border-r border-white/10 bg-white/[0.01] p-10 lg:flex">
+        <Link href="/" className="text-lg font-bold text-white">
+          Budi Cloud
+        </Link>
+        <div className="max-w-md">
+          <p className="text-2xl font-semibold leading-snug text-white">
+            Team-wide AI cost visibility for engineering managers.
           </p>
-          <p className="mt-3 text-sm text-zinc-300">
-            Free, self-hosted, no signup needed.{" "}
-            <a
-              href="https://getbudi.dev"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-400 underline-offset-2 hover:text-blue-300 hover:underline"
-            >
-              Learn more
-            </a>
-          </p>
+          <ul className="mt-6 space-y-3 text-sm text-zinc-400">
+            <li className="flex items-start gap-2">
+              <CheckIcon />
+              <span>
+                Track Claude Code, Cursor, Copilot & Windsurf spend in one
+                dashboard
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckIcon />
+              <span>Set budgets and get alerts before costs spike</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckIcon />
+              <span>
+                Drill into spend by model, repo, branch, and team member
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckIcon />
+              <span>Open-source, self-hostable, free tier on Budi Cloud</span>
+            </li>
+          </ul>
         </div>
+        <p className="text-xs text-zinc-600">
+          Open-source under MIT &middot;{" "}
+          <a
+            href="https://github.com/siropkin/budi-cloud"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline-offset-2 hover:text-zinc-400 hover:underline"
+          >
+            GitHub
+          </a>
+        </p>
+      </div>
 
-        {error && (
-          <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-            {error}
+      <div className="flex flex-1 items-center justify-center p-6">
+        <div className="w-full max-w-sm space-y-6">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-white">Sign in</h1>
+            <p className="mt-1 text-sm text-zinc-400">
+              Free, self-hosted, no credit card needed.{" "}
+              <a
+                href="https://getbudi.dev"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 underline-offset-2 hover:text-blue-300 hover:underline"
+              >
+                Learn more
+              </a>
+            </p>
           </div>
-        )}
 
-        {magicLinkSent ? (
-          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-center text-sm text-emerald-400">
-            Check your email for a sign-in link.
-          </div>
-        ) : (
-          <>
-            <div className="space-y-3">
-              <button
-                onClick={() => signInWithProvider("github")}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-black transition-colors hover:bg-zinc-200"
-              >
-                <GitHubIcon />
-                Continue with GitHub
-              </button>
-              <button
-                onClick={() => signInWithProvider("google")}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
-              >
-                <GoogleIcon />
-                Continue with Google
-              </button>
+          {error && (
+            <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+              {error}
             </div>
+          )}
 
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-white/10" />
-              <span className="text-xs text-zinc-500">or</span>
-              <div className="h-px flex-1 bg-white/10" />
+          {magicLinkSent ? (
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-center text-sm text-emerald-400">
+              Check your email for a sign-in link.
             </div>
+          ) : (
+            <>
+              <div className="space-y-3">
+                <button
+                  onClick={() => signInWithProvider("github")}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-black transition-colors hover:bg-zinc-200"
+                >
+                  <GitHubIcon />
+                  Continue with GitHub
+                </button>
+                <button
+                  onClick={() => signInWithProvider("google")}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
+                >
+                  <GoogleIcon />
+                  Continue with Google
+                </button>
+              </div>
 
-            <div className="space-y-3">
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Email address"
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-zinc-500 focus:border-blue-500 focus:outline-none"
-                onKeyDown={(e) => e.key === "Enter" && signInWithMagicLink()}
-              />
-              <button
-                onClick={signInWithMagicLink}
-                disabled={loading || !email}
-                className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {loading ? "Sending..." : "Send magic link"}
-              </button>
-            </div>
-          </>
-        )}
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-white/10" />
+                <span className="text-xs text-zinc-500">or</span>
+                <div className="h-px flex-1 bg-white/10" />
+              </div>
+
+              <div className="space-y-3">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Email address"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-zinc-500 focus:border-blue-500 focus:outline-none"
+                  onKeyDown={(e) => e.key === "Enter" && signInWithMagicLink()}
+                />
+                <button
+                  onClick={signInWithMagicLink}
+                  disabled={loading || !email}
+                  className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loading ? "Sending..." : "Send magic link"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </main>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      className="mt-0.5 h-4 w-4 shrink-0 text-blue-400"
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={2}
+      stroke="currentColor"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="m4.5 12.75 6 6 9-13.5"
+      />
+    </svg>
   );
 }
 
