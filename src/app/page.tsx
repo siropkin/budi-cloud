@@ -62,7 +62,7 @@ export default async function Home() {
           </a>
           <Link
             href="/login"
-            className="rounded-lg bg-white/10 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-white/15"
+            className="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-green-600"
           >
             Sign in
           </Link>
@@ -81,7 +81,7 @@ export default async function Home() {
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <Link
             href="/login"
-            className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            className="rounded-lg bg-accent px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-green-600"
           >
             Get started free
           </Link>
@@ -97,7 +97,7 @@ export default async function Home() {
       </section>
 
       <section className="mx-auto w-full max-w-5xl px-6 pb-20">
-        <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.02] shadow-2xl shadow-blue-500/5">
+        <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.02] shadow-2xl shadow-green-500/5">
           <DashboardPreview />
         </div>
       </section>
@@ -109,7 +109,7 @@ export default async function Home() {
               key={prop.title}
               className="rounded-xl border border-white/10 bg-white/[0.02] p-6"
             >
-              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600/10 text-blue-400">
+              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10 text-green-400">
                 <prop.icon />
               </div>
               <h3 className="text-base font-semibold text-white">
@@ -132,7 +132,7 @@ export default async function Home() {
         </p>
         <Link
           href="/login"
-          className="mt-6 inline-block rounded-lg bg-blue-600 px-8 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+          className="mt-6 inline-block rounded-lg bg-accent px-8 py-3 text-sm font-medium text-white transition-colors hover:bg-green-600"
         >
           Get started free
         </Link>
