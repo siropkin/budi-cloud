@@ -49,7 +49,7 @@ export default function AuthErrorPage() {
             href="/login"
             className="block w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-center text-sm font-medium text-white transition-colors hover:bg-white/10"
           >
-            Back to login
+            Back to sign in
           </a>
         </div>
       </div>
