@@ -14,8 +14,7 @@ const VALUE_PROPS = [
   },
   {
     title: "Budgets & alerts",
-    description:
-      "Set budgets and get notified before costs spike.",
+    description: "Set budgets and get notified before costs spike.",
     icon: BellIcon,
   },
   {
@@ -75,9 +74,9 @@ export default async function Home() {
           AI cost visibility for developers and teams
         </h1>
         <p className="mt-5 max-w-xl text-lg text-zinc-400">
-          Track what you spend on Claude Code, Cursor, Copilot, and
-          Windsurf — in one place. Set budgets, catch spikes early, and make
-          informed decisions about AI tooling.
+          Track what you spend on Claude Code, Cursor, Copilot, and Windsurf —
+          in one place. Set budgets, catch spikes early, and make informed
+          decisions about AI tooling.
         </p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <Link

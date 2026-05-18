@@ -122,8 +122,8 @@ export default async function SettingsPage() {
           </CardHeader>
           <CardContent>
             <p className="mb-3 text-sm text-zinc-400">
-              Upload and manage your negotiated price lists. The
-              active list overrides the daemon&apos;s ingested costs.
+              Upload and manage your negotiated price lists. The active list
+              overrides the daemon&apos;s ingested costs.
             </p>
             <Link
               href="/dashboard/settings/pricing"

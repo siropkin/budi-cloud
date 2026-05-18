@@ -118,8 +118,8 @@ export default async function PricingSettingsPage({
         </Link>
         <h1 className="mt-2 text-xl font-bold">Pricing</h1>
         <p className="mt-1 text-sm text-zinc-400">
-          Manage your negotiated price lists. Recalculations use the
-          active list to override the daemon&apos;s ingested costs.
+          Manage your negotiated price lists. Recalculations use the active list
+          to override the daemon&apos;s ingested costs.
         </p>
       </div>
 
