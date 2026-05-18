@@ -9,13 +9,12 @@ const VALUE_PROPS = [
   {
     title: "Unified AI spend view",
     description:
-      "See every team member's Claude Code, Cursor, Copilot, and Windsurf usage in one dashboard.",
+      "See all your Claude Code, Cursor, Copilot, and Windsurf usage in one dashboard.",
     icon: ChartIcon,
   },
   {
     title: "Budgets & alerts",
-    description:
-      "Set per-team or per-user budgets and get notified before costs spike.",
+    description: "Set budgets and get notified before costs spike.",
     icon: BellIcon,
   },
   {
@@ -72,12 +71,12 @@ export default async function Home() {
 
       <section className="mx-auto flex w-full max-w-6xl flex-col items-center px-6 pt-16 pb-20 text-center sm:pt-24 sm:pb-28">
         <h1 className="max-w-2xl text-4xl font-bold tracking-tight text-white sm:text-5xl">
-          Team-wide AI cost visibility for engineering managers
+          AI cost visibility for developers and teams
         </h1>
         <p className="mt-5 max-w-xl text-lg text-zinc-400">
-          Track what your team spends on Claude Code, Cursor, Copilot, and
-          Windsurf — in one place. Set budgets, catch spikes early, and make
-          informed decisions about AI tooling.
+          Track what you spend on Claude Code, Cursor, Copilot, and Windsurf —
+          in one place. Set budgets, catch spikes early, and make informed
+          decisions about AI tooling.
         </p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <Link

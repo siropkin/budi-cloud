@@ -26,12 +26,11 @@ export function InviteSection() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Invite Team Members</CardTitle>
+        <CardTitle>Invite Members</CardTitle>
       </CardHeader>
       <CardContent>
         <p className="mb-3 text-sm text-zinc-400">
-          Generate an invite link to share with your team. Links expire in 7
-          days.
+          Generate an invite link to share with others. Links expire in 7 days.
         </p>
 
         {error && <p className="mb-3 text-sm text-red-400">{error}</p>}

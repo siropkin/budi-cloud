@@ -80,7 +80,7 @@ export default async function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Team Members ({members.length})</CardTitle>
+          <CardTitle>Members ({members.length})</CardTitle>
         </CardHeader>
         <CardContent>
           {members.length === 0 ? (
@@ -122,8 +122,8 @@ export default async function SettingsPage() {
           </CardHeader>
           <CardContent>
             <p className="mb-3 text-sm text-zinc-400">
-              Upload and manage your team&apos;s negotiated price lists. The
-              active list overrides the daemon&apos;s ingested costs.
+              Upload and manage your negotiated price lists. The active list
+              overrides the daemon&apos;s ingested costs.
             </p>
             <Link
               href="/dashboard/settings/pricing"

@@ -56,7 +56,7 @@ export default function LoginPage() {
         </Link>
         <div className="max-w-md">
           <p className="text-2xl font-semibold leading-snug text-white">
-            Team-wide AI cost visibility for engineering managers.
+            AI cost visibility for developers and teams.
           </p>
           <ul className="mt-6 space-y-3 text-sm text-zinc-400">
             <li className="flex items-start gap-2">
@@ -73,7 +73,7 @@ export default function LoginPage() {
             <li className="flex items-start gap-2">
               <CheckIcon />
               <span>
-                Drill into spend by model, repo, branch, and team member
+                Drill into spend by model, repo, branch, and contributor
               </span>
             </li>
             <li className="flex items-start gap-2">

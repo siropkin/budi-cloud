@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Budi Cloud",
-  description: "Team-wide AI cost visibility for engineering managers",
+  description: "AI cost visibility for developers and teams",
 };
 
 export default function RootLayout({

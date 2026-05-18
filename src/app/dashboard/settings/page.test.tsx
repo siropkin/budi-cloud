@@ -76,16 +76,16 @@ async function render() {
 }
 
 describe("dashboard/settings /page", () => {
-  it("smoke: renders Workspace, API Key, and Team Members sections with populated data", async () => {
+  it("smoke: renders Workspace, API Key, and Members sections with populated data", async () => {
     const node = await render();
     expect(node).toBeTruthy();
     const text = extractText(node);
     expect(text).toContain("Settings");
     expect(text).toContain("Workspace");
     expect(text).toContain("Acme");
-    // The team members section header includes the count — pin it so a
+    // The members section header includes the count — pin it so a
     // refactor that drops the count or the header is caught.
-    expect(text).toContain("Team Members");
+    expect(text).toContain("Members");
     expect(text).toContain("2");
     expect(text).toContain("Ivan");
     expect(text).toContain("Jane");
@@ -96,7 +96,7 @@ describe("dashboard/settings /page", () => {
     const node = await render();
     expect(node).toBeTruthy();
     const text = extractText(node);
-    expect(text).toContain("Team Members");
+    expect(text).toContain("Members");
     expect(text).toContain("0");
     expect(text).toContain("No members yet");
   });
