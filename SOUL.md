@@ -21,6 +21,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 Extraction boundaries are defined in [ADR-0086](https://github.com/siropkin/budi/blob/main/docs/adr/0086-extraction-boundaries.md) in the main repo. The privacy contract is [ADR-0083](https://github.com/siropkin/budi/blob/main/docs/adr/0083-cloud-ingest-identity-and-privacy-contract.md). Read both before touching the ingest path.
 
+## Issue tracking
+
+All budi repos use **GitHub Issues** as the issue tracker. File bugs, feature requests, and tasks as GitHub issues on the relevant repo.
+
 ## Build & dev
 
 ```bash
