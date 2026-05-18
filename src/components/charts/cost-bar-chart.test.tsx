@@ -98,7 +98,7 @@ describe("CostBarChart", () => {
     expect((outside.props as { textAnchor: string }).textAnchor).toBe("start");
   });
 
-  it("flips the value label inside the bar when it nears the right edge (#261)", () => {
+  it("always renders value labels outside the bar (#330)", () => {
     const saturating = [
       { label: "leader", cost_cents: 1000, tokens: 0 },
       { label: "tiny", cost_cents: 10, tokens: 0 },
@@ -112,17 +112,13 @@ describe("CostBarChart", () => {
       }
     ).content;
 
-    // Leader is 100% of the max — ratio 1.0 >= 0.85 — render inside the bar
-    // (white text, end-anchored at the right edge).
-    const inside = content({ x: 0, y: 0, width: 200, height: 20, value: 1000 });
-    expect((inside.props as { textAnchor: string }).textAnchor).toBe("end");
-    expect((inside.props as { fill: string }).fill).toBe("#ffffff");
+    const leader = content({ x: 0, y: 0, width: 200, height: 20, value: 1000 });
+    expect((leader.props as { textAnchor: string }).textAnchor).toBe("start");
+    expect((leader.props as { fill: string }).fill).toBe("#71717a");
 
-    // Tiny is 1% of the max — render outside the bar (gray text, start-anchored
-    // just past the bar's right edge).
-    const outside = content({ x: 0, y: 0, width: 2, height: 20, value: 10 });
-    expect((outside.props as { textAnchor: string }).textAnchor).toBe("start");
-    expect((outside.props as { fill: string }).fill).toBe("#71717a");
+    const tiny = content({ x: 0, y: 0, width: 2, height: 20, value: 10 });
+    expect((tiny.props as { textAnchor: string }).textAnchor).toBe("start");
+    expect((tiny.props as { fill: string }).fill).toBe("#71717a");
   });
 
   it("renders token totals when unit='tokens' (#128)", () => {
@@ -140,9 +136,7 @@ describe("CostBarChart", () => {
         content: (props: Record<string, unknown>) => ReactElement;
       }
     ).content;
-    // Token mode formats with fmtNum (no $). Exercise the outside-the-bar
-    // branch on the smaller of the two rows so the assertion isn't sensitive
-    // to the flip-inside threshold.
+    // Token mode formats with fmtNum (no $).
     const tinyLabel = content({
       x: 0,
       y: 0,

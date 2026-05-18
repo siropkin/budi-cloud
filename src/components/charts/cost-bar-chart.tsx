@@ -123,14 +123,6 @@ export function CostBarChart({
   }));
 
   const height = barChartHeight(sorted.length);
-  // Largest bar drives the "should we flip the value label inside?" decision
-  // (#261). Comparing per-bar value to maxValue is a stable proxy for the
-  // pixel-width ratio because recharts maps value→pixel linearly across the
-  // plot area. Bars at ≥ FLIP_INSIDE_RATIO of the max would otherwise push
-  // their value label past the chart's right edge (visibly clipped on 390px
-  // viewports).
-  const maxValue = sorted[0]?.value ?? 0;
-  const FLIP_INSIDE_RATIO = 0.85;
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -175,6 +167,7 @@ export function CostBarChart({
         <XAxis
           dataKey="value"
           type="number"
+          domain={[0, (max: number) => max * 1.1]}
           tickFormatter={(v) => fmt(Number(v))}
           axisLine={false}
           tickLine={false}
@@ -230,25 +223,6 @@ export function CostBarChart({
                 typeof p.height === "number" ? p.height : Number(p.height ?? 0);
               const value = Number(p.value ?? 0);
               const text = fmt(value);
-              const flipInside =
-                maxValue > 0 && value / maxValue >= FLIP_INSIDE_RATIO;
-              if (flipInside) {
-                // Anchor inside the bar at the right edge so the label stays
-                // visible even when the bar saturates the plot area. White
-                // sits cleanly on the blue fill (`#3b82f6`).
-                return (
-                  <text
-                    x={x + width - 6}
-                    y={y + height / 2}
-                    dy={4}
-                    textAnchor="end"
-                    fill="#ffffff"
-                    fontSize={12}
-                  >
-                    {text}
-                  </text>
-                );
-              }
               return (
                 <text
                   x={x + width + 4}
