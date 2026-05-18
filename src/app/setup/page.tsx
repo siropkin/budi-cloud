@@ -38,9 +38,9 @@ export default async function SetupPage({
     <main className="flex min-h-screen items-center justify-center bg-[#0a0a0a]">
       <div className="w-full max-w-sm space-y-6 rounded-xl border border-white/10 bg-white/[0.02] p-8">
         <div className="text-center">
-          <h1 className="text-xl font-bold text-white">Create Your Team</h1>
+          <h1 className="text-xl font-bold text-white">Create Your Workspace</h1>
           <p className="mt-1 text-sm text-zinc-400">
-            Set up a workspace to start tracking team AI costs.
+            Set up a workspace to start tracking AI costs.
           </p>
         </div>
         <WorkspaceSetupForm />
