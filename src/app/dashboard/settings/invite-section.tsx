@@ -53,7 +53,7 @@ export function InviteSection() {
           <button
             onClick={handleGenerate}
             disabled={loading}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
           >
             {loading ? "Generating..." : "Generate invite link"}
           </button>

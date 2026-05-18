@@ -158,7 +158,7 @@ function BrandLink({
       onClick={onNavigate}
       className="mb-6 flex items-center gap-2 px-3 text-lg font-bold text-white"
     >
-      <BarChart3 className="h-5 w-5 text-blue-500" />
+      <BarChart3 className="h-5 w-5 text-accent" />
       Budi Cloud
     </Link>
   );

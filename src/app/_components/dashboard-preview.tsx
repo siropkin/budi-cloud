@@ -19,7 +19,7 @@ export function DashboardPreview() {
                 key={label}
                 className={`rounded px-2 py-0.5 text-xs ${
                   label === "7d"
-                    ? "bg-blue-600/20 text-blue-400"
+                    ? "bg-accent/20 text-blue-400"
                     : "text-zinc-600"
                 }`}
               >
@@ -87,7 +87,7 @@ function MockBarChart() {
       {bars.map((h, i) => (
         <div
           key={i}
-          className="flex-1 rounded-sm bg-blue-500/30"
+          className="flex-1 rounded-sm bg-accent/30"
           style={{ height: `${(h / max) * 100}%` }}
         />
       ))}

@@ -56,7 +56,7 @@ export function RoleCell({
         className={clsx(
           "rounded-md border px-2 py-0.5 text-xs font-medium transition-colors focus:outline-none focus:ring-1 disabled:opacity-50",
           role === "manager"
-            ? "border-blue-500/30 bg-blue-500/10 text-blue-300 focus:ring-blue-500/40"
+            ? "border-accent/30 bg-accent/10 text-blue-300 focus:ring-accent/40"
             : "border-zinc-500/30 bg-zinc-500/10 text-zinc-300 focus:ring-zinc-500/40"
         )}
       >
@@ -74,7 +74,7 @@ function RoleBadge({ role }: { role: string }) {
       className={clsx(
         "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium",
         role === "manager"
-          ? "border-blue-500/30 bg-blue-500/10 text-blue-300"
+          ? "border-accent/30 bg-accent/10 text-blue-300"
           : "border-zinc-500/30 bg-zinc-500/10 text-zinc-400"
       )}
     >
