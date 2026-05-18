@@ -69,7 +69,7 @@ export function DeviceCountChart({ data }: { data: DeviceCountDatum[] }) {
         />
         <Bar
           dataKey="active_devices"
-          fill="#22c55e"
+          fill="#3b82f6"
           maxBarSize={28}
           radius={[4, 4, 0, 0]}
           isAnimationActive={false}

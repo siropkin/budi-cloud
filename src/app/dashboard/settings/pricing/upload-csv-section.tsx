@@ -112,7 +112,7 @@ export function UploadCsvSection() {
             type="button"
             onClick={handlePreview}
             disabled={isPending}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
           >
             {isPending ? "Parsing…" : "Preview"}
           </button>

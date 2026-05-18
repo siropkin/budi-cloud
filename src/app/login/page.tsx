@@ -105,7 +105,7 @@ export default function LoginPage() {
                 href="https://getbudi.dev"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-green-400 underline-offset-2 hover:text-green-300 hover:underline"
+                className="text-blue-400 underline-offset-2 hover:text-blue-300 hover:underline"
               >
                 Learn more
               </a>
@@ -159,7 +159,7 @@ export default function LoginPage() {
                 <button
                   onClick={signInWithMagicLink}
                   disabled={loading || !email}
-                  className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {loading ? "Sending..." : "Send magic link"}
                 </button>
@@ -175,7 +175,7 @@ export default function LoginPage() {
 function CheckIcon() {
   return (
     <svg
-      className="mt-0.5 h-4 w-4 shrink-0 text-green-400"
+      className="mt-0.5 h-4 w-4 shrink-0 text-blue-400"
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={2}

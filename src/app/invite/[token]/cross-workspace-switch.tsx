@@ -98,7 +98,7 @@ export function CrossWorkspaceSwitch({
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             disabled={pending}
-            className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-sm text-zinc-200 focus:border-blue-500/60 focus:outline-none"
+            className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-sm text-zinc-200 focus:border-accent/60 focus:outline-none"
           />
           <div className="flex justify-end gap-2 pt-2">
             <a
@@ -116,8 +116,8 @@ export function CrossWorkspaceSwitch({
               className={clsx(
                 "rounded-lg px-4 py-2 text-sm font-medium transition-colors",
                 canSubmit
-                  ? "bg-blue-600 text-white hover:bg-blue-700"
-                  : "cursor-not-allowed bg-blue-600/40 text-blue-200/60"
+                  ? "bg-accent text-white hover:bg-blue-700"
+                  : "cursor-not-allowed bg-accent/40 text-blue-200/60"
               )}
             >
               {pending ? "Switching…" : `Switch to ${targetWorkspaceName}`}
