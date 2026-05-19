@@ -27,6 +27,22 @@ CREATE TABLE public.window_summaries (
   PRIMARY KEY (device_id, started_at)
 );
 
+-- Supabase projects ship with anon / authenticated / service_role roles.
+-- The CI migrations job runs against a bare Postgres that lacks them. Stub
+-- them idempotently so the GRANTs below succeed in both environments — on a
+-- real Supabase project these are no-ops.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'anon') THEN
+    CREATE ROLE anon NOLOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authenticated') THEN
+    CREATE ROLE authenticated NOLOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'service_role') THEN
+    CREATE ROLE service_role NOLOGIN;
+  END IF;
+END $$;
+
 -- #306: explicit GRANTs for forward compatibility with Supabase's upcoming
 -- Data API default change (2026-10-30).
 GRANT SELECT ON public.window_summaries TO anon;
