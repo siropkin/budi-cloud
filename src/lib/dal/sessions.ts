@@ -12,17 +12,22 @@ import {
 
 /**
  * Cursor for `getSessions` pagination — encodes the row at the boundary of the
- * current page. The composite `(started_at, session_id)` shape gives a stable
- * walk even when two sessions share a `started_at` (rare but real once cursor
- * sync re-emits a batch with the same instant): the SQL filter
- * `(started_at, session_id) < cursor` keeps the strict ordering and never
+ * current page. The composite `(last_active_at, session_id)` shape gives a
+ * stable walk even when two sessions share a `last_active_at` (rare but real
+ * once cursor sync re-emits a batch with the same instant): the SQL filter
+ * `(last_active_at, session_id) < cursor` keeps the strict ordering and never
  * skips or duplicates a tied row.
  *
  * The dashboard URL serializes this as `?cursor=<base64url(JSON)>` so a
  * session_id containing punctuation never collides with a delimiter (#85).
+ *
+ * History: prior to #340 this used `started_at` as the sort/cursor key. That
+ * meant sessions started months ago but active today were invisible in the 1d /
+ * 7d views. `last_active_at` = `COALESCE(ended_at, started_at)` matches the
+ * local statusline's cost computation which uses message timestamps.
  */
 export interface SessionsCursor {
-  startedAt: string;
+  lastActiveAt: string;
   sessionId: string;
 }
 
@@ -30,15 +35,20 @@ export interface SessionsCursor {
 export const SESSIONS_PAGE_SIZE = 50;
 
 /**
- * Get a single page of sessions ordered by `(started_at desc, session_id desc)`.
+ * Get a single page of sessions ordered by `(last_active_at desc, session_id desc)`.
  * Manager sees full org; member sees own devices only (ADR-0083 §6).
  * `options.scopedUserId` further narrows a manager view to a single teammate.
  *
- * Pagination is cursor-based on `(started_at, session_id)`. Sessions are
- * immutable once written so the cursor is stable across reloads — no offset
- * skew under concurrent writes, no expensive count query required to know if
- * another page exists. We fetch `pageSize + 1` rows so `hasMore` falls out of
- * the result-set size; the extra row is dropped before returning.
+ * Pagination is cursor-based on `(last_active_at, session_id)`.
+ * `last_active_at` is the generated column `COALESCE(ended_at, started_at)`
+ * added in migration 026 (#340), so sessions sort by most-recent activity —
+ * a JetBrains session started 7 months ago but active today appears at the
+ * top of a 1d view rather than being invisible.
+ *
+ * Sessions are immutable once written so the cursor is stable across reloads —
+ * no offset skew under concurrent writes, no expensive count query required to
+ * know if another page exists. We fetch `pageSize + 1` rows so `hasMore` falls
+ * out of the result-set size; the extra row is dropped before returning.
  *
  * History: prior to #85 this returned the most recent 100 rows with no
  * pagination, silently truncating the visible Sessions history to whatever
@@ -64,19 +74,20 @@ export async function getSessions(
     .from("session_summaries")
     .select("*")
     .in("device_id", deviceIds)
-    .gte("started_at", range.startedAtFrom)
-    .lte("started_at", range.startedAtTo)
-    .order("started_at", { ascending: false })
+    .gte("last_active_at", range.startedAtFrom)
+    .lte("last_active_at", range.startedAtTo)
+    .order("last_active_at", { ascending: false })
     // Tie-breaker: without a secondary sort key, two rows with the same
-    // `started_at` could appear on either side of a cursor boundary across
-    // requests, causing rows to skip or duplicate as the user paginates.
+    // `last_active_at` could appear on either side of a cursor boundary
+    // across requests, causing rows to skip or duplicate as the user
+    // paginates.
     .order("session_id", { ascending: false })
     .limit(pageSize + 1);
 
   if (surfaces) query = query.in("surface", surfaces);
 
   if (cursor) {
-    // Composite tuple compare: (started_at, session_id) < cursor.
+    // Composite tuple compare: (last_active_at, session_id) < cursor.
     // PostgREST has no native row-constructor compare, so we expand to the
     // logically-equivalent disjunction.
     //
@@ -85,10 +96,10 @@ export async function getSessions(
     // `(`, `)`) would inject extra top-level conditions into the disjunction,
     // breaking the cursor invariant. Decoding already rejects those shapes
     // (#176), but we quote here too so a direct DAL caller can't bypass it.
-    const startedAt = postgrestQuoteLiteral(cursor.startedAt);
+    const lastActiveAt = postgrestQuoteLiteral(cursor.lastActiveAt);
     const sessionId = postgrestQuoteLiteral(cursor.sessionId);
     query = query.or(
-      `started_at.lt.${startedAt},and(started_at.eq.${startedAt},session_id.lt.${sessionId})`
+      `last_active_at.lt.${lastActiveAt},and(last_active_at.eq.${lastActiveAt},session_id.lt.${sessionId})`
     );
   }
 
@@ -100,7 +111,7 @@ export async function getSessions(
   const tail = rows[rows.length - 1];
   const nextCursor =
     hasMore && tail
-      ? { startedAt: tail.started_at, sessionId: tail.session_id }
+      ? { lastActiveAt: tail.last_active_at, sessionId: tail.session_id }
       : null;
 
   return { rows, nextCursor };
@@ -164,6 +175,9 @@ export interface SessionRow {
   provider: string;
   started_at: string;
   ended_at: string | null;
+  // Generated column: COALESCE(ended_at, started_at). Used for filtering and
+  // sorting by most-recent activity (#340).
+  last_active_at: string;
   duration_ms: number | null;
   repo_id: string | null;
   git_branch: string | null;

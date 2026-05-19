@@ -165,18 +165,20 @@ export default async function SessionsPage({
       ),
     },
     {
-      key: "started",
-      header: "Started",
+      key: "last-active",
+      header: "Last Active",
       headerClassName: headerCellClass,
       cellClassName: "text-zinc-400",
       cellTitle: (s) =>
-        s.started_at ? new Date(s.started_at).toLocaleString() : undefined,
+        s.last_active_at
+          ? new Date(s.last_active_at).toLocaleString()
+          : undefined,
       render: (s) => (
         <Link
           href={hrefForSession(s)}
           className="block max-w-[14ch] truncate py-2 pr-3 whitespace-nowrap"
         >
-          {formatTimestamp(s.started_at)}
+          {formatTimestamp(s.last_active_at)}
         </Link>
       ),
     },
@@ -352,7 +354,7 @@ export default async function SessionsPage({
                         </span>
                       )}
                       <span className="shrink-0 text-xs text-zinc-500">
-                        {formatTimestamp(s.started_at)}
+                        {formatTimestamp(s.last_active_at)}
                       </span>
                     </div>
                     {s.title && (

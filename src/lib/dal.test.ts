@@ -1828,24 +1828,28 @@ describe("getSessions cursor pagination (#85)", () => {
     fake.seed("users", [{ ...manager }]);
     fake.seed("devices", [{ id: deviceId, user_id: manager.id }]);
     // Newest first when we paginate. Index 0 == newest.
-    const rows = Array.from({ length: n }, (_, i) => ({
-      device_id: deviceId,
-      session_id: `sess_${String(n - i).padStart(4, "0")}`,
-      provider: "claude_code",
-      started_at: new Date(
+    const rows = Array.from({ length: n }, (_, i) => {
+      const started_at = new Date(
         Date.UTC(2026, 3, 1, 0, 0, 0) + i * 60_000
-      ).toISOString(),
-      ended_at: null,
-      duration_ms: null,
-      repo_id: "repo_x",
-      git_branch: "refs/heads/main",
-      ticket: null,
-      message_count: 1,
-      total_input_tokens: 0,
-      total_output_tokens: 0,
-      total_cost_cents_effective: 0,
-      total_cost_cents_ingested: 0,
-    }));
+      ).toISOString();
+      return {
+        device_id: deviceId,
+        session_id: `sess_${String(n - i).padStart(4, "0")}`,
+        provider: "claude_code",
+        started_at,
+        ended_at: null,
+        last_active_at: started_at,
+        duration_ms: null,
+        repo_id: "repo_x",
+        git_branch: "refs/heads/main",
+        ticket: null,
+        message_count: 1,
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        total_cost_cents_effective: 0,
+        total_cost_cents_ingested: 0,
+      };
+    });
     fake.seed("session_summaries", rows);
     return rows;
   }
@@ -1859,10 +1863,10 @@ describe("getSessions cursor pagination (#85)", () => {
 
     expect(page.rows).toHaveLength(2);
     expect(page.nextCursor).not.toBeNull();
-    // Newest first: index 0 = newest started_at = "2026-04-01T00:04:00Z".
-    expect(page.rows[0].started_at).toBe("2026-04-01T00:04:00.000Z");
-    expect(page.rows[1].started_at).toBe("2026-04-01T00:03:00.000Z");
-    expect(page.nextCursor?.startedAt).toBe("2026-04-01T00:03:00.000Z");
+    // Newest first: index 0 = newest last_active_at = "2026-04-01T00:04:00Z".
+    expect(page.rows[0].last_active_at).toBe("2026-04-01T00:04:00.000Z");
+    expect(page.rows[1].last_active_at).toBe("2026-04-01T00:03:00.000Z");
+    expect(page.nextCursor?.lastActiveAt).toBe("2026-04-01T00:03:00.000Z");
   });
 
   it("walks the entire history across pages without skipping or duplicating rows", async () => {
@@ -1904,7 +1908,7 @@ describe("getSessions cursor pagination (#85)", () => {
     expect(page.nextCursor).toBeNull();
   });
 
-  it("breaks ties on session_id when two rows share the same started_at", async () => {
+  it("breaks ties on session_id when two rows share the same last_active_at", async () => {
     // Composite cursor must keep tied rows in a deterministic order so the
     // walk neither skips one nor returns the same row twice.
     fake.seed("workspaces", [{ id: "org_team", name: "team" }]);
@@ -1918,6 +1922,7 @@ describe("getSessions cursor pagination (#85)", () => {
         provider: "claude_code",
         started_at: ts,
         ended_at: null,
+        last_active_at: ts,
         duration_ms: null,
         repo_id: "repo_x",
         git_branch: "refs/heads/main",
@@ -1934,6 +1939,7 @@ describe("getSessions cursor pagination (#85)", () => {
         provider: "claude_code",
         started_at: ts,
         ended_at: null,
+        last_active_at: ts,
         duration_ms: null,
         repo_id: "repo_x",
         git_branch: "refs/heads/main",
@@ -1952,7 +1958,7 @@ describe("getSessions cursor pagination (#85)", () => {
     });
     expect(first.rows.map((r) => r.session_id)).toEqual(["sess_b"]);
     expect(first.nextCursor).toEqual({
-      startedAt: ts,
+      lastActiveAt: ts,
       sessionId: "sess_b",
     });
 
@@ -1990,6 +1996,7 @@ describe("getSessions cursor pagination (#85)", () => {
         provider: "claude_code",
         started_at: "2026-04-15T10:00:00.000Z",
         ended_at: null,
+        last_active_at: "2026-04-15T10:00:00.000Z",
         duration_ms: null,
         repo_id: "repo_x",
         git_branch: "refs/heads/main",
@@ -2006,6 +2013,7 @@ describe("getSessions cursor pagination (#85)", () => {
         provider: "claude_code",
         started_at: "2026-04-15T11:00:00.000Z",
         ended_at: null,
+        last_active_at: "2026-04-15T11:00:00.000Z",
         duration_ms: null,
         repo_id: "repo_x",
         git_branch: "refs/heads/main",
@@ -2029,6 +2037,55 @@ describe("getSessions cursor pagination (#85)", () => {
     };
     const page = await getSessions(jane, wideRange);
     expect(page.rows.map((r) => r.session_id)).toEqual(["sess_jane"]);
+  });
+
+  it("includes sessions with old started_at but recent ended_at in a narrow range (#340)", async () => {
+    fake.seed("workspaces", [{ id: "org_team", name: "team" }]);
+    fake.seed("users", [{ ...manager }]);
+    fake.seed("devices", [{ id: "dev_ivan", user_id: manager.id }]);
+    fake.seed("session_summaries", [
+      {
+        device_id: "dev_ivan",
+        session_id: "sess_old_start_recent_activity",
+        provider: "copilot_chat",
+        started_at: "2025-10-17T08:00:00.000Z",
+        ended_at: "2026-05-19T12:00:00.000Z",
+        last_active_at: "2026-05-19T12:00:00.000Z",
+        duration_ms: null,
+        repo_id: "repo_x",
+        git_branch: "refs/heads/main",
+        ticket: null,
+        message_count: 5,
+        total_input_tokens: 100,
+        total_output_tokens: 50,
+        total_cost_cents_effective: 10,
+        total_cost_cents_ingested: 10,
+      },
+      {
+        device_id: "dev_ivan",
+        session_id: "sess_recent",
+        provider: "claude_code",
+        started_at: "2026-05-19T09:00:00.000Z",
+        ended_at: "2026-05-19T10:00:00.000Z",
+        last_active_at: "2026-05-19T10:00:00.000Z",
+        duration_ms: 3_600_000,
+        repo_id: "repo_x",
+        git_branch: "refs/heads/main",
+        ticket: null,
+        message_count: 10,
+        total_input_tokens: 200,
+        total_output_tokens: 100,
+        total_cost_cents_effective: 20,
+        total_cost_cents_ingested: 20,
+      },
+    ]);
+
+    const { getSessions } = await loadDal();
+    const todayRange = utcRange("2026-05-18", "2026-05-19");
+    const page = await getSessions(manager, todayRange);
+
+    const ids = page.rows.map((r) => r.session_id).sort();
+    expect(ids).toEqual(["sess_old_start_recent_activity", "sess_recent"]);
   });
 });
 
@@ -2072,6 +2129,7 @@ describe("getSessions multi-provider visibility (#202)", () => {
         session_id: "sess_cc",
         provider: "claude_code",
         started_at: "2026-04-15T10:00:00.000Z",
+        last_active_at: "2026-04-15T10:00:00.000Z",
         surface: "terminal",
       },
       {
@@ -2079,6 +2137,7 @@ describe("getSessions multi-provider visibility (#202)", () => {
         session_id: "sess_copilot",
         provider: "copilot_chat",
         started_at: "2026-04-15T11:00:00.000Z",
+        last_active_at: "2026-04-15T11:00:00.000Z",
         surface: "vscode",
       },
       {
@@ -2086,6 +2145,7 @@ describe("getSessions multi-provider visibility (#202)", () => {
         session_id: "sess_cursor",
         provider: "cursor",
         started_at: "2026-04-15T12:00:00.000Z",
+        last_active_at: "2026-04-15T12:00:00.000Z",
         surface: "cursor",
       },
       {
@@ -2093,6 +2153,7 @@ describe("getSessions multi-provider visibility (#202)", () => {
         session_id: "sess_codex",
         provider: "codex",
         started_at: "2026-04-15T13:00:00.000Z",
+        last_active_at: "2026-04-15T13:00:00.000Z",
         surface: "terminal",
       },
       {
@@ -2100,6 +2161,7 @@ describe("getSessions multi-provider visibility (#202)", () => {
         session_id: "sess_copilot_cli",
         provider: "copilot_cli",
         started_at: "2026-04-15T14:00:00.000Z",
+        last_active_at: "2026-04-15T14:00:00.000Z",
         surface: "terminal",
       },
     ]);

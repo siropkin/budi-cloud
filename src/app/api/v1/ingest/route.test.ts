@@ -27,7 +27,7 @@ class FakeSupabase {
 
   from(name: string) {
     if (!this.tables.has(name)) this.tables.set(name, []);
-    return new FakeQuery(this.tables.get(name)!);
+    return new FakeQuery(this.tables.get(name)!, name);
   }
 
   /**
@@ -116,7 +116,10 @@ class FakeQuery {
   private _head = false;
   private _countMode: "exact" | null = null;
 
-  constructor(private readonly rows: Row[]) {}
+  constructor(
+    private readonly rows: Row[],
+    private readonly tableName: string = ""
+  ) {}
 
   select(_cols?: string, opts?: { count?: "exact"; head?: boolean }) {
     this._countMode = opts?.count ?? null;
@@ -237,6 +240,12 @@ class FakeQuery {
         this.rows[existingIdx] = { ...this.rows[existingIdx], ...incoming };
       } else {
         this.rows.push({ ...incoming });
+      }
+    }
+    // Simulate the GENERATED ALWAYS AS (COALESCE(ended_at, started_at)) column
+    if (this.tableName === "session_summaries") {
+      for (const r of this.rows) {
+        r.last_active_at = r.ended_at ?? r.started_at;
       }
     }
     return {
