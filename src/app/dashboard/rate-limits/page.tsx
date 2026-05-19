@@ -209,9 +209,7 @@ export default async function RateLimitsPage({
   );
 }
 
-function aggregateThrottlesByDay(
-  events: { started_at: string }[]
-): {
+function aggregateThrottlesByDay(events: { started_at: string }[]): {
   bucket_day: string;
   total_throttle_windows: number;
   users_hitting_limit: number;

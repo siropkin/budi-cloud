@@ -7,7 +7,7 @@
 -- dashboard needs for per-window, throttle-event, and burn-rate charts.
 
 CREATE TABLE public.window_summaries (
-  device_id       UUID           NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+  device_id       TEXT           NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
   started_at      TIMESTAMPTZ    NOT NULL,
   ended_at        TIMESTAMPTZ    NOT NULL,
   duration_minutes DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -57,7 +57,7 @@ CREATE INDEX idx_window_summaries_hit_rate_limit
 
 -- Window usage timeline: tokens/cost per calendar day, aggregated from windows.
 CREATE OR REPLACE FUNCTION dashboard_window_timeline(
-  p_device_ids UUID[],
+  p_device_ids TEXT[],
   p_started_from TIMESTAMPTZ,
   p_started_to   TIMESTAMPTZ,
   p_surfaces     TEXT[] DEFAULT NULL
@@ -90,7 +90,7 @@ $$;
 
 -- Throttle events: windows where the user hit the rate limit.
 CREATE OR REPLACE FUNCTION dashboard_throttle_events(
-  p_device_ids UUID[],
+  p_device_ids TEXT[],
   p_started_from TIMESTAMPTZ,
   p_started_to   TIMESTAMPTZ,
   p_surfaces     TEXT[] DEFAULT NULL
@@ -104,7 +104,7 @@ RETURNS TABLE (
   output_tokens    BIGINT,
   cost_cents       NUMERIC,
   burn_rate        DOUBLE PRECISION,
-  device_id        UUID,
+  device_id        TEXT,
   provider         TEXT,
   surface          TEXT
 ) LANGUAGE sql STABLE AS $$
@@ -131,7 +131,7 @@ $$;
 
 -- Burn rate trend: per-window burn rate ordered by time.
 CREATE OR REPLACE FUNCTION dashboard_burn_rate_trend(
-  p_device_ids UUID[],
+  p_device_ids TEXT[],
   p_started_from TIMESTAMPTZ,
   p_started_to   TIMESTAMPTZ,
   p_surfaces     TEXT[] DEFAULT NULL
@@ -140,7 +140,7 @@ RETURNS TABLE (
   started_at  TIMESTAMPTZ,
   burn_rate   DOUBLE PRECISION,
   cost_cents  NUMERIC,
-  device_id   UUID
+  device_id   TEXT
 ) LANGUAGE sql STABLE AS $$
   SELECT
     w.started_at,
@@ -157,7 +157,7 @@ $$;
 
 -- Team rate-limit stats: count of distinct users who hit rate limits per day.
 CREATE OR REPLACE FUNCTION dashboard_team_rate_limit_stats(
-  p_device_ids UUID[],
+  p_device_ids TEXT[],
   p_started_from TIMESTAMPTZ,
   p_started_to   TIMESTAMPTZ,
   p_surfaces     TEXT[] DEFAULT NULL
