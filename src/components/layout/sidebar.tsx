@@ -7,6 +7,7 @@ import { clsx } from "clsx";
 import type { MouseEventHandler } from "react";
 import {
   BarChart3,
+  Gauge,
   GitBranch,
   LayoutDashboard,
   Cpu,
@@ -52,6 +53,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/models", label: "Models", icon: Cpu },
   { href: "/dashboard/repos", label: "Repos", icon: GitBranch },
   { href: "/dashboard/sessions", label: "Sessions", icon: Timer },
+  { href: "/dashboard/rate-limits", label: "Rate Limits", icon: Gauge },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ] as const;
 

@@ -87,6 +87,7 @@ All dashboard pages live under `/dashboard`:
 - `/dashboard/models` — breakdown by model / provider
 - `/dashboard/repos` — breakdown by repo / branch / ticket
 - `/dashboard/sessions` — session list with health signals; `/dashboard/sessions/[id]` for a single-session drill-down
+- `/dashboard/rate-limits` — rate-limit window charts: usage timeline, throttle events, burn rate trends, and (managers) team throttle impact
 - `/dashboard/settings` — workspace info, the viewer's API key, members list, and (managers) invite link generation; nested `/dashboard/settings/pricing` for the workspace's price-list overrides
 
 ## Window contract and local→cloud linking

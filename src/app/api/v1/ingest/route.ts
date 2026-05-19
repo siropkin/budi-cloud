@@ -9,10 +9,12 @@ import {
 import {
   buildRollupRows,
   buildSessionRows,
+  buildWindowRows,
   summarizeEnvelope,
   validateIngestMetrics,
   type IngestDailyRollup,
   type IngestSessionSummary,
+  type IngestWindowSummary,
 } from "@/app/api/v1/ingest/rows";
 
 // ADR-0083 §7: Max body size 1 MiB
@@ -24,13 +26,12 @@ const MAX_BODY_BYTES = 1024 * 1024;
 // the daily_rollups insert pressure, not just a one-line edit.
 const RATE_LIMIT = { limit: 60, windowSeconds: 60 } as const;
 
-// Accept v1 (pre-#741 daemons), v2 (v8.4.3+ daemons that added `surface`), and
-// v3 (v8.5.0+ daemons that added session `title` per siropkin/budi#779). Each
-// bump is a strict superset of the previous one: every new field is optional
-// in the row builders, so older payloads remain valid. See siropkin/budi#749 —
-// bumping the daemon's schema_version without widening the server's accepted
-// set broke cloud sync for every v8.4.3 upgrader.
-const SUPPORTED_SCHEMA_VERSIONS = new Set([1, 2, 3]);
+// Accept v1 (pre-#741 daemons), v2 (v8.4.3+ daemons that added `surface`),
+// v3 (v8.5.0+ daemons that added session `title` per siropkin/budi#779), and
+// v4 (v8.5.4+ daemons that added `window_summaries` per #339). Each bump is a
+// strict superset of the previous one: every new field is optional in the row
+// builders, so older payloads remain valid.
+const SUPPORTED_SCHEMA_VERSIONS = new Set([1, 2, 3, 4]);
 
 // Cap the stored label so a malformed envelope can't flood the devices table.
 // 128 chars is comfortably above any sane hostname or user-chosen nickname.
@@ -63,6 +64,7 @@ interface SyncEnvelope {
   payload: {
     daily_rollups: IngestDailyRollup[];
     session_summaries: IngestSessionSummary[];
+    window_summaries?: IngestWindowSummary[];
   };
 }
 
@@ -152,12 +154,19 @@ function validateEnvelope(body: SyncEnvelope): string | null {
   if (!Array.isArray(body.payload.session_summaries)) {
     return "payload.session_summaries must be an array";
   }
+  if (
+    body.payload.window_summaries !== undefined &&
+    !Array.isArray(body.payload.window_summaries)
+  ) {
+    return "payload.window_summaries must be an array";
+  }
   // #178: reject the whole envelope on non-finite or negative numeric metrics
   // so a misbehaving daemon pauses (ADR-0083 §7) instead of silently
   // poisoning every aggregate that touches the row for the 90-day window.
   const metricError = validateIngestMetrics(
     body.payload.daily_rollups,
-    body.payload.session_summaries
+    body.payload.session_summaries,
+    body.payload.window_summaries
   );
   if (metricError) return metricError;
   return null;
@@ -332,6 +341,14 @@ export async function POST(request: NextRequest) {
           body.payload.session_summaries
         )
       : [];
+  const windowRows =
+    body.payload.window_summaries && body.payload.window_summaries.length > 0
+      ? buildWindowRows(
+          body.device_id,
+          body.synced_at,
+          body.payload.window_summaries
+        )
+      : [];
 
   if (rollupRows.length > 0) {
     const { error: rollupError, count } = await supabase
@@ -376,6 +393,26 @@ export async function POST(request: NextRequest) {
     sessionSummariesUpserted = count ?? sessionRows.length;
   }
 
+  // --- UPSERT window summaries (#339) ---
+  let windowSummariesUpserted = 0;
+  if (windowRows.length > 0) {
+    const { error: windowError, count } = await supabase
+      .from("window_summaries")
+      .upsert(windowRows, {
+        onConflict: "device_id,started_at",
+        count: "exact",
+      });
+
+    if (windowError) {
+      console.error("Failed to upsert window_summaries:", windowError);
+      return Response.json(
+        { error: "Failed to store window summaries" },
+        { status: 500 }
+      );
+    }
+    windowSummariesUpserted = count ?? windowRows.length;
+  }
+
   // --- Compute watermark: latest fully-synced bucket_day ---
   const { data: watermarkRow } = await supabase
     .from("daily_rollups")
@@ -400,9 +437,11 @@ export async function POST(request: NextRequest) {
   return Response.json({
     accepted: true,
     watermark,
-    records_upserted: dailyRollupsUpserted + sessionSummariesUpserted,
+    records_upserted:
+      dailyRollupsUpserted + sessionSummariesUpserted + windowSummariesUpserted,
     daily_rollups_upserted: dailyRollupsUpserted,
     session_summaries_upserted: sessionSummariesUpserted,
+    window_summaries_upserted: windowSummariesUpserted,
     surfaces_seen,
     providers_seen,
   });

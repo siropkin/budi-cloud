@@ -110,6 +110,8 @@ export const METRIC_CAPS = {
   total_input_tokens: 1e10,
   total_output_tokens: 1e10,
   total_cost_cents: 1e8,
+  duration_minutes: 600,
+  burn_rate_cents_per_minute: 1e6,
 } as const;
 
 /**
@@ -148,6 +150,15 @@ const SESSION_METRIC_FIELDS = [
   "total_cost_cents",
 ] as const satisfies ReadonlyArray<keyof IngestSessionSummary>;
 
+const WINDOW_METRIC_FIELDS = [
+  "message_count",
+  "input_tokens",
+  "output_tokens",
+  "cache_creation_tokens",
+  "cache_read_tokens",
+  "cost_cents",
+] as const satisfies ReadonlyArray<keyof IngestWindowSummary>;
+
 /**
  * Walks the envelope's rollups and session summaries, returning a 422-style
  * error message on the first non-finite or negative numeric metric.
@@ -159,7 +170,8 @@ const SESSION_METRIC_FIELDS = [
  */
 export function validateIngestMetrics(
   rollups: IngestDailyRollup[],
-  sessions: IngestSessionSummary[]
+  sessions: IngestSessionSummary[],
+  windows?: IngestWindowSummary[]
 ): string | null {
   for (let i = 0; i < rollups.length; i++) {
     const r = rollups[i];
@@ -187,6 +199,22 @@ export function validateIngestMetrics(
     for (const f of SESSION_METRIC_FIELDS) {
       if (!isValidNonNegativeNumber(s[f])) {
         return `session_summaries[${i}].${f} must be a finite, non-negative number`;
+      }
+    }
+  }
+  if (windows) {
+    for (let i = 0; i < windows.length; i++) {
+      const w = windows[i];
+      for (const f of WINDOW_METRIC_FIELDS) {
+        if (!isValidNonNegativeNumber(w[f])) {
+          return `window_summaries[${i}].${f} must be a finite, non-negative number`;
+        }
+      }
+      if (!isValidNonNegativeNumber(w.duration_minutes)) {
+        return `window_summaries[${i}].duration_minutes must be a finite, non-negative number`;
+      }
+      if (!isValidNonNegativeNumber(w.burn_rate_cents_per_minute)) {
+        return `window_summaries[${i}].burn_rate_cents_per_minute must be a finite, non-negative number`;
       }
     }
   }
@@ -472,6 +500,69 @@ export function buildSessionRows(
     ),
     vital_overall_state: normalizeVitalState(s.vital_overall_state),
     surface: normalizeSurface(s.surface),
+    synced_at: syncedAt,
+  }));
+}
+
+export interface IngestWindowSummary {
+  started_at: string;
+  ended_at: string;
+  duration_minutes: number;
+  is_active?: boolean;
+  message_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+  cost_cents: number;
+  burn_rate_cents_per_minute: number;
+  hit_rate_limit?: boolean;
+  provider?: string | null;
+  surface?: string | null;
+}
+
+export function buildWindowRows(
+  deviceId: string,
+  syncedAt: string,
+  windows: IngestWindowSummary[]
+) {
+  return windows.map((w) => ({
+    device_id: deviceId,
+    started_at: w.started_at,
+    ended_at: w.ended_at,
+    duration_minutes: safeNonNegativeNumber(
+      w.duration_minutes,
+      METRIC_CAPS.duration_minutes
+    ),
+    is_active: w.is_active ?? false,
+    message_count: safeNonNegativeNumber(
+      w.message_count,
+      METRIC_CAPS.message_count
+    ),
+    input_tokens: safeNonNegativeNumber(
+      w.input_tokens,
+      METRIC_CAPS.input_tokens
+    ),
+    output_tokens: safeNonNegativeNumber(
+      w.output_tokens,
+      METRIC_CAPS.output_tokens
+    ),
+    cache_creation_tokens: safeNonNegativeNumber(
+      w.cache_creation_tokens,
+      METRIC_CAPS.cache_creation_tokens
+    ),
+    cache_read_tokens: safeNonNegativeNumber(
+      w.cache_read_tokens,
+      METRIC_CAPS.cache_read_tokens
+    ),
+    cost_cents: safeNonNegativeNumber(w.cost_cents, METRIC_CAPS.cost_cents),
+    burn_rate_cents_per_minute: safeNonNegativeNumber(
+      w.burn_rate_cents_per_minute,
+      METRIC_CAPS.burn_rate_cents_per_minute
+    ),
+    hit_rate_limit: w.hit_rate_limit ?? false,
+    provider: normalizeSurface(w.provider),
+    surface: normalizeSurface(w.surface),
     synced_at: syncedAt,
   }));
 }
