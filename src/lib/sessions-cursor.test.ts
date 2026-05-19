@@ -16,7 +16,7 @@ import {
 describe("decodeSessionsCursor (#176)", () => {
   it("round-trips a well-formed cursor", () => {
     const original = {
-      startedAt: "2026-04-15T10:00:00.000Z",
+      lastActiveAt: "2026-04-15T10:00:00.000Z",
       sessionId: "sess_0001",
     };
     const decoded = decodeSessionsCursor(encodeSessionsCursor(original));
@@ -38,18 +38,18 @@ describe("decodeSessionsCursor (#176)", () => {
     expect(decodeSessionsCursor(toBase64Url(JSON.stringify({})))).toBeNull();
     expect(
       decodeSessionsCursor(
-        toBase64Url(JSON.stringify({ startedAt: 123, sessionId: "x" }))
+        toBase64Url(JSON.stringify({ lastActiveAt: 123, sessionId: "x" }))
       )
     ).toBeNull();
     expect(
       decodeSessionsCursor(
-        toBase64Url(JSON.stringify({ startedAt: "x", sessionId: null }))
+        toBase64Url(JSON.stringify({ lastActiveAt: "x", sessionId: null }))
       )
     ).toBeNull();
   });
 
-  it("rejects startedAt values that aren't a real ISO-8601 instant", () => {
-    for (const startedAt of [
+  it("rejects lastActiveAt values that aren't a real ISO-8601 instant", () => {
+    for (const lastActiveAt of [
       "not-a-date",
       "2026-13-45T99:99:99.000Z",
       "2026", // Date.parse accepts this; we don't.
@@ -58,7 +58,7 @@ describe("decodeSessionsCursor (#176)", () => {
       "2026-04-15T10:00:00Z", // No milliseconds → toISOString won't match.
     ]) {
       const raw = toBase64Url(
-        JSON.stringify({ startedAt, sessionId: "sess_0001" })
+        JSON.stringify({ lastActiveAt, sessionId: "sess_0001" })
       );
       expect(decodeSessionsCursor(raw)).toBeNull();
     }
@@ -68,18 +68,18 @@ describe("decodeSessionsCursor (#176)", () => {
     // The bug report's exact crafted shape: a `,` lifts the trailing fragment
     // up to a top-level term in the .or() disjunction, breaking the cursor
     // invariant. Same risk for `(` and `)` opening / closing a nested group.
-    const startedAt = "2026-01-01T00:00:00.000Z";
+    const lastActiveAt = "2026-01-01T00:00:00.000Z";
     for (const sessionId of [
       "x,y",
       "x)or(true",
-      "a),or(started_at.gt.1900-01-01,and(true",
+      "a),or(last_active_at.gt.1900-01-01,and(true",
       "x(",
       "x)",
       "(",
       ")",
       ",",
     ]) {
-      const raw = toBase64Url(JSON.stringify({ startedAt, sessionId }));
+      const raw = toBase64Url(JSON.stringify({ lastActiveAt, sessionId }));
       expect(decodeSessionsCursor(raw)).toBeNull();
     }
   });
@@ -96,7 +96,7 @@ describe("decodeSessionsCursor (#176)", () => {
       "sess-with-dashes",
     ]) {
       const original = {
-        startedAt: "2026-04-15T10:00:00.000Z",
+        lastActiveAt: "2026-04-15T10:00:00.000Z",
         sessionId,
       };
       const decoded = decodeSessionsCursor(encodeSessionsCursor(original));
@@ -112,12 +112,12 @@ describe("decodeSessionsCursor (#176)", () => {
     const canonical = "2026-05-08T02:02:02.469Z";
     const decoded = decodeSessionsCursor(
       encodeSessionsCursor({
-        startedAt: postgrestShape,
+        lastActiveAt: postgrestShape,
         sessionId: "sess_0001",
       })
     );
     expect(decoded).toEqual({
-      startedAt: canonical,
+      lastActiveAt: canonical,
       sessionId: "sess_0001",
     });
   });
@@ -131,9 +131,12 @@ describe("decodeSessionsCursor (#176)", () => {
     ];
     for (const [input, expected] of inputs) {
       const decoded = decodeSessionsCursor(
-        encodeSessionsCursor({ startedAt: input, sessionId: "sess_x" })
+        encodeSessionsCursor({ lastActiveAt: input, sessionId: "sess_x" })
       );
-      expect(decoded).toEqual({ startedAt: expected, sessionId: "sess_x" });
+      expect(decoded).toEqual({
+        lastActiveAt: expected,
+        sessionId: "sess_x",
+      });
     }
   });
 
@@ -145,7 +148,7 @@ describe("decodeSessionsCursor (#176)", () => {
       decodeSessionsCursor(
         toBase64Url(
           JSON.stringify({
-            startedAt: "2026-04-15T10:00:00.000Z",
+            lastActiveAt: "2026-04-15T10:00:00.000Z",
             sessionId: big,
           })
         )
@@ -155,7 +158,7 @@ describe("decodeSessionsCursor (#176)", () => {
       decodeSessionsCursor(
         toBase64Url(
           JSON.stringify({
-            startedAt: big,
+            lastActiveAt: big,
             sessionId: "sess_0001",
           })
         )

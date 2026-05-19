@@ -4,15 +4,18 @@ import type { SessionsCursor } from "@/lib/dal";
  * URL serialization for the Sessions page cursor.
  *
  * `session_id` is daemon-provided TEXT, so we don't trust it to be free of
- * URL-meaningful characters. Encoding the `(started_at, session_id)` tuple as
- * base64url JSON keeps the cursor opaque to the browser/router and avoids any
- * delimiter collision the daemon could trip on. A malformed cursor decodes to
- * `null` so a hand-edited URL silently falls back to "first page" rather than
- * 500ing — same defensive posture as the user filter in #80.
+ * URL-meaningful characters. Encoding the `(last_active_at, session_id)` tuple
+ * as base64url JSON keeps the cursor opaque to the browser/router and avoids
+ * any delimiter collision the daemon could trip on. A malformed cursor decodes
+ * to `null` so a hand-edited URL silently falls back to "first page" rather
+ * than 500ing — same defensive posture as the user filter in #80.
+ *
+ * History: prior to #340 this encoded `startedAt`. Old cursors decode to `null`
+ * (missing `lastActiveAt` field) and silently reset to page 1.
  */
 export function encodeSessionsCursor(cursor: SessionsCursor): string {
   const json = JSON.stringify({
-    startedAt: normalizeIsoInstant(cursor.startedAt),
+    lastActiveAt: normalizeIsoInstant(cursor.lastActiveAt),
     sessionId: cursor.sessionId,
   });
   return base64UrlEncode(json);
@@ -45,9 +48,10 @@ function normalizeIsoInstant(value: string): string {
  * crafted URL falls back cleanly to "first page" instead of producing a 500
  * deeper in the query path.
  *
- * - `startedAt` must round-trip through `Date` and reproduce the same string,
- *   pinning it to a real ISO-8601 instant (e.g. `2026-04-15T10:00:00.000Z`).
- *   This rejects free-form strings the cursor was never meant to carry.
+ * - `lastActiveAt` must round-trip through `Date` and reproduce the same
+ *   string, pinning it to a real ISO-8601 instant (e.g.
+ *   `2026-04-15T10:00:00.000Z`). This rejects free-form strings the cursor
+ *   was never meant to carry.
  * - `sessionId` must not contain `,` `(` `)` — the PostgREST filter-tree
  *   delimiters that drove the original injection report. Real daemons emit
  *   opaque token-shaped ids; these characters never legitimately appear.
@@ -65,20 +69,20 @@ export function decodeSessionsCursor(
     const json = base64UrlDecode(raw);
     const parsed = JSON.parse(json) as Partial<SessionsCursor>;
     if (
-      typeof parsed.startedAt !== "string" ||
+      typeof parsed.lastActiveAt !== "string" ||
       typeof parsed.sessionId !== "string"
     ) {
       return null;
     }
     if (
-      parsed.startedAt.length > MAX_CURSOR_FIELD_LEN ||
+      parsed.lastActiveAt.length > MAX_CURSOR_FIELD_LEN ||
       parsed.sessionId.length > MAX_CURSOR_FIELD_LEN
     ) {
       return null;
     }
-    if (!isIsoInstant(parsed.startedAt)) return null;
+    if (!isIsoInstant(parsed.lastActiveAt)) return null;
     if (SESSION_ID_DISALLOWED.test(parsed.sessionId)) return null;
-    return { startedAt: parsed.startedAt, sessionId: parsed.sessionId };
+    return { lastActiveAt: parsed.lastActiveAt, sessionId: parsed.sessionId };
   } catch {
     return null;
   }

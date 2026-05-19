@@ -133,7 +133,7 @@ describe("dashboard/sessions /page", () => {
       "Title",
       "Provider",
       "Model",
-      "Started",
+      "Last Active",
       "Duration",
       "Repo",
       "Branch",
@@ -166,7 +166,7 @@ describe("dashboard/sessions /page", () => {
     expect(text).not.toContain("Member");
     // Other column headers must still render — the suppression is scoped.
     expect(text).toContain("Provider");
-    expect(text).toContain("Started");
+    expect(text).toContain("Last Active");
   });
 
   it("units toggle: ?units=tokens flips the Cost column header to Tokens (#128)", async () => {
